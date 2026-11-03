@@ -35,17 +35,17 @@ var (
 // format: its canonical JSON encoding is the AEAD additional data.
 type AAD struct {
 	Format    string `json:"format"`
+	Cipher    string `json:"cipher"`
 	CreatedAt string `json:"created_at"`
 	Writes    uint64 `json:"writes"`
 }
 
 type envelope struct {
-	Format string          `json:"format"`
-	Cipher string          `json:"cipher"`
-	KDF    json.RawMessage `json:"kdf"`
-	Nonce  string          `json:"nonce"`
-	AAD    AAD             `json:"aad"`
-	CT     string          `json:"ct"`
+	Format string `json:"format"`
+	Cipher string `json:"cipher"`
+	Nonce  string `json:"nonce"`
+	AAD    AAD    `json:"aad"`
+	CT     string `json:"ct"`
 }
 
 func corrupt(why string) error { return fmt.Errorf("%w: %s", ErrCorrupt, why) }
@@ -73,6 +73,7 @@ func seal(key secret.Secret, aad AAD, plaintext []byte) ([]byte, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, errors.New("vault: random source failed")
 	}
+	aad.Format, aad.Cipher = FormatVault, CipherName
 	aadBytes, err := json.Marshal(aad)
 	if err != nil {
 		return nil, errors.New("vault: header encoding failed")
@@ -95,6 +96,7 @@ func open(key secret.Secret, data []byte) ([]byte, AAD, error) {
 	}
 	var env envelope
 	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(&env); err != nil {
 		return nil, AAD{}, corrupt("unreadable envelope")
 	}
@@ -104,7 +106,7 @@ func open(key secret.Secret, data []byte) ([]byte, AAD, error) {
 	if env.Format != FormatVault || env.AAD.Format != FormatVault {
 		return nil, AAD{}, corrupt("unsupported format")
 	}
-	if env.Cipher != CipherName {
+	if env.Cipher != CipherName || env.AAD.Cipher != CipherName || env.Cipher != env.AAD.Cipher {
 		return nil, AAD{}, corrupt("unsupported cipher")
 	}
 	nonce, err := base64.StdEncoding.DecodeString(env.Nonce)

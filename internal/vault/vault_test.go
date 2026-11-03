@@ -30,7 +30,7 @@ func sameValue(r Record, want string) bool {
 func newVault(t *testing.T) (*Vault, string) {
 	t.Helper()
 	home := filepath.Join(t.TempDir(), "home")
-	v, err := Init(home, testKey(1))
+	v, err := Init(home, testID, testKey(1))
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestInitAndOpen(t *testing.T) {
 			t.Fatalf("%s missing: %v", f, err)
 		}
 	}
-	if _, err := Init(home, testKey(1)); !errors.Is(err, ErrExists) {
+	if _, err := Init(home, testID, testKey(1)); !errors.Is(err, ErrExists) {
 		t.Fatalf("second Init: %v, want ErrExists", err)
 	}
 	if _, err := Open(home, testKey(1)); err != nil {

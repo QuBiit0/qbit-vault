@@ -217,3 +217,51 @@ func TestSaveSnapshotsConsistentPairPerSave(t *testing.T) {
 		})
 	}
 }
+
+const testID = "6f9619ff-8b86-4d11-b42d-00c04fc964ff"
+
+func TestNewIDIsUUIDv4AndUnique(t *testing.T) {
+	a, b := NewID(), NewID()
+	if !uuidV4RE.MatchString(a) || !uuidV4RE.MatchString(b) || a == b {
+		t.Fatalf("NewID: %q %q", a, b)
+	}
+}
+
+func TestInitUsesCallerID(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if _, err := Init(home, testID, testKey(1)); err != nil {
+		t.Fatal(err)
+	}
+	if readState(t, home)["vault_id"] != testID {
+		t.Fatal("state does not carry the supplied vault id")
+	}
+	got, err := ReadID(home)
+	if err != nil || got != testID {
+		t.Fatalf("ReadID = %q, %v", got, err)
+	}
+}
+
+func TestInitRejectsBadID(t *testing.T) {
+	for _, id := range []string{"", "not-a-uuid", "6F9619FF-8B86-4D11-B42D-00C04FC964FF", testID + "x", "6f9619ff-8b86-1d11-b42d-00c04fc964ff"} {
+		home := filepath.Join(t.TempDir(), "home")
+		if _, err := Init(home, id, testKey(1)); err == nil {
+			t.Fatalf("Init accepted id %q", id)
+		}
+		if _, err := os.Stat(filepath.Join(home, "vault.enc")); err == nil {
+			t.Fatalf("vault created for bad id %q", id)
+		}
+	}
+}
+
+func TestReadID(t *testing.T) {
+	home := t.TempDir()
+	if _, err := ReadID(home); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "state.json"), []byte("{nope"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadID(home); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("malformed: %v", err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/QuBiit0/gentle-vault/internal/secret"
@@ -26,14 +27,27 @@ type state struct {
 	extra   map[string]json.RawMessage
 }
 
-func newVaultID() (string, error) {
+var vaultIDRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
+// NewID returns a random UUID v4 to identify a new vault.
+func NewID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", errors.New("vault: random source failed")
+		panic("vault: random source failed")
 	}
 	b[6] = b[6]&0x0f | 0x40
 	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// ReadID returns the vault id recorded in state.json without needing the
+// key. A missing file wraps os.ErrNotExist; a malformed one is ErrCorrupt.
+func ReadID(home string) (string, error) {
+	st, err := loadState(home)
+	if err != nil {
+		return "", err
+	}
+	return st.VaultID, nil
 }
 
 func (s *state) marshal() ([]byte, error) {
@@ -69,7 +83,7 @@ func loadState(home string) (*state, error) {
 		return nil, corrupt("unsupported state format")
 	}
 	s := &state{extra: map[string]json.RawMessage{}}
-	if json.Unmarshal(m["vault_id"], &s.VaultID) != nil || s.VaultID == "" {
+	if json.Unmarshal(m["vault_id"], &s.VaultID) != nil || !vaultIDRE.MatchString(s.VaultID) {
 		return nil, corrupt("state has no vault id")
 	}
 	if json.Unmarshal(m["writes"], &s.Writes) != nil {
@@ -90,6 +104,7 @@ type store struct {
 	home string
 	key  secret.Secret
 	keep int
+	id   string // vault id for a first save; empty means generate one
 }
 
 // header is what load reports about the vault file besides its plaintext.
@@ -173,9 +188,9 @@ func (s *store) save(plaintext []byte) error {
 	st, err := loadState(s.home)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		id, idErr := newVaultID()
-		if idErr != nil {
-			return idErr
+		id := s.id
+		if id == "" {
+			id = NewID()
 		}
 		st = &state{VaultID: id, extra: map[string]json.RawMessage{}}
 	case err != nil:
@@ -192,7 +207,7 @@ func (s *store) save(plaintext []byte) error {
 	}
 
 	st.Writes++
-	sealed, err := seal(s.key, AAD{Format: FormatVault, CreatedAt: created, Writes: st.Writes}, plaintext)
+	sealed, err := seal(s.key, AAD{Format: FormatVault, Cipher: CipherName, CreatedAt: created, Writes: st.Writes}, plaintext)
 	if err != nil {
 		return err
 	}

@@ -20,7 +20,7 @@ func testKey(b byte) secret.Secret {
 }
 
 func testAAD(writes uint64) AAD {
-	return AAD{Format: FormatVault, CreatedAt: "2026-11-03T00:00:00Z", Writes: writes}
+	return AAD{Format: FormatVault, Cipher: CipherName, CreatedAt: "2026-11-03T00:00:00Z", Writes: writes}
 }
 
 func mustSeal(t *testing.T, key secret.Secret, aad AAD, pt []byte) []byte {
@@ -73,14 +73,13 @@ func TestEnvelopeShape(t *testing.T) {
 	if err := json.Unmarshal(sealed, &m); err != nil {
 		t.Fatal(err)
 	}
-	if len(m) != 6 {
+	if len(m) != 5 {
 		t.Fatalf("unexpected key count %d", len(m))
 	}
 	for k, want := range map[string]string{
 		"format": `"gentle-vault/1"`,
 		"cipher": `"xchacha20poly1305"`,
-		"kdf":    `null`,
-		"aad":    `{"format":"gentle-vault/1","created_at":"2026-11-03T00:00:00Z","writes":3}`,
+		"aad":    `{"format":"gentle-vault/1","cipher":"xchacha20poly1305","created_at":"2026-11-03T00:00:00Z","writes":3}`,
 	} {
 		if string(m[k]) != want {
 			t.Fatalf("%s = %s, want %s", k, m[k], want)
@@ -144,6 +143,10 @@ func TestOpenRefusals(t *testing.T) {
 		{"tampered aad writes", key, mutate(t, good, func(m map[string]any) { m["aad"].(map[string]any)["writes"] = 1 })},
 		{"tampered aad created_at", key, mutate(t, good, func(m map[string]any) { m["aad"].(map[string]any)["created_at"] = "2000-01-01T00:00:00Z" })},
 		{"wrong format", key, mutate(t, good, func(m map[string]any) { m["format"] = "gentle-vault/2" })},
+		{"tampered aad cipher", key, mutate(t, good, func(m map[string]any) { m["aad"].(map[string]any)["cipher"] = "aes" })},
+		{"tampered aad format", key, mutate(t, good, func(m map[string]any) { m["aad"].(map[string]any)["format"] = "gentle-vault/2" })},
+		{"unknown top-level kdf", key, mutate(t, good, func(m map[string]any) { m["kdf"] = nil })},
+		{"unknown top-level field", key, mutate(t, good, func(m map[string]any) { m["extra"] = 1 })},
 		{"wrong cipher", key, mutate(t, good, func(m map[string]any) { m["cipher"] = "aes" })},
 		{"bad base64 ct", key, mutate(t, good, func(m map[string]any) { m["ct"] = "!!!" })},
 		{"bad base64 nonce", key, mutate(t, good, func(m map[string]any) { m["nonce"] = "!!!" })},

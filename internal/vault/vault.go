@@ -29,12 +29,17 @@ type Vault struct {
 }
 
 // Init creates an empty vault and its state file. It never overwrites an
-// existing vault (ErrExists) and never reads the process environment.
-func Init(home string, key secret.Secret) (*Vault, error) {
+// existing vault (ErrExists) and never reads the process environment. The
+// caller supplies the vault id (see NewID) so the key can be stored under it
+// before the vault exists.
+func Init(home, vaultID string, key secret.Secret) (*Vault, error) {
 	if err := checkKey(key); err != nil {
 		return nil, err
 	}
-	v := &Vault{st: &store{home: home, key: key}}
+	if !vaultIDRE.MatchString(vaultID) {
+		return nil, errors.New("vault: vault id must be a lowercase uuid v4")
+	}
+	v := &Vault{st: &store{home: home, key: key, id: vaultID}}
 	err := v.locked(true, func() error {
 		if _, err := os.Stat(filepath.Join(home, vaultFile)); err == nil {
 			return ErrExists

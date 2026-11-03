@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/keychain"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
@@ -83,6 +84,7 @@ func newInit(g *globals) *cobra.Command {
 				}
 				return mapErr(err, "")
 			}
+			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventInit, Detail: string(mode)})
 			if g.JSON {
 				return writeJSON(out, initBody{OK: true, Initialized: true, Home: home, Keychain: string(mode)})
 			}

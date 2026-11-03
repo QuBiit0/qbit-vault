@@ -3,9 +3,11 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/vault"
 )
 
@@ -71,6 +73,7 @@ func newMv(g *globals) *cobra.Command {
 				}
 				return mapErr(err, name)
 			}
+			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventMv, Names: []string{name}, Layer: auditLayer(dest), Detail: layerName(from) + "->" + layerName(dest)})
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), moveBody{OK: true, Name: name, From: layerName(from), To: layerName(dest), Project: projectOf(proj)})
 			}
@@ -109,6 +112,8 @@ func newRelink(g *globals) *cobra.Command {
 			case err != nil:
 				return mapErr(err, "")
 			}
+			cwd, _ := os.Getwd()
+			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRelink, Cwd: cwd})
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), relinkBody{OK: true, From: args[0], To: args[1], Secrets: n})
 			}

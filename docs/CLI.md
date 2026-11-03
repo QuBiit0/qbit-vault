@@ -57,6 +57,8 @@ Every success is exactly one object with `"ok":true`. `project` is `{"root":…,
 | `list` | `{"ok":true,"project":…,"secrets":[{"name":…,"layer":…,"project_label":… (project records only),"overrides_global":bool,"description":…,"sensitive":bool,"binaries":[…],"hosts":[…],"created_at":…,"updated_at":…}]}` (`project` is the project of the current directory) |
 | `mv` | `{"ok":true,"name":…,"from":…,"to":…,"project":…}` |
 | `relink` | `{"ok":true,"from":…,"to":…,"secrets":N}` |
+| `audit` | `{"ok":true,"records":[…]}` |
+| `audit --verify` | `{"ok":true,"valid":bool,"records":N}` plus `"problem":{"line":L,"seq":S,"reason":…}` when not valid |
 
 No success output ever contains a value.
 
@@ -85,8 +87,10 @@ gentle-vault exec --session S --secret NAME[=ENV] [--secret …] [--timeout 10m]
 
 | Command | What it does |
 | --- | --- |
-| `audit [--tail N] [--since 24h] [--name NAME] [--event exec] [--json]` | Read the log. |
-| `audit --verify` | Validate the hash chain. |
+| `audit [--tail N] [--since 24h] [--name NAME] [--event exec] [--json]` | Read the log, oldest first, filters combined, `--tail` (default 50) applied last. `--since` takes a positive Go duration (`90m`, `24h`); `--event` one of the events in STORAGE.md § Audit log; `--name` a valid secret name; anything else is a usage error. Works without unlocking the vault. Human: one line per record, `<ts> <event> <names joined by ,> <layer> <session>` plus `exit=<code>` when present (`-` for empty names or layer); an empty result prints `no audit records`. JSON: `{"ok":true,"records":[…]}` (the records as stored). |
+| `audit --verify [--json]` | Validate the hash chain; cannot be combined with the filters. Human: `audit log ok (N records)` (`1 record` for one), exit 0, or `audit log broken at line L (seq S): <reason>`, exit 1, both on stdout. JSON: `{"ok":true,"valid":true,"records":N}` or `{"ok":true,"valid":false,"records":N,"problem":{"line":L,"seq":S,"reason":"…"}}` with exit 1 (`records` counts the records that verified before the problem). Reasons: `bad_json`, `bad_hash`, `bad_prev`, `bad_seq`, `partial_line`, `truncated`, `head_mismatch`. |
+
+Without a vault home both forms fail with `not_initialized` (exit 1). `init`, `set`, `rm`, `edit`, `mv`, `relink` and every typed refusal append a record; if that write fails the command still succeeds (or refuses) as before and prints `warning: audit log write failed` on stderr.
 
 ## Host plumbing (not for humans)
 

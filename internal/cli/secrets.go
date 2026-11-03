@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 	"github.com/QuBiit0/gentle-vault/internal/vault"
@@ -347,6 +348,11 @@ func newSet(g *globals) *cobra.Command {
 			if err := s.v.Put(layer, name, rec); err != nil {
 				return mapErr(err, name)
 			}
+			recd := audit.Record{Event: audit.EventCapture, Names: []string{name}, Layer: auditLayer(layer)}
+			if replaced {
+				recd.Detail = "replaced"
+			}
+			g.record(cmd.ErrOrStderr(), recd)
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), setBody{OK: true, Name: name, Layer: layerName(layer), Project: projectOf(layer), Replaced: replaced})
 			}
@@ -400,6 +406,7 @@ func newRm(g *globals) *cobra.Command {
 			if err := s.v.Remove(e.Layer, name); err != nil {
 				return mapErr(err, name)
 			}
+			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRm, Names: []string{name}, Layer: auditLayer(e.Layer)})
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), removeBody{OK: true, Name: name, Layer: layerName(e.Layer), Removed: true})
 			}
@@ -508,6 +515,7 @@ func newEdit(g *globals) *cobra.Command {
 			if err := s.v.Put(e.Layer, name, e.Record); err != nil {
 				return mapErr(err, name)
 			}
+			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventEdit, Names: []string{name}, Layer: auditLayer(e.Layer)})
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), editBody{OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer), Updated: true})
 			}

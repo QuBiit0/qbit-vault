@@ -91,13 +91,13 @@ Backups are pruned to the last 20 snapshots by default (`config.backups_keep`), 
 | File | POSIX | Windows |
 | --- | --- | --- |
 | `$GENTLE_VAULT_HOME/` | 0700 | owner-only ACL, inheritance disabled |
-| `vault.enc`, `key.enc`, `grants.enc`, `audit.jsonl`, `state.json` | 0600 | owner-only ACL |
+| `vault.enc`, `key.enc`, `grants.enc`, `audit.jsonl`, `audit.head`, `state.json` | 0600 | owner-only ACL |
 | `backups/**` | 0600 | owner-only ACL |
 | `bindings.yaml`, `dumpguard.yaml`, `config.yaml` | 0600 | owner-only ACL |
 
 `doctor` reports any file whose mode is wider than this.
 
-**Enforcement.** `internal/perm` (`EnsureDir`, `EnsureFile`, `Check`) applies the table. `internal/vault` calls it as it creates things, before secret-bearing bytes are written or a temp file replaces a live one: the home directory on every locked operation that may create it, the lock file right after it is created, each temp file before the rename over `vault.enc` or `state.json`, and the `backups/` directory, every snapshot directory and every snapshot file. On POSIX a path wider than 0700/0600 is tightened with `chmod`; stricter modes are left alone. On Windows the path gets a protected DACL (inheritance disabled) with a single allow entry for the current user's SID, set through `golang.org/x/sys/windows`; the home directory's entry is inheritable, so files created inside start out private. `Check` reports a Windows path as private when no access-allowed entry names another SID and the DACL is not null. `internal/keychain` applies the same rule to `key.enc` (and its temp file, before any key bytes are written) and to the unlock cache.
+**Enforcement.** `internal/perm` (`EnsureDir`, `EnsureFile`, `Check`) applies the table. `internal/vault` calls it as it creates things, before secret-bearing bytes are written or a temp file replaces a live one: the home directory on every locked operation that may create it, the lock files (`vault.lock`, `audit.lock`) right after they are created, each temp file before the rename over `vault.enc` or `state.json`, and the `backups/` directory, every snapshot directory and every snapshot file. On POSIX a path wider than 0700/0600 is tightened with `chmod`; stricter modes are left alone. On Windows the path gets a protected DACL (inheritance disabled) with a single allow entry for the current user's SID, set through `golang.org/x/sys/windows`; the home directory's entry is inheritable, so files created inside start out private. `Check` reports a Windows path as private when no access-allowed entry names another SID and the DACL is not null. `internal/keychain` applies the same rule to `key.enc` (and its temp file, before any key bytes are written) and to the unlock cache.
 
 ## Grants: `grants.enc`
 
@@ -142,9 +142,23 @@ One JSON object per line. Every record:
   "hash": "sha256:<hash of this line without the hash field>" }
 ```
 
-Events: `init`, `capture`, `grant`, `exec`, `refusal`, `revoke`, `rm`, `rekey`, `restore`, `uninstall`, `warning`.
+Events: `init`, `capture`, `grant`, `exec`, `manage`, `refusal`, `revoke`, `rm`, `mv`, `edit`, `relink`, `rekey`, `restore`, `uninstall`, `warning`. An unknown event is refused when appending.
 
-`gentle-vault audit --verify` walks the chain and reports the first broken link. `gentle-vault audit --tail 50`, `--since 24h`, `--name X`, `--json` for the Gentle Shell widget.
+**Fields.** In this order: `ts` (RFC 3339, nanoseconds, UTC), `seq` (1-based), `prev`, `event`, `session`, then the optional `host` (`{name, version}`), `names`, `layer` (`global` or `project:<root>`), `by`, `reason`, `cwd`, `refusal` (the refusal type), `scope`, `expires_at`, `command`, `exit_code`, `duration_ms`, `redactions`, `outcome`, `detail`, and finally `hash`. Optional fields are omitted when empty. The API takes secret **names** only; a name that does not match the secret-name rule is dropped (never written raw) and the record gets `detail: "invalid name"`.
+
+**Chain.** `prev` is `sha256:` plus the hex SHA-256 of the previous line's raw bytes, without the newline; the first record's `prev` is `sha256:` plus 64 zeros. `hash` is `sha256:` plus the hex SHA-256 of the record's JSON with the `hash` field omitted. Editing a line breaks its own `hash`; deleting, inserting or reordering lines breaks the next `prev`.
+
+**Anchor.** After each append, `audit.head` (`{"seq":N,"hash":"sha256:…","line":"sha256:…"}`) is replaced atomically (temp file, fsync, rename). `hash` is the `hash` field of record N; `line` is the SHA-256 of record N's raw line, which is exactly the `prev` the next record needs. A head without `line` (written before it existed) is still accepted and falls back to `hash`. Without the anchor, deleting the tail of the log would leave a chain that still verifies. If the log is missing or empty while the anchor has `seq` > 0, the next append does **not** restart at genesis: it continues with `seq` = anchor `seq` + 1 and `prev` = the anchor's `line`, so a deleted log stays visible. `--verify` reports `truncated` at line 1 for a missing or empty log with such an anchor, and for a log whose first record has `seq` ≠ 1 (the log starts after genesis). It also reports `truncated` when the log ends before the anchor and `head_mismatch` when the anchor does not match the record it names (`hash`, or `line` when present); an anchor one record behind the log (a crash between the two writes) is fine, and a missing `audit.head` next to an existing log is valid. The anchor catches accidental truncation and naive deletion, not an attacker who rewrites both files (THREAT_MODEL R8).
+
+**Appending.** Appends from any process serialize on `audit.lock` (the same lock-file mechanism as `vault.lock`, bounded wait, stale break). The writer reads the last line from the end of the file (a 64 KiB window), writes one line with `O_APPEND`, fsyncs, then writes the anchor. If the last line is malformed (partial, not JSON, longer than the window) the writer does not guess from it: it ends the partial line with a newline, sets `prev` to the hash of those raw bytes and `seq` to the anchor's `seq` plus one (without a readable anchor, the number of lines plus one), so `--verify` still reports the damage.
+
+**Verify.** `gentle-vault audit --verify` walks every line and reports the first problem as `{line, seq, reason}`, with `reason` one of `bad_json`, `bad_hash` (the line is not exactly the canonical encoding of its fields, or its `hash` is wrong), `bad_prev`, `bad_seq`, `partial_line` (the last line lacks its newline), `truncated`, `head_mismatch`. A missing log and a missing anchor are valid with 0 records.
+
+**Who writes.** The CLI writes `init` (`detail` = keychain mode, only when a vault is created), `capture` (`set`: names, layer, `detail: "replaced"` when replacing a value), `rm`, `edit`, `mv` (layer = destination, `detail: "global->project"` or `"project->global"`), `relink` (`cwd`) and one `refusal` record (type, and the secret name when it is valid) for every typed refusal a command returns. `session` is `--session` or `cli`; `by` is `user`. A record never holds a value, a description, a binary list or command arguments. `grant`, `exec`, `manage` and `revoke` records arrive with their slices.
+
+**Best effort (CLI).** The vault change is already committed when its record is written, so a failed append prints `warning: audit log write failed` to stderr and leaves the exit code and stdout alone. A home directory that does not exist has no audit log and is skipped silently. Grant and exec (slices 1.6 and 1.8) will decide separately whether a failed append is fail-closed.
+
+`gentle-vault audit --tail 50`, `--since 24h`, `--name X`, `--event E`, `--json` for the Gentle Shell widget; the log is read under `audit.lock`, so a reader never sees a half-written line, and it works without unlocking the vault.
 
 The command text is passed through the redactor before being logged (a command that embeds a literal value, which should not happen, still never reaches the log).
 
@@ -158,6 +172,7 @@ If someone copies the whole `$GENTLE_VAULT_HOME` (a stolen backup, a synced fold
 | `grants.enc` | no (AEAD) | format, write counter |
 | `key.enc` (passphrase mode) | only by brute-forcing the passphrase through Argon2id (64 MiB per guess) | the master key, if the passphrase is weak |
 | `audit.jsonl` | yes | secret **names**, layers, sessions, redacted commands, timestamps. Never values. |
+| `audit.head` | yes | the sequence number and hash of the newest audit record. No names, no values. |
 | `state.json`, `config.yaml`, `bindings.yaml`, `dumpguard.yaml` | yes | installed hosts, versions, settings. No names, no values. |
 
 In keychain mode the key never sits in the directory; it lives in the OS keychain, unlocked only by the user's login session. The audit log stays cleartext on purpose: it is append-only and must be verifiable (`audit --verify`) even when the vault is locked or corrupt. Hiding names in the audit log too (keyed hashes) is a v2 candidate, see `ROADMAP.md`.

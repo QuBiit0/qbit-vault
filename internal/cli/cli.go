@@ -103,12 +103,17 @@ func execute(args []string, stdout, stderr io.Writer, getenv func(string) string
 		ue usageError
 		rf refusal.Refusal
 		ce codedError
+		xe exitError
 	)
 	switch {
+	case errors.As(err, &xe):
+		return xe.code
 	case errors.As(err, &ue):
 		return report(stdout, stderr, asJSON, "usage", ue.msg, exitcode.Usage)
 	case errors.As(err, &rf):
-		return reportRefusal(stdout, stderr, asJSON, rf)
+		code = reportRefusal(stdout, stderr, asJSON, rf)
+		g.recordRefusal(stderr, rf)
+		return code
 	case errors.As(err, &ce):
 		return report(stdout, stderr, asJSON, ce.code, ce.msg, ce.exit)
 	case !entered:
@@ -212,6 +217,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newVersion(g))
 	root.AddCommand(newInit(g))
 	root.AddCommand(newSet(g), newRm(g), newDescribe(g), newEdit(g), newList(g), newMv(g), newRelink(g))
+	root.AddCommand(newAudit(g))
 	return root
 }
 

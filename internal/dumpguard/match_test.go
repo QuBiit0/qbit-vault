@@ -202,12 +202,11 @@ func TestMatchGuardGaps(t *testing.T) {
 
 func TestMatchRawForShellsWithOtherGrammars(t *testing.T) {
 	g := Default()
-	// POSIX segmentation would see one harmless word here; cmd and pwsh
+	// POSIX segmentation may see one harmless word here; cmd and pwsh
 	// would run the second command.
 	for _, c := range []string{`echo "a\" & printenv & \"b"`, `echo "a\" ; env ; \"b"`} {
-		if g.Match(c, inj) {
-			t.Skipf("POSIX segmentation already refuses %q", c)
-		}
+		// Whether POSIX segmentation also refuses these is irrelevant: the
+		// raw form must refuse on its own, so the assertion always runs.
 		if !g.MatchRaw(c, inj) {
 			t.Errorf("MatchRaw(%q) should refuse", c)
 		}
@@ -290,4 +289,23 @@ func FuzzDumpGuard(f *testing.F) {
 		_ = Binaries(junk)
 		_ = g.Match(junk+" ; "+cmd, names)
 	})
+}
+
+// An ambiguous wrapper segment is also matched with the wrapper and every
+// prefix of its words removed, so a dump command behind unknown flags is seen.
+func TestMatchAmbiguousWrapperSegments(t *testing.T) {
+	g := Default()
+	for _, c := range []string{
+		"sudo --foo bar env", "strace -fQ printenv", "timeout --frobnicate 5 env",
+		"xargs -0Z printenv HOME", "nice --foo cat /proc/self/environ",
+	} {
+		if !g.Match(c, inj) {
+			t.Errorf("%q should be refused", c)
+		}
+	}
+	for _, c := range []string{"sudo --foo bar make", "strace -fQ ls"} {
+		if g.Match(c, inj) {
+			t.Errorf("%q should be allowed", c)
+		}
+	}
 }

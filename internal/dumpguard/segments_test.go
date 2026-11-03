@@ -226,3 +226,46 @@ func TestSimpleProgram(t *testing.T) {
 		})
 	}
 }
+
+// Flags a wrapper does not know make the segment ambiguous: Binaries returns
+// a sentinel no allowlist can contain, so the allowlist refuses it.
+func TestBinariesAmbiguousWrapperFlags(t *testing.T) {
+	amb := []string{Ambiguous}
+	tests := []struct {
+		name string
+		cmd  string
+		want []string
+	}{
+		{"strace cluster, value is next word", "strace -fo gh curl --version", []string{"curl"}},
+		{"strace unknown cluster letter", "strace -fQ gh curl --version", amb},
+		{"xargs cluster, -n takes the attached 1", "xargs -0n1 gh curl", []string{"gh"}},
+		{"xargs cluster, value is next word", "xargs -0n 1 curl x", []string{"curl"}},
+		{"xargs unknown cluster letter", "xargs -0Z gh curl", amb},
+		{"timeout attached value", "timeout -sKILL 5 curl x", []string{"curl"}},
+		{"timeout unknown flag", "timeout --frobnicate 5 curl x", amb},
+		{"nice long with equals", "nice --adjustment=5 curl x", []string{"curl"}},
+		{"nice unknown long", "nice --foo curl x", amb},
+		{"sudo cluster", "sudo -Eu root curl x", []string{"curl"}},
+		{"sudo unknown long flag", "sudo --foo bar curl x", amb},
+		{"sudo unknown short flag", "sudo -Z gh curl x", amb},
+		{"env split string", "env -S 'curl x' gh", amb},
+		{"npx -c runs a shell", "npx -c 'curl x' gh", amb},
+		{"pnpm unknown flag before exec", "pnpm --foo bar exec curl x", amb},
+		{"known forms stay exact", "sudo -u root gh x", []string{"gh"}},
+		{"timeout known", "timeout -s KILL 5 gh x", []string{"gh"}},
+		{"nice known", "nice -n 5 gh x", []string{"gh"}},
+		{"strace known", "strace -f -o out gh x", []string{"gh"}},
+		{"strace attached", "strace -fo out gh x", []string{"gh"}},
+		{"xargs known", "xargs -n1 gh", []string{"gh"}},
+		{"xargs attached I", "xargs -I{} gh {}", []string{"gh"}},
+		{"sudo equals form", "sudo --user=root gh x", []string{"gh"}},
+		{"ambiguity in a later segment", "gh a; sudo --foo x curl", []string{"gh", Ambiguous}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Binaries(tt.cmd); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("Binaries(%q)\n got %q\nwant %q", tt.cmd, got, tt.want)
+			}
+		})
+	}
+}

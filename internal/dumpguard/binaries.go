@@ -8,27 +8,7 @@ import (
 
 var assignRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 
-// flags of each wrapper that consume the following word.
 var (
-	sudoArgs    = set("-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t", "--user", "--group", "--host", "--prompt", "--chdir", "--chroot")
-	envArgs     = set("-u", "--unset", "-C", "--chdir")
-	execArgs    = set("-a")
-	timeArgs    = set("-f", "-o", "--format", "--output")
-	pkgArgs     = set("-p", "--package")
-	pnpmArgs    = set("-C", "--dir", "-F", "--filter")
-	yarnArgs    = set("--cwd")
-	uvArgs      = set("--directory", "--project", "-p", "--python", "--env-file")
-	uvRunArgs   = set("--with", "--with-requirements", "-p", "--python", "--directory", "--project", "--env-file", "--extra", "--group", "--package", "--from")
-	poetryArgs  = set("-C", "--directory", "-P", "--project")
-	niceArgs    = set("-n", "--adjustment")
-	timeoutArgs = set("-s", "--signal", "-k", "--kill-after")
-	stdbufArgs  = set("-i", "-o", "-e", "--input", "--output", "--error")
-	straceArgs  = set("-o", "-e", "-p", "-s", "-u", "-E", "-a", "-b", "-P", "-S", "-I", "-X", "-O", "-U", "-z", "-Z")
-	chrootArgs  = set("--userspec", "--groups")
-	ionicArgs   = set("-c", "-n", "-p", "-P", "-u", "--class", "--classdata", "--pid", "--pgid", "--uid")
-	doasArgs    = set("-u", "-C", "-a")
-	xargsArgs   = set("-I", "-n", "-P", "-d", "-a", "-L", "-s", "-E", "-J", "--max-args", "--max-procs", "--delimiter", "--arg-file", "--max-lines", "--max-chars", "--eof")
-	noArgs      = set()
 	shellNames  = set("sh", "bash", "zsh", "dash", "ksh", "ash", "fish")
 	psNames     = set("pwsh", "powershell")
 	psCmdFlags  = set("-c", "-command")
@@ -41,25 +21,6 @@ func set(v ...string) map[string]bool {
 		m[s] = true
 	}
 	return m
-}
-
-// skipFlags advances past leading flags (and the values of those in withArg),
-// stopping after `--` or at the first word that is not a flag.
-func skipFlags(w []string, i int, withArg map[string]bool) int {
-	for i < len(w) {
-		a := w[i]
-		if a == "--" {
-			return i + 1
-		}
-		if len(a) < 2 || a[0] != '-' {
-			return i
-		}
-		i++
-		if withArg[a] && i < len(w) {
-			i++
-		}
-	}
-	return i
 }
 
 // afterPositional skips one positional word at i (the duration of `timeout`,
@@ -94,102 +55,6 @@ func baseName(word string) string {
 		}
 	}
 	return word
-}
-
-// wrapped returns the index where the wrapped command starts when the word at
-// i is a wrapper (sudo, env, npx, ...); ok is false for anything else.
-func wrapped(w []string, i int) (next int, ok bool) {
-	switch strings.ToLower(baseName(w[i])) {
-	case "sudo":
-		return skipFlags(w, i+1, sudoArgs), true
-	case "env":
-		j := i + 1
-		for {
-			j = skipFlags(w, j, envArgs)
-			k := skipAssign(w, j)
-			if k == j {
-				return j, true
-			}
-			j = k
-		}
-	case "command":
-		if i+1 < len(w) && (w[i+1] == "-v" || w[i+1] == "-V") {
-			return 0, false // a lookup, nothing runs
-		}
-		return skipFlags(w, i+1, noArgs), true
-	case "exec":
-		return skipFlags(w, i+1, execArgs), true
-	case "nohup", "setsid":
-		return skipFlags(w, i+1, noArgs), true
-	case "nice":
-		return skipFlags(w, i+1, niceArgs), true
-	case "timeout":
-		return afterPositional(w, skipFlags(w, i+1, timeoutArgs)), true // DURATION
-	case "stdbuf":
-		return skipFlags(w, i+1, stdbufArgs), true
-	case "strace":
-		return skipFlags(w, i+1, straceArgs), true
-	case "chroot":
-		return afterPositional(w, skipFlags(w, i+1, chrootArgs)), true // NEWROOT
-	case "ionice":
-		return skipFlags(w, i+1, ionicArgs), true
-	case "doas":
-		return skipFlags(w, i+1, doasArgs), true
-	case "xargs":
-		return skipFlags(w, i+1, xargsArgs), true
-	case "time":
-		return skipFlags(w, i+1, timeArgs), true
-	case "npx", "bunx":
-		return skipFlags(w, i+1, pkgArgs), true
-	case "uvx":
-		return skipFlags(w, i+1, uvRunArgs), true
-	case "pnpm":
-		j := skipFlags(w, i+1, pnpmArgs)
-		if j < len(w) && (w[j] == "exec" || w[j] == "dlx") {
-			return skipFlags(w, j+1, pkgArgs), true
-		}
-	case "yarn":
-		j := skipFlags(w, i+1, yarnArgs)
-		if j < len(w) && w[j] == "dlx" {
-			return skipFlags(w, j+1, pkgArgs), true
-		}
-	case "uv":
-		j := skipFlags(w, i+1, uvArgs)
-		if j < len(w) && w[j] == "run" {
-			return skipFlags(w, j+1, uvRunArgs), true
-		}
-		if j+1 < len(w) && w[j] == "tool" && w[j+1] == "run" {
-			return skipFlags(w, j+2, uvRunArgs), true
-		}
-	case "poetry":
-		j := skipFlags(w, i+1, poetryArgs)
-		if j < len(w) && w[j] == "run" {
-			return skipFlags(w, j+1, noArgs), true
-		}
-	}
-	return 0, false
-}
-
-// resolve finds the program a segment runs after leading VAR=val assignments
-// and wrappers. idx is -1 when nothing runs. bare is true when the program is
-// a wrapper that was given no command (`env`, `env FOO=1`, `sudo`): it then
-// runs as itself and its remaining words are not a command.
-func resolve(w []string) (idx int, bare bool) {
-	i := 0
-	for {
-		i = skipAssign(w, i)
-		if i >= len(w) {
-			return -1, false
-		}
-		next, ok := wrapped(w, i)
-		if !ok {
-			return i, false
-		}
-		if next >= len(w) {
-			return i, true
-		}
-		i = next
-	}
 }
 
 // scriptOf returns the script text of `sh -c '...'`, `pwsh -Command ...`,
@@ -247,7 +112,8 @@ func ProgramName(word string) string {
 // without duplicates, after resolving wrappers (sudo, env, command, exec,
 // nohup, setsid, nice, timeout, stdbuf, strace, chroot, ionice, doas, xargs, time, npx, pnpm exec/dlx, yarn dlx, bunx, uv run, uvx, poetry run)
 // and leading VAR=val assignments. Directories and .exe/.cmd/.bat are
-// stripped; names are lowercased on Windows. `sh -c` and `eval` scripts are
+// stripped; names are lowercased on Windows. A segment whose wrapper flags
+// cannot be parsed with certainty is listed as Ambiguous. `sh -c` and `eval` scripts are
 // transparent: their own segments are listed instead of the shell.
 func Binaries(cmd string) []string {
 	var out []string
@@ -256,11 +122,14 @@ func Binaries(cmd string) []string {
 		if s.script {
 			continue
 		}
-		idx, _ := resolve(s.Words)
+		idx, _, amb := resolveAmbiguity(s.Words)
 		if idx < 0 {
 			continue
 		}
 		name := ProgramName(s.Words[idx])
+		if amb {
+			name = Ambiguous
+		}
 		if name == "" {
 			continue
 		}

@@ -322,7 +322,7 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 			allowed[dumpguard.ProgramName(b)] = true
 		}
 		for _, prog := range programs {
-			if !builtins[prog] && !allowed[prog] {
+			if prog == dumpguard.Ambiguous || (!builtins[prog] && !allowed[prog]) {
 				return refusal.New(refusal.ScopeBinary, e.Name)
 			}
 		}

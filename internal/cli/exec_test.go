@@ -824,3 +824,28 @@ func TestExecAllowlistUnderBashUnchanged(t *testing.T) {
 	}
 	w.wantRefusal(refusal.ScopeBinary, "GITHUB_TOKEN", execArgs(sessA, []string{"GITHUB_TOKEN"}, run+" && curl x", "--shell", "bash")...)
 }
+
+// Wrapper flags the parser cannot place must not let another program past
+// the allowlist (review warning): the command is refused, nothing runs.
+func TestExecAllowlistRefusesAmbiguousWrapperFlags(t *testing.T) {
+	w := newExecWorld(t)
+	w.setSecret("GITHUB_TOKEN", xv, "--global", "--binaries", "gh")
+	w.grantTo(sessA, "GITHUB_TOKEN", "session")
+	mk := marker(t)
+	run := child(t, "mark", mk, 0)
+	for _, c := range []string{
+		"strace -fo gh " + run,
+		"xargs -0n 1 " + run,
+		"xargs -0Z gh " + run,
+		"timeout -sKILL 5 " + run,
+		"nice --adjustment=5 " + run,
+		"sudo -Eu root " + run,
+		"sudo --foo bar " + run,
+		"strace -fQ gh " + run,
+	} {
+		w.wantRefusal(refusal.ScopeBinary, "GITHUB_TOKEN", execArgs(sessA, []string{"GITHUB_TOKEN"}, c, "--shell", "bash")...)
+		if ran(mk) {
+			t.Fatalf("%q ran", c)
+		}
+	}
+}

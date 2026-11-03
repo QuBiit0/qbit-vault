@@ -49,9 +49,20 @@ func forms(seg Segment) []string {
 		add(strings.Join(folded, " "))
 	}
 	for _, w := range variants {
-		idx, bare := resolve(w)
+		idx, bare, amb := resolveAmbiguity(w)
 		if idx < 0 {
 			continue
+		}
+		if amb {
+			// Unknown wrapper flags: also test the segment with the wrapper
+			// and every prefix of its words removed, at each split point.
+			for k := range w {
+				add(strings.Join(w[k:], " "))
+				add(strings.ToLower(baseName(w[k])) + " " + strings.Join(w[k+1:], " "))
+				if j, b := resolve(w[k:]); j >= 0 && !b {
+					add(strings.Join(append([]string{strings.ToLower(baseName(w[k+j]))}, w[k+j+1:]...), " "))
+				}
+			}
 		}
 		prog := strings.ToLower(baseName(w[idx]))
 		if bare {

@@ -21,6 +21,9 @@ func (g *globals) backend() (prompt.Backend, error) { return newPrompt(g) }
 // (Ctrl-C, end of input, or a "no" to a confirmation). Nothing was written.
 var errCancelled = codedError{"cancelled", "cancelled", exitcode.Failure}
 
+// errTimedOut is the same outcome after the prompt timeout (docs/CLI.md).
+var errTimedOut = codedError{"cancelled", prompt.ErrTimeout.Error(), exitcode.Failure}
+
 // promptFail maps a failed prompt. A backend that cannot ask becomes a usage
 // error naming what to do instead (hint, when not empty).
 func promptFail(err error, hint string) error {

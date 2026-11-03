@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/grants"
 	"github.com/QuBiit0/gentle-vault/internal/prompt"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
@@ -158,6 +159,18 @@ func newPromptCmd(g *globals) *cobra.Command {
 			defer s.close()
 
 			layerChoice := avail[0]
+			// From here the user is asked, so the outcome is audited, best effort.
+			// The record never holds the reason, the value or the token.
+			var outcome, auditedLayer, auditedScope = "cancelled", "", ""
+			defer func() {
+				if outcome == "" {
+					return // refused before the user was asked about the secret
+				}
+				g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventPrompt, Names: []string{name}, Layer: auditedLayer, Scope: auditedScope, Outcome: outcome})
+			}()
+			if len(avail) == 1 {
+				auditedLayer = auditLayer(layerChoice)
+			}
 			if len(avail) > 1 {
 				opts := make([]string, len(avail))
 				for i, l := range avail {
@@ -171,6 +184,7 @@ func newPromptCmd(g *globals) *cobra.Command {
 					return promptFail(err, "")
 				}
 				layerChoice = avail[i]
+				auditedLayer = auditLayer(layerChoice)
 			}
 
 			var (
@@ -189,11 +203,13 @@ func newPromptCmd(g *globals) *cobra.Command {
 			}
 			wipeEntries(all)
 			if !withValue && !exists {
+				outcome = ""
 				return mapErr(vault.ErrNotFound, name)
 			}
 
 			allowed := g.allowedScopes(name, layerChoice, sensitive, want)
 			if len(allowed) == 0 {
+				outcome = ""
 				return g.noScopeError(name, layerChoice, sensitive, want)
 			}
 
@@ -218,6 +234,7 @@ func newPromptCmd(g *globals) *cobra.Command {
 				return promptFail(err, "")
 			}
 			if i >= len(allowed) {
+				outcome = "denied"
 				return refusal.New(refusal.UserDeclined, name)
 			}
 			scope := allowed[i]
@@ -231,6 +248,7 @@ func newPromptCmd(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			outcome, auditedScope = "issued", string(scope)
 			body := promptBody{OK: true, Token: token, Scope: string(scope), Layer: layerName(layerChoice)}
 			if withValue {
 				if _, werr := fd.Write(bytes.TrimSpace(raw)); werr != nil {

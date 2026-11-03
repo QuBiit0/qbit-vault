@@ -4,6 +4,7 @@
 package prompttest
 
 import (
+	"context"
 	"errors"
 	"io"
 
@@ -105,7 +106,7 @@ type stream struct {
 func (s *stream) Write(p []byte) (int, error) { return s.out.Write(p) }
 func (*stream) Close() error                  { return nil }
 
-func (s *stream) ReadLine() ([]byte, error) {
+func (s *stream) ReadLine(context.Context) ([]byte, error) {
 	var buf []byte
 	var one [1]byte
 	for {
@@ -129,4 +130,4 @@ func (s *stream) ReadLine() ([]byte, error) {
 	}
 }
 
-func (s *stream) ReadHidden() ([]byte, error) { return s.ReadLine() }
+func (s *stream) ReadHidden(ctx context.Context) ([]byte, error) { return s.ReadLine(ctx) }

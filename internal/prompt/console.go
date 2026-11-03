@@ -1,10 +1,10 @@
 package prompt
 
 import (
+	"context"
 	"io"
 	"os"
 	"runtime"
-	"unicode/utf8"
 
 	"golang.org/x/term"
 )
@@ -59,20 +59,52 @@ func (c *console) Close() error {
 	return err
 }
 
-func (c *console) ReadLine() ([]byte, error) { return readLine(c.in) }
+func (c *console) ReadLine(ctx context.Context) ([]byte, error) {
+	return untilDone(ctx, func() ([]byte, error) { return readLine(c.in) })
+}
+
+// untilDone runs read and returns its result, or ctx.Err() if ctx ends first.
+// A blocked console read cannot be interrupted, so it is left behind; the
+// process is about to exit with the timeout.
+func untilDone(ctx context.Context, read func() ([]byte, error)) ([]byte, error) {
+	type result struct {
+		b   []byte
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		b, err := read()
+		ch <- result{b, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.b, r.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
 // ReadHidden puts the terminal in raw mode (no echo, no line editing, Ctrl-C
 // delivered as a byte so it cancels instead of killing the process mid-read)
 // and restores it on every path. Nothing is echoed, not even a mask: the
 // length of a secret is not shown either.
-func (c *console) ReadHidden() ([]byte, error) {
+func (c *console) ReadHidden(ctx context.Context) ([]byte, error) {
 	fd := int(c.in.Fd())
 	state, err := term.MakeRaw(fd)
 	if err != nil {
 		return nil, ErrNoTerminal
 	}
 	defer func() { _ = term.Restore(fd, state) }()
-	return readHidden(c.in, c.out)
+	b, err := untilDone(ctx, func() ([]byte, error) {
+		return readHidden(c.in, c.out, func() { flushInput(c.in) })
+	})
+	if err != nil && ctx.Err() != nil {
+		// Timed out with the reader still blocked: drop what it could not
+		// take and leave the hidden prompt line.
+		flushInput(c.in)
+		_, _ = io.WriteString(c.out, "\r\n")
+	}
+	return b, err
 }
 
 // readByte reads exactly one byte, so nothing past the answer is consumed.
@@ -113,85 +145,4 @@ func readLine(r io.Reader) ([]byte, error) {
 			buf = append(buf, b)
 		}
 	}
-}
-
-// Escape sequence states of readHidden.
-const (
-	escNone = iota
-	escStart
-	escCSI
-	escSS3
-)
-
-// readHidden reads one line from a raw terminal r. Enter ends it; Backspace
-// removes the last rune; Ctrl-C, or Ctrl-D on an empty line, is ErrCancelled;
-// escape sequences (arrow keys, bracketed-paste markers) and other control
-// bytes are dropped. The bytes are never echoed to w, which only gets the
-// line break. The input is kept as bytes and bounded by maxInput.
-func readHidden(r io.Reader, w io.Writer) ([]byte, error) {
-	var (
-		buf []byte
-		esc = escNone
-	)
-	fail := func(err error) ([]byte, error) {
-		clear(buf)
-		_, _ = io.WriteString(w, "\r\n")
-		return nil, err
-	}
-	for {
-		b, err := readByte(r)
-		if err != nil {
-			if err == io.EOF && len(buf) > 0 {
-				break
-			}
-			return fail(err)
-		}
-		switch esc {
-		case escStart:
-			switch {
-			case b == '[':
-				esc = escCSI
-				continue
-			case b == 'O':
-				esc = escSS3
-				continue
-			}
-			esc = escNone // not a sequence: handle b as a normal byte
-		case escCSI:
-			if b >= 0x40 && b <= 0x7e {
-				esc = escNone
-			}
-			continue
-		case escSS3:
-			esc = escNone
-			continue
-		}
-		switch {
-		case b == '\r' || b == '\n':
-			_, _ = io.WriteString(w, "\r\n")
-			return buf, nil
-		case b == 0x03:
-			return fail(ErrCancelled)
-		case b == 0x04:
-			if len(buf) == 0 {
-				return fail(ErrCancelled)
-			}
-		case b == 0x7f || b == 0x08:
-			for len(buf) > 0 {
-				last := buf[len(buf)-1]
-				buf = buf[:len(buf)-1]
-				if !utf8.RuneStart(last) {
-					continue
-				}
-				break
-			}
-		case b == 0x1b:
-			esc = escStart
-		case b < 0x20:
-		case len(buf) < maxInput:
-			buf = append(buf, b)
-		}
-	}
-	_, _ = io.WriteString(w, "\r\n")
-	return buf, nil
 }

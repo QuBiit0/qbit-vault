@@ -90,6 +90,10 @@ func mapErr(err error, name string) error {
 		return refusal.New(refusal.Internal, "").WithMessage("vault is busy").WithRetryable(true)
 	case errors.Is(err, prompt.ErrCancelled):
 		return errCancelled
+	case errors.Is(err, prompt.ErrTimeout):
+		return errTimedOut
+	case errors.Is(err, prompt.ErrTrailingInput), errors.Is(err, prompt.ErrBadTimeout):
+		return usageError{err.Error()}
 	case errors.Is(err, prompt.ErrMismatch):
 		return usageError{"passphrases do not match"}
 	case errors.Is(err, keychain.ErrEmptyPassphrase):

@@ -729,3 +729,117 @@ func TestPromptRefusalShapeInJSON(t *testing.T) {
 		t.Fatalf("code=%d out=%q", code, out)
 	}
 }
+
+const msgTrailing = "the input continued after Enter; paste a single line, or use --stdin for multi-line values"
+
+func TestPromptTimeoutIsCancelledAndChangesNothing(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun(fxVal, "set", "B_KEY", "--global", "--stdin")
+	before, grantsBefore := w.snapshot(), w.grantsState()
+	timedOut := prompttest.Answer{Err: prompt.ErrTimeout}
+	cmds := map[string][]string{
+		"set":     {"set", "A_KEY"},
+		"rm":      {"rm", "B_KEY"},
+		"grant":   {"--session", sessA, "grant", "B_KEY", "--scope", "once"},
+		"prompt":  {"--session", sessA, "prompt", "--name", "B_KEY", "--reason", "r"},
+		"set+grp": {"--session", sessA, "set", "A_KEY", "--grant", "once"},
+	}
+	for name, args := range cmds {
+		t.Run(name, func(t *testing.T) {
+			withBackend(t, answers(timedOut))
+			code, out, errs := w.run("", args...)
+			if code != exitcode.Failure || out != "" || errs != "error: prompt timed out\n" {
+				t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+			}
+			if w.snapshot() != before || w.grantsState() != grantsBefore {
+				t.Fatal("the vault changed")
+			}
+		})
+	}
+	withBackend(t, answers(timedOut))
+	code, out, _ := w.run("", "--json", "set", "A_KEY")
+	if code != exitcode.Failure || out != `{"ok":false,"error":{"code":"cancelled","message":"prompt timed out"}}`+"\n" {
+		t.Fatalf("json: code=%d out=%q", code, out)
+	}
+}
+
+func TestTrailingInputIsAUsageErrorAndWritesNothing(t *testing.T) {
+	w := newWorld(t)
+	before := w.snapshot()
+	withBackend(t, answers(prompttest.Answer{Err: prompt.ErrTrailingInput}))
+	code, out, errs := w.run("", "set", "A_KEY")
+	if code != exitcode.Usage || out != "" || errs != usageErr(msgTrailing) {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if w.snapshot() != before {
+		t.Fatal("the vault changed")
+	}
+	h := newHarness(t)
+	withBackend(t, answers(prompttest.Answer{Err: prompt.ErrTrailingInput}))
+	if code, out, errs = h.run("", "init", "--passphrase"); code != exitcode.Usage || out != "" || errs != usageErr(msgTrailing) {
+		t.Fatalf("init: code=%d out=%q err=%q", code, out, errs)
+	}
+	if _, err := os.Stat(filepath.Join(h.home, "key.enc")); !os.IsNotExist(err) {
+		t.Fatal("a key file was created")
+	}
+}
+
+func TestBadPromptTimeoutEnvIsUsage(t *testing.T) {
+	w := newWorld(t)
+	old := newPrompt
+	newPrompt = func(g *globals) (prompt.Backend, error) { return prompt.Select(g.getenv) }
+	t.Cleanup(func() { newPrompt = old })
+	var out, errb bytes.Buffer
+	code := execute([]string{"--home", w.home, "set", "A_KEY"}, &out, &errb, envFrom(map[string]string{prompt.EnvTimeout: "9s"}))
+	if code != exitcode.Usage || out.Len() != 0 || !strings.Contains(errb.String(), prompt.EnvTimeout) {
+		t.Fatalf("code=%d out=%q err=%q", code, out.String(), errb.String())
+	}
+}
+
+func TestPromptAuditRecords(t *testing.T) {
+	pinClock(t)
+	w := newWorld(t)
+	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
+	run := func(a prompttest.Answer) {
+		withBackend(t, answers(a))
+		w.run("", "--session", sessA, "prompt", "--name", "A_KEY", "--reason", "TESTSECRET_reason_must_not_be_audited")
+	}
+	run(pick(0))                                   // issued, once
+	run(pick(2))                                   // denied
+	run(cancel())                                  // cancelled
+	run(prompttest.Answer{Err: prompt.ErrTimeout}) // timed out counts as cancelled
+	recs := w.auditEvents("prompt")
+	if len(recs) != 4 {
+		t.Fatalf("%d prompt records, want 4", len(recs))
+	}
+	for i, want := range []string{"issued", "denied", "cancelled", "cancelled"} {
+		r := recs[i]
+		if r.Outcome != want || len(r.Names) != 1 || r.Names[0] != "A_KEY" || r.Session != sessA || r.Layer != "global" || r.By != "user" {
+			t.Fatalf("record %d = %+v, want outcome %s", i, r, want)
+		}
+		if r.Reason != "" || r.Detail != "" {
+			t.Fatalf("record %d carries free text: %+v", i, r)
+		}
+	}
+	if recs[0].Scope != "once" || recs[1].Scope != "" {
+		t.Fatalf("scopes = %q, %q", recs[0].Scope, recs[1].Scope)
+	}
+	noFixtures(t, "audit", w.auditText())
+	// A refused request (unknown secret) never reached the user: no prompt record.
+	withBackend(t, answers())
+	w.run("", "--session", sessA, "prompt", "--name", "NOPE_KEY", "--reason", "r")
+	if n := len(w.auditEvents("prompt")); n != 4 {
+		t.Fatalf("%d prompt records after a refused request", n)
+	}
+}
+
+func TestInteractiveSetAuditsManualEntry(t *testing.T) {
+	w := newWorld(t)
+	withBackend(t, answers(val(fxVal)))
+	w.mustRun("", "set", "A_KEY")
+	w.mustRun(fxVal, "set", "B_KEY", "--global", "--stdin")
+	recs := w.auditEvents("capture")
+	if len(recs) != 2 || recs[0].Reason != "manual entry" || recs[1].Reason != "" {
+		t.Fatalf("capture records = %+v", recs)
+	}
+}

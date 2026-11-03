@@ -10,6 +10,9 @@ import (
 	"github.com/QuBiit0/gentle-vault/internal/vault"
 )
 
+// manualEntry is the reason of a capture the user started themselves.
+const manualEntry = "manual entry"
+
 // scopeOrder is the order scopes are offered in.
 var scopeOrder = []grants.Scope{grants.ScopeOnce, grants.ScopeSession, grants.ScopeProject}
 
@@ -92,7 +95,7 @@ func askValue(ask prompt.Backend, req prompt.SecretRequest, hint string) ([]byte
 // leaves the vault as it was (R-CAP-04).
 func (g *globals) captureValue(ask prompt.Backend, name string, layer vault.Layer, existing bool, flagScope grants.Scope, sensitive bool) ([]byte, grants.Scope, error) {
 	raw, err := askValue(ask, prompt.SecretRequest{
-		Name: name, Reason: "manual entry", Host: "cli", Session: g.Session,
+		Name: name, Reason: manualEntry, Host: "cli", Session: g.Session,
 		Project: layerRequest(layer), Existing: existing,
 	}, "use --stdin")
 	if err != nil {

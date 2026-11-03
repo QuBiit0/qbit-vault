@@ -2,10 +2,12 @@ package prompt
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -17,6 +19,8 @@ const (
 // memTerm is a scripted terminal: each read consumes one line.
 type memTerm struct {
 	lines  []string
+	block  bool   // with no lines left, block until the prompt deadline
+	trail  bool   // the next hidden read reports input after Enter
 	hidden []bool // for every read, whether it was a hidden one
 	out    bytes.Buffer
 	closed bool
@@ -25,9 +29,16 @@ type memTerm struct {
 func (m *memTerm) Write(p []byte) (int, error) { return m.out.Write(p) }
 func (m *memTerm) Close() error                { m.closed = true; return nil }
 
-func (m *memTerm) next(hidden bool) ([]byte, error) {
+func (m *memTerm) next(ctx context.Context, hidden bool) ([]byte, error) {
 	m.hidden = append(m.hidden, hidden)
+	if hidden && m.trail {
+		return nil, ErrTrailingInput
+	}
 	if len(m.lines) == 0 {
+		if m.block {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
 		return nil, io.EOF
 	}
 	l := m.lines[0]
@@ -38,8 +49,8 @@ func (m *memTerm) next(hidden bool) ([]byte, error) {
 	return []byte(l), nil
 }
 
-func (m *memTerm) ReadLine() ([]byte, error)   { return m.next(false) }
-func (m *memTerm) ReadHidden() ([]byte, error) { return m.next(true) }
+func (m *memTerm) ReadLine(ctx context.Context) ([]byte, error)   { return m.next(ctx, false) }
+func (m *memTerm) ReadHidden(ctx context.Context) ([]byte, error) { return m.next(ctx, true) }
 
 func backendOf(lines ...string) (Backend, *memTerm) {
 	t := &memTerm{lines: lines}
@@ -353,7 +364,7 @@ func TestReadHidden(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var w bytes.Buffer
-			got, err := readHidden(strings.NewReader(tt.in), &w)
+			got, err := readHidden(strings.NewReader(tt.in), &w, func() {})
 			if !errors.Is(err, tt.err) || string(got) != tt.want {
 				t.Fatalf("got %q, %v; want %q, %v", got, err, tt.want, tt.err)
 			}
@@ -365,7 +376,7 @@ func TestReadHidden(t *testing.T) {
 }
 
 func TestReadHiddenBoundsInput(t *testing.T) {
-	got, err := readHidden(strings.NewReader(strings.Repeat("a", maxInput*2)+"\r"), io.Discard)
+	got, err := readHidden(strings.NewReader(strings.Repeat("a", maxInput*2)+"\r"), io.Discard, func() {})
 	if err != nil || len(got) != maxInput {
 		t.Fatalf("len = %d, err = %v, want %d", len(got), err, maxInput)
 	}
@@ -423,5 +434,121 @@ func TestSelect(t *testing.T) {
 	b, err := Select(env("carrier-pigeon"))
 	if b != nil || err == nil || errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), EnvBackend) || !strings.Contains(err.Error(), "carrier-pigeon") {
 		t.Errorf("unknown: %v, %v", b, err)
+	}
+}
+
+func TestReadHiddenRefusesInputAfterEnter(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		ok   bool // accepted
+	}{
+		{"second pasted line", "line1\rline2\r", false},
+		{"second line after lf", "line1\nline2\n", false},
+		{"partial second line", "line1\rrest", false},
+		{"crlf is one line ending", "line1\r\n", true},
+		{"plain enter", "line1\r", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flushed := 0
+			var w bytes.Buffer
+			got, err := readHidden(strings.NewReader(tt.in), &w, func() { flushed++ })
+			if flushed == 0 {
+				t.Error("pending terminal input was not flushed")
+			}
+			if tt.ok {
+				if err != nil || string(got) != "line1" {
+					t.Fatalf("got %q, %v", got, err)
+				}
+				return
+			}
+			if !errors.Is(err, ErrTrailingInput) || got != nil {
+				t.Fatalf("got %q, %v; want ErrTrailingInput and nothing", got, err)
+			}
+			if strings.Contains(w.String(), "line") {
+				t.Error("pasted text was echoed")
+			}
+		})
+	}
+}
+
+func TestReadHiddenFlushesOnCancel(t *testing.T) {
+	flushed := 0
+	if _, err := readHidden(strings.NewReader("ab\x03rest"), io.Discard, func() { flushed++ }); !errors.Is(err, ErrCancelled) || flushed == 0 {
+		t.Fatalf("err = %v, flushed = %d", err, flushed)
+	}
+}
+
+func TestTrailingInputRefusesValueAndPassphrase(t *testing.T) {
+	for name, call := range map[string]func(Backend) (int, error){
+		"secret":     func(b Backend) (int, error) { s, err := b.Secret(req); return s.Len(), err },
+		"passphrase": func(b Backend) (int, error) { s, err := b.Passphrase(true); return s.Len(), err },
+	} {
+		t.Run(name, func(t *testing.T) {
+			term := &memTerm{trail: true}
+			n, err := call(New(func() (Terminal, error) { return term, nil }))
+			if !errors.Is(err, ErrTrailingInput) || n != 0 {
+				t.Fatalf("err = %v, len = %d", err, n)
+			}
+		})
+	}
+	const want = "the input continued after Enter; paste a single line, or use --stdin for multi-line values"
+	if ErrTrailingInput.Error() != want {
+		t.Errorf("message = %q", ErrTrailingInput.Error())
+	}
+}
+
+func TestTimeout(t *testing.T) {
+	calls := map[string]func(Backend) error{
+		"secret":     func(b Backend) error { _, err := b.Secret(req); return err },
+		"passphrase": func(b Backend) error { _, err := b.Passphrase(false); return err },
+		"choose":     func(b Backend) error { _, err := b.Choose("q", []string{"a"}, 0); return err },
+		"confirm":    func(b Backend) error { _, err := b.Confirm("q"); return err },
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			term := &memTerm{block: true}
+			b := New(func() (Terminal, error) { return term, nil }, Timeout(30*time.Millisecond))
+			start := time.Now()
+			err := call(b)
+			if !errors.Is(err, ErrTimeout) || err.Error() != "prompt timed out" {
+				t.Fatalf("err = %v", err)
+			}
+			if time.Since(start) > 5*time.Second {
+				t.Error("the prompt did not time out promptly")
+			}
+			if !term.closed {
+				t.Error("terminal not closed")
+			}
+			if errors.Is(err, ErrCancelled) {
+				t.Error("a timeout is its own error")
+			}
+		})
+	}
+}
+
+func TestSelectTimeoutEnv(t *testing.T) {
+	env := func(v string) func(string) string {
+		return func(k string) string {
+			if k == EnvTimeout {
+				return v
+			}
+			return ""
+		}
+	}
+	for _, v := range []string{"", "10s", "90s", "1h", "5m"} {
+		if _, err := Select(env(v)); err != nil {
+			t.Errorf("%q: %v", v, err)
+		}
+	}
+	for _, v := range []string{"9s", "1h1s", "0", "-5m", "abc", "5"} {
+		b, err := Select(env(v))
+		if b != nil || !errors.Is(err, ErrBadTimeout) || !strings.Contains(err.Error(), EnvTimeout) {
+			t.Errorf("%q: %v, %v", v, b, err)
+		}
+	}
+	if DefaultTimeout != 5*time.Minute {
+		t.Errorf("default = %v", DefaultTimeout)
 	}
 }

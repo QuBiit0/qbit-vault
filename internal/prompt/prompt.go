@@ -8,12 +8,14 @@ package prompt
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -22,6 +24,16 @@ import (
 
 // EnvBackend is the environment variable that forces a prompt backend.
 const EnvBackend = "GENTLE_VAULT_PROMPT"
+
+// EnvTimeout sets how long a prompt waits for the user, as a Go duration.
+const EnvTimeout = "GENTLE_VAULT_PROMPT_TIMEOUT"
+
+// The prompt timeout when EnvTimeout is unset, and its bounds.
+const (
+	DefaultTimeout = 5 * time.Minute
+	MinTimeout     = 10 * time.Second
+	MaxTimeout     = time.Hour
+)
 
 var (
 	// ErrCancelled means the user gave up (Ctrl-C, end of input).
@@ -33,6 +45,14 @@ var (
 	ErrMismatch = errors.New("passphrases do not match")
 	// ErrUnknownBackend means GENTLE_VAULT_PROMPT names no backend.
 	ErrUnknownBackend = errors.New("unknown prompt backend")
+	// ErrTimeout means the user did not answer in time.
+	ErrTimeout = errors.New("prompt timed out")
+	// ErrBadTimeout means GENTLE_VAULT_PROMPT_TIMEOUT is not a duration in bounds.
+	ErrBadTimeout = errors.New("invalid prompt timeout")
+	// ErrTrailingInput means more input followed Enter in a hidden read, as
+	// with a multi-line paste. The extra text is discarded, not left for the
+	// next program on the terminal.
+	ErrTrailingInput = errors.New("the input continued after Enter; paste a single line, or use --stdin for multi-line values")
 )
 
 // unavailableError is an ErrUnavailable with its own message.
@@ -71,21 +91,32 @@ type Backend interface {
 }
 
 // Terminal is the seam under the tty backend: a console with an echoed line
-// read and a hidden one. Reads return io.EOF at the end of input and
-// ErrCancelled on Ctrl-C; the line terminator is not part of the result.
+// read and a hidden one. Reads return io.EOF at the end of input, ErrCancelled
+// on Ctrl-C and ctx.Err() when ctx ends first (the terminal must be left as it
+// was found); a hidden read that was followed by more input returns
+// ErrTrailingInput. The line terminator is not part of the result.
 type Terminal interface {
 	io.Writer
-	ReadLine() ([]byte, error)
-	ReadHidden() ([]byte, error)
+	ReadLine(ctx context.Context) ([]byte, error)
+	ReadHidden(ctx context.Context) ([]byte, error)
 	Close() error
 }
 
 // Select picks the backend named by GENTLE_VAULT_PROMPT: the terminal one
-// when it is unset or `tty`. The native dialogs arrive with slice 1.10.
+// when it is unset or `tty`. The native dialogs arrive with slice 1.10. The
+// wait is bounded by GENTLE_VAULT_PROMPT_TIMEOUT.
 func Select(getenv func(string) string) (Backend, error) {
+	timeout := DefaultTimeout
+	if v := getenv(EnvTimeout); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < MinTimeout || d > MaxTimeout {
+			return nil, fmt.Errorf("%w: %s must be a duration between %s and %s", ErrBadTimeout, EnvTimeout, MinTimeout, MaxTimeout)
+		}
+		timeout = d
+	}
 	switch name := getenv(EnvBackend); name {
 	case "", "tty":
-		return New(openConsole), nil
+		return New(openConsole, Timeout(timeout)), nil
 	case "osascript", "powershell", "zenity", "kdialog":
 		return nil, unavailableError{"prompt backend " + name + " arrives in a later release"}
 	default:
@@ -95,16 +126,29 @@ func Select(getenv func(string) string) (Backend, error) {
 
 // New builds the terminal backend over open, which is called for every
 // prompt and whose terminal is closed when the prompt ends.
-func New(open func() (Terminal, error)) Backend { return &tty{open: open} }
+func New(open func() (Terminal, error), opts ...Option) Backend {
+	b := &tty{open: open, timeout: DefaultTimeout}
+	for _, o := range opts {
+		o(b)
+	}
+	return b
+}
+
+// Option configures New.
+type Option func(*tty)
+
+// Timeout bounds how long one prompt waits for the user (DefaultTimeout).
+func Timeout(d time.Duration) Option { return func(b *tty) { b.timeout = d } }
 
 type tty struct {
-	open func() (Terminal, error)
+	open    func() (Terminal, error)
+	timeout time.Duration
 }
 
 func (*tty) Name() string { return "tty" }
 
 // with opens the terminal for one prompt.
-func (b *tty) with(fn func(Terminal) error) error {
+func (b *tty) with(fn func(context.Context, Terminal) error) error {
 	t, err := b.open()
 	if err != nil {
 		if errors.Is(err, ErrUnavailable) {
@@ -113,7 +157,9 @@ func (b *tty) with(fn func(Terminal) error) error {
 		return ErrNoTerminal
 	}
 	defer t.Close()
-	return fn(t)
+	ctx, cancel := context.WithTimeout(context.Background(), b.timeout)
+	defer cancel()
+	return fn(ctx, t)
 }
 
 // readErr maps a terminal read failure.
@@ -121,6 +167,10 @@ func readErr(err error) error {
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, ErrCancelled):
 		return ErrCancelled
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, ErrTimeout):
+		return ErrTimeout
+	case errors.Is(err, ErrTrailingInput):
+		return ErrTrailingInput
 	default:
 		return unavailableError{"cannot read from the terminal"}
 	}
@@ -128,10 +178,10 @@ func readErr(err error) error {
 
 func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 	var out secret.Secret
-	err := b.with(func(t Terminal) error {
+	err := b.with(func(ctx context.Context, t Terminal) error {
 		_, _ = io.WriteString(t, Header(req))
 		_, _ = io.WriteString(t, "Value (input is hidden): ")
-		raw, err := t.ReadHidden()
+		raw, err := t.ReadHidden(ctx)
 		if err != nil {
 			return readErr(err)
 		}
@@ -144,16 +194,16 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 
 func (b *tty) Passphrase(confirm bool) (secret.Secret, error) {
 	var out secret.Secret
-	err := b.with(func(t Terminal) error {
+	err := b.with(func(ctx context.Context, t Terminal) error {
 		_, _ = io.WriteString(t, "Passphrase (input is hidden): ")
-		first, err := t.ReadHidden()
+		first, err := t.ReadHidden(ctx)
 		if err != nil {
 			return readErr(err)
 		}
 		defer clear(first)
 		if confirm {
 			_, _ = io.WriteString(t, "Confirm passphrase: ")
-			second, err := t.ReadHidden()
+			second, err := t.ReadHidden(ctx)
 			if err != nil {
 				return readErr(err)
 			}
@@ -177,7 +227,7 @@ func (b *tty) Choose(q string, options []string, def int) (int, error) {
 		return 0, errors.New("prompt: default choice out of range")
 	}
 	chosen := 0
-	err := b.with(func(t Terminal) error {
+	err := b.with(func(ctx context.Context, t Terminal) error {
 		var m strings.Builder
 		m.WriteString(escape(q) + "\n")
 		for i, o := range options {
@@ -186,7 +236,7 @@ func (b *tty) Choose(q string, options []string, def int) (int, error) {
 		_, _ = io.WriteString(t, m.String())
 		for range maxChoiceTries {
 			fmt.Fprintf(t, "Choice [%d]: ", def+1)
-			line, err := t.ReadLine()
+			line, err := t.ReadLine(ctx)
 			if err != nil {
 				return readErr(err)
 			}
@@ -208,9 +258,9 @@ func (b *tty) Choose(q string, options []string, def int) (int, error) {
 
 func (b *tty) Confirm(q string) (bool, error) {
 	yes := false
-	err := b.with(func(t Terminal) error {
+	err := b.with(func(ctx context.Context, t Terminal) error {
 		_, _ = io.WriteString(t, escape(q)+" [y/N] ")
-		line, err := t.ReadLine()
+		line, err := t.ReadLine(ctx)
 		if err != nil {
 			return readErr(err)
 		}

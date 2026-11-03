@@ -446,6 +446,9 @@ func newSet(g *globals) *cobra.Command {
 			if replaced {
 				recd.Detail = "replaced"
 			}
+			if !stdin {
+				recd.Reason = manualEntry
+			}
 			g.record(cmd.ErrOrStderr(), recd)
 			body := setBody{OK: true, Name: name, Layer: layerName(layer), Project: projectOf(layer), Replaced: replaced, GrantsDropped: res.Changed}
 			var granted *grants.Grant

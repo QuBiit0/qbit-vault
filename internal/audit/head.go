@@ -18,20 +18,11 @@ const maxTail = 64 * 1024
 
 // head is the content of audit.head: the truncation anchor (L3). Hash is the
 // hash field of the record with that seq; Line is the SHA-256 of that record's
-// raw line, which is the prev the next record needs. A head written before
-// Line existed has it empty.
+// raw line, which is the prev the next record needs.
 type head struct {
 	Seq  uint64 `json:"seq"`
 	Hash string `json:"hash"`
-	Line string `json:"line,omitempty"`
-}
-
-// next is the prev of the record that follows the head.
-func (h head) next() string {
-	if h.Line != "" {
-		return h.Line
-	}
-	return h.Hash // legacy head: no line hash was recorded
+	Line string `json:"line"`
 }
 
 // tailState returns the seq and prev for the next record, and whether a
@@ -46,7 +37,7 @@ func tailState(f *os.File, home string) (seq uint64, prev string, sep bool, err 
 		// An empty log after a head with records is a deleted or emptied
 		// log: continue the chain from the head, never restart at genesis.
 		if h, ok := readHead(home); ok && h.Seq > 0 {
-			return h.Seq + 1, h.next(), false, nil
+			return h.Seq + 1, h.Line, false, nil
 		}
 		return 1, Genesis, false, nil
 	}
@@ -102,7 +93,9 @@ func readHead(home string) (head, bool) {
 		return head{}, false
 	}
 	var h head
-	if json.Unmarshal(b, &h) != nil {
+	// A head missing any field is unreadable, which verify reports as
+	// head_mismatch.
+	if json.Unmarshal(b, &h) != nil || h.Hash == "" || h.Line == "" {
 		return head{}, false
 	}
 	return h, true

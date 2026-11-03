@@ -150,7 +150,7 @@ func verifyReader(r io.Reader, h *head, badHead bool) (Result, error) {
 		expect = h.Seq
 		line = max(line, 1)
 		return fail(Truncated)
-	case h != nil && (!headSeen || headHash != h.Hash || (h.Line != "" && headLine != h.Line)):
+	case h != nil && (!headSeen || headHash != h.Hash || headLine != h.Line):
 		expect = h.Seq
 		return fail(HeadMismatch)
 	}

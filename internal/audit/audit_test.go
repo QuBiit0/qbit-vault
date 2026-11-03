@@ -299,7 +299,7 @@ func TestDeletedLogThenAppendDoesNotRestartAtGenesis(t *testing.T) {
 	}
 }
 
-func TestLegacyHeadWithoutLineHash(t *testing.T) {
+func TestHeadWithoutLineHashIsMismatch(t *testing.T) {
 	home := t.TempDir()
 	appendN(t, home, 2)
 	var r Record
@@ -308,14 +308,7 @@ func TestLegacyHeadWithoutLineHash(t *testing.T) {
 	if err := os.WriteFile(headPath(home), hb, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ := Verify(home); !res.Valid {
-		t.Fatalf("legacy head rejected: %+v", res)
-	}
-	if err := os.Remove(logPath(home)); err != nil {
-		t.Fatal(err)
-	}
-	appendN(t, home, 1)
-	wantProblem(t, home, 1, Truncated)
+	wantProblem(t, home, 2, HeadMismatch)
 }
 
 func TestHeadEdited(t *testing.T) {
@@ -349,7 +342,7 @@ func TestHeadBehindByACrashIsValid(t *testing.T) {
 	lines := readLines(t, home)
 	var r Record
 	_ = json.Unmarshal([]byte(lines[2]), &r)
-	hb, _ := json.Marshal(head{Seq: 3, Hash: r.Hash})
+	hb, _ := json.Marshal(head{Seq: 3, Hash: r.Hash, Line: sum([]byte(lines[2]))})
 	if err := os.WriteFile(headPath(home), hb, 0o600); err != nil {
 		t.Fatal(err)
 	}

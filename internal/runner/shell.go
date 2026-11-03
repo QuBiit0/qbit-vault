@@ -97,3 +97,19 @@ func CheckShell(shell Shell) error {
 	_, _, err := buildArgv(shell, "true")
 	return err
 }
+
+// Resolve returns the shell that will actually interpret a command: auto
+// (or empty) becomes sh, bash or cmd per L5; any other value is returned as
+// given. Callers use it to pick the grammar that applies to the command.
+func Resolve(shell Shell) Shell {
+	if shell != ShellAuto && shell != "" {
+		return shell
+	}
+	if runtime.GOOS != "windows" {
+		return ShellSh
+	}
+	if _, err := lookBash(); err == nil {
+		return ShellBash
+	}
+	return ShellCmd
+}

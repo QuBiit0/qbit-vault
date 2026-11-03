@@ -718,3 +718,109 @@ func TestExecLeakBattery(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// childPath is the test binary as a bare, unquoted path: cmd and pwsh
+// commands under an allowlist cannot contain quotes (F1).
+func childPath(t *testing.T, mode, arg string) string {
+	t.Helper()
+	t.Setenv(envChild, mode)
+	t.Setenv(envChildArg, arg)
+	t.Setenv(envChildExit, "0")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(exe, " \t&()^%!;'`$@{}") {
+		t.Skipf("test binary path %q needs quoting", exe)
+	}
+	return exe
+}
+
+// F1: with --shell cmd or pwsh the POSIX segmentation does not see the
+// commands the shell chains, so an allowlist only admits one simple command.
+func TestExecAllowlistUnderCmdAndPwsh(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("cmd is Windows only; pwsh paths are covered by dumpguard.SimpleProgram tests")
+	}
+	for _, shell := range []string{"cmd", "pwsh"} {
+		t.Run(shell, func(t *testing.T) {
+			w := newExecWorld(t)
+			w.setSecret("GITHUB_TOKEN", xv, "--global", "--binaries", "gh")
+			w.grantTo(sessA, "GITHUB_TOKEN", "session")
+			mk := marker(t)
+			exe := childPath(t, "mark", mk)
+			bypasses := []string{
+				"gh x \\& " + exe,
+				"gh --version | " + exe,
+				`gh "a\" & ` + exe + ` & \"b"`,
+				`gh "a\" ; ` + exe + ` ; \"b"`,
+				"gh x & " + exe,
+				"gh x\n" + exe,
+			}
+			if shell == "pwsh" {
+				bypasses = append(bypasses, "gh x ; "+exe) // ';' only chains in pwsh
+			}
+			for _, c := range bypasses {
+				code, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, c, "--shell", shell)...)
+				if code == 2 {
+					t.Skipf("%s is not available: %s%s", shell, out, errs)
+				}
+				if code != 3 || !strings.Contains(out+errs, refusal.New(refusal.ScopeBinary, "GITHUB_TOKEN").Message) {
+					t.Errorf("%q: code=%d out=%q err=%q, want scope_binary", c, code, out, errs)
+				}
+				if ran(mk) {
+					t.Fatalf("%q ran the second command", c)
+				}
+			}
+			// A program outside the list is refused even when simple.
+			code, _, _ := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, exe, "--shell", shell)...)
+			if code != 3 || ran(mk) {
+				t.Fatalf("a simple command outside the list: code=%d ran=%v", code, ran(mk))
+			}
+			// One simple allowlisted command still runs.
+			w.mustRun("", "edit", "GITHUB_TOKEN", "--binaries", "gh,cli.test")
+			code, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, exe+" --version", "--shell", shell)...)
+			if code != 0 || !ran(mk) {
+				t.Fatalf("plain allowlisted command: code=%d out=%q err=%q ran=%v", code, out, errs, ran(mk))
+			}
+		})
+	}
+}
+
+// F1: the guard sees what cmd and pwsh would chain, and without an allowlist
+// the shell choice changes nothing else.
+func TestExecDumpGuardUnderCmdAndPwsh(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("cmd is Windows only")
+	}
+	for _, shell := range []string{"cmd", "pwsh"} {
+		t.Run(shell, func(t *testing.T) {
+			w := newExecWorld(t)
+			w.setSecret("GITHUB_TOKEN", xv, "--global")
+			w.grantTo(sessA, "GITHUB_TOKEN", "session")
+			for _, c := range []string{`echo "a\" & printenv & \"b"`, `echo "a\" ; env ; \"b"`, "pri^ntenv"} {
+				code, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, c, "--shell", shell)...)
+				if code == 2 {
+					t.Skipf("%s is not available: %s%s", shell, out, errs)
+				}
+				if code != 3 || !strings.Contains(out+errs, refusal.New(refusal.DumpCommand, "").Message) {
+					t.Errorf("%q: code=%d out=%q err=%q, want dump_command", c, code, out, errs)
+				}
+			}
+		})
+	}
+}
+
+// F1: sh and bash keep their POSIX segmentation: a quoted ';' is one word.
+func TestExecAllowlistUnderBashUnchanged(t *testing.T) {
+	w := newExecWorld(t)
+	w.setSecret("GITHUB_TOKEN", xv, "--global", "--binaries", "cli.test")
+	w.grantTo(sessA, "GITHUB_TOKEN", "session")
+	mk := marker(t)
+	run := child(t, "mark", mk, 0)
+	code, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, run+" 'a;b' && "+run, "--shell", "bash")...)
+	if code != 0 || !ran(mk) {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	w.wantRefusal(refusal.ScopeBinary, "GITHUB_TOKEN", execArgs(sessA, []string{"GITHUB_TOKEN"}, run+" && curl x", "--shell", "bash")...)
+}

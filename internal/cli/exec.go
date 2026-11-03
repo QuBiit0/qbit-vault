@@ -292,12 +292,27 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 	for i, sc := range p.secrets {
 		injected[i] = sc.env
 	}
-	if guard.Match(p.command, injected) {
+	// cmd and pwsh quote and separate differently from POSIX, which is what
+	// Segments models: the raw text is tested as well (F1).
+	eff := runner.Resolve(p.shell)
+	foreign := eff == runner.ShellCmd || eff == runner.ShellPwsh
+	if guard.Match(p.command, injected) || (foreign && guard.MatchRaw(p.command, injected)) {
 		return refusal.New(refusal.DumpCommand, "")
 	}
 
 	// 4. Binary allowlist: every program the shell may start (L3).
 	programs := dumpguard.Binaries(p.command)
+	if foreign {
+		// Fail closed: the segments above follow POSIX grammar, so under cmd
+		// or pwsh an allowlist only admits one simple command (F1).
+		prog, simple := dumpguard.SimpleProgram(string(eff), p.command)
+		programs = []string{prog}
+		for _, e := range recs {
+			if len(e.Record.Binaries) > 0 && !simple {
+				return refusal.New(refusal.ScopeBinary, e.Name)
+			}
+		}
+	}
 	for _, e := range recs {
 		if len(e.Record.Binaries) == 0 {
 			continue

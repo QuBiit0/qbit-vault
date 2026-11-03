@@ -514,3 +514,38 @@ func TestCheckShell(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveShell(t *testing.T) {
+	for _, sh := range []Shell{ShellSh, ShellBash, ShellCmd, ShellPwsh} {
+		if got := Resolve(sh); got != sh {
+			t.Errorf("Resolve(%q) = %q", sh, got)
+		}
+	}
+	want := ShellSh
+	if runtime.GOOS == "windows" {
+		want = ShellCmd
+		if _, err := lookBash(); err == nil {
+			want = ShellBash
+		}
+	}
+	for _, auto := range []Shell{ShellAuto, ""} {
+		if got := Resolve(auto); got != want {
+			t.Errorf("Resolve(%q) = %q, want %q", auto, got, want)
+		}
+	}
+}
+
+// F5: a child killed by a signal reports 128+signal (POSIX).
+func TestRunSignalledChildExitsWith128PlusSignal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("signals are POSIX only; Windows reports the OS exit code")
+	}
+	helper(t, "selfkill", "")
+	res, err := Run(context.Background(), spec(t, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != 128+9 {
+		t.Fatalf("exit code %d, want 137", res.ExitCode)
+	}
+}

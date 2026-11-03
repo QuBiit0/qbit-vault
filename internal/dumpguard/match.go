@@ -15,7 +15,13 @@ func (g *Guard) Match(cmd string, injected []string) (refused bool) {
 		return false
 	}
 	res := g.compiled(injected)
-	for _, seg := range Segments(cmd) {
+	segs := Segments(cmd)
+	if strings.Contains(cmd, "<<") {
+		// Here-document bodies are not commands but they reach a program's
+		// stdin: test the whole text as one segment too.
+		segs = append(segs, rawSegment(strings.NewReplacer("\r", " ", "\n", " ").Replace(cmd)))
+	}
+	for _, seg := range segs {
 		for _, form := range forms(seg) {
 			for _, re := range res {
 				if re.MatchString(form) {
@@ -77,4 +83,37 @@ func foldInput(w []string) []string {
 		return nil
 	}
 	return out
+}
+
+// rawCleaner drops the characters cmd and pwsh use to escape or quote, so
+// `pri^ntenv` and `"env"` read as the dump command they run.
+var rawCleaner = strings.NewReplacer("^", "", "`", "", "\"", "", "'", "")
+
+// MatchRaw tests the command as one segment and again in pieces cut at every
+// character either shell can use as a separator (& | ; ( ) { } and line
+// breaks), ignoring quotes entirely. Callers use it besides Match for shells
+// whose grammar Segments does not model (cmd, pwsh): quoting differs from
+// POSIX there, so it errs on the side of refusing.
+func (g *Guard) MatchRaw(cmd string, injected []string) bool {
+	if len(injected) == 0 {
+		return false
+	}
+	res := g.compiled(injected)
+	clean := rawCleaner.Replace(cmd)
+	pieces := strings.FieldsFunc(clean, func(r rune) bool { return strings.ContainsRune("&|;(){}\r\n", r) })
+	for _, text := range append([]string{clean}, pieces...) {
+		for _, form := range forms(rawSegment(text)) {
+			for _, re := range res {
+				if re.MatchString(form) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func rawSegment(cmd string) Segment {
+	w := strings.Fields(cmd)
+	return Segment{Words: w, Text: strings.Join(w, " ")}
 }

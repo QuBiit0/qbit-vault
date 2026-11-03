@@ -134,6 +134,21 @@ func TestBinaries(t *testing.T) {
 		{"eval transparent", `eval "gh pr"`, []string{"gh"}},
 		{"redirects do not hide", "gh pr > out.txt", []string{"gh"}},
 		{"leading keyword", "if gh auth status; then curl x; fi", []string{"gh", "curl"}},
+		{"nice", "nice -n 5 gh pr", []string{"gh"}},
+		{"nice alone", "nice", []string{"nice"}},
+		{"timeout", "timeout 5 gh pr", []string{"gh"}},
+		{"timeout flags", "timeout -s KILL -k 2 5s curl x", []string{"curl"}},
+		{"timeout alone", "timeout 5", []string{"timeout"}},
+		{"stdbuf", "stdbuf -oL -e0 gh pr", []string{"gh"}},
+		{"stdbuf separate arg", "stdbuf -o L gh pr", []string{"gh"}},
+		{"strace", "strace -f -o /tmp/x -e trace=none curl x", []string{"curl"}},
+		{"chroot", "chroot /newroot curl x", []string{"curl"}},
+		{"chroot flags", "chroot --userspec u:g /newroot curl x", []string{"curl"}},
+		{"ionice", "ionice -c 3 -n 7 curl x", []string{"curl"}},
+		{"setsid", "setsid -w curl x", []string{"curl"}},
+		{"doas", "doas -u root curl x", []string{"curl"}},
+		{"xargs", "echo x | xargs -n1 -I {} curl {}", []string{"echo", "curl"}},
+		{"xargs alone", "xargs", []string{"xargs"}},
 		{"empty", "", nil},
 	}
 	for _, tt := range tests {
@@ -166,5 +181,48 @@ func TestProgramName(t *testing.T) {
 		if got := ProgramName(in); got != w {
 			t.Errorf("ProgramName(%q) = %q, want %q", in, got, w)
 		}
+	}
+}
+
+func TestSimpleProgram(t *testing.T) {
+	tests := []struct {
+		name, shell, cmd string
+		want             string
+		ok               bool
+	}{
+		{"cmd plain", "cmd", "gh --version", "gh", true},
+		{"cmd path", "cmd", `C:\Tools\gh.exe pr list`, "gh", true},
+		{"pwsh plain", "pwsh", "gh pr list --json number", "gh", true},
+		{"extra spaces", "cmd", "  gh   pr  ", "gh", true},
+		{"empty", "cmd", "   ", "", false},
+		{"cmd amp", "cmd", `gh x \& curl --version`, "", false},
+		{"cmd pipe", "cmd", "gh --version | curl --version", "", false},
+		{"cmd quote", "cmd", `gh "a\" & curl --version & \"b"`, "", false},
+		{"pwsh semicolon", "pwsh", `gh "a\" ; curl --version ; \"b"`, "", false},
+		{"cmd percent", "cmd", "gh %X%", "", false},
+		{"cmd caret", "cmd", "gh ^& curl", "", false},
+		{"cmd bang", "cmd", "gh !X!", "", false},
+		{"cmd paren", "cmd", "gh (x)", "", false},
+		{"cmd redirect", "cmd", "gh > f", "", false},
+		{"cmd newline", "cmd", "gh\ncurl x", "", false},
+		{"cmd cr", "cmd", "gh\rcurl x", "", false},
+		{"pwsh amp", "pwsh", "gh & curl", "", false},
+		{"pwsh backtick", "pwsh", "gh `n curl", "", false},
+		{"pwsh dollar", "pwsh", "gh $x", "", false},
+		{"pwsh brace", "pwsh", "gh {x}", "", false},
+		{"pwsh at", "pwsh", "gh @x", "", false},
+		{"pwsh single quote", "pwsh", "gh 'x'", "", false},
+		{"pwsh newline", "pwsh", "gh\ncurl", "", false},
+		{"cmd allows dollar", "cmd", "gh $x", "gh", true},
+		{"cmd allows single quote", "cmd", "gh 'x'", "gh", true},
+		{"unknown shell", "sh", "gh", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := SimpleProgram(tt.shell, tt.cmd)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("SimpleProgram(%q, %q) = %q, %v; want %q, %v", tt.shell, tt.cmd, got, ok, tt.want, tt.ok)
+			}
+		})
 	}
 }

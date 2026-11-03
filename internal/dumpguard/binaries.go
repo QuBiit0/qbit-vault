@@ -20,6 +20,14 @@ var (
 	uvArgs      = set("--directory", "--project", "-p", "--python", "--env-file")
 	uvRunArgs   = set("--with", "--with-requirements", "-p", "--python", "--directory", "--project", "--env-file", "--extra", "--group", "--package", "--from")
 	poetryArgs  = set("-C", "--directory", "-P", "--project")
+	niceArgs    = set("-n", "--adjustment")
+	timeoutArgs = set("-s", "--signal", "-k", "--kill-after")
+	stdbufArgs  = set("-i", "-o", "-e", "--input", "--output", "--error")
+	straceArgs  = set("-o", "-e", "-p", "-s", "-u", "-E", "-a", "-b", "-P", "-S", "-I", "-X", "-O", "-U", "-z", "-Z")
+	chrootArgs  = set("--userspec", "--groups")
+	ionicArgs   = set("-c", "-n", "-p", "-P", "-u", "--class", "--classdata", "--pid", "--pgid", "--uid")
+	doasArgs    = set("-u", "-C", "-a")
+	xargsArgs   = set("-I", "-n", "-P", "-d", "-a", "-L", "-s", "-E", "-J", "--max-args", "--max-procs", "--delimiter", "--arg-file", "--max-lines", "--max-chars", "--eof")
 	noArgs      = set()
 	shellNames  = set("sh", "bash", "zsh", "dash", "ksh", "ash", "fish")
 	psNames     = set("pwsh", "powershell")
@@ -50,6 +58,15 @@ func skipFlags(w []string, i int, withArg map[string]bool) int {
 		if withArg[a] && i < len(w) {
 			i++
 		}
+	}
+	return i
+}
+
+// afterPositional skips one positional word at i (the duration of `timeout`,
+// the new root of `chroot`).
+func afterPositional(w []string, i int) int {
+	if i < len(w) {
+		return i + 1
 	}
 	return i
 }
@@ -102,8 +119,24 @@ func wrapped(w []string, i int) (next int, ok bool) {
 		return skipFlags(w, i+1, noArgs), true
 	case "exec":
 		return skipFlags(w, i+1, execArgs), true
-	case "nohup":
+	case "nohup", "setsid":
 		return skipFlags(w, i+1, noArgs), true
+	case "nice":
+		return skipFlags(w, i+1, niceArgs), true
+	case "timeout":
+		return afterPositional(w, skipFlags(w, i+1, timeoutArgs)), true // DURATION
+	case "stdbuf":
+		return skipFlags(w, i+1, stdbufArgs), true
+	case "strace":
+		return skipFlags(w, i+1, straceArgs), true
+	case "chroot":
+		return afterPositional(w, skipFlags(w, i+1, chrootArgs)), true // NEWROOT
+	case "ionice":
+		return skipFlags(w, i+1, ionicArgs), true
+	case "doas":
+		return skipFlags(w, i+1, doasArgs), true
+	case "xargs":
+		return skipFlags(w, i+1, xargsArgs), true
 	case "time":
 		return skipFlags(w, i+1, timeArgs), true
 	case "npx", "bunx":
@@ -212,7 +245,7 @@ func ProgramName(word string) string {
 
 // Binaries returns the program base name of every segment, in order and
 // without duplicates, after resolving wrappers (sudo, env, command, exec,
-// nohup, time, npx, pnpm exec/dlx, yarn dlx, bunx, uv run, uvx, poetry run)
+// nohup, setsid, nice, timeout, stdbuf, strace, chroot, ionice, doas, xargs, time, npx, pnpm exec/dlx, yarn dlx, bunx, uv run, uvx, poetry run)
 // and leading VAR=val assignments. Directories and .exe/.cmd/.bat are
 // stripped; names are lowercased on Windows. `sh -c` and `eval` scripts are
 // transparent: their own segments are listed instead of the shell.
@@ -237,4 +270,38 @@ func Binaries(cmd string) []string {
 		}
 	}
 	return out
+}
+
+// Characters that let cmd.exe or PowerShell chain, start or substitute a
+// command. Segments follows POSIX grammar, so for these shells the allowlist
+// accepts only a command free of all of them (F1).
+const (
+	cmdMeta  = "&|<>^%!()\"\n\r"
+	pwshMeta = ";&|<>`$(){}@\"'\n\r"
+)
+
+// SimpleProgram returns the program of cmd for shell "cmd" or "pwsh" when cmd
+// is one simple command: no metacharacter that shell can use to chain, start
+// or substitute another command. ok is false otherwise, for an empty command
+// and for any other shell. Wrappers are not resolved: the first word is the
+// program, so a wrapper has to be allowlisted itself.
+func SimpleProgram(shell, cmd string) (program string, ok bool) {
+	var meta string
+	switch shell {
+	case "cmd":
+		meta = cmdMeta
+	case "pwsh":
+		meta = pwshMeta
+	default:
+		return "", false
+	}
+	if strings.ContainsAny(cmd, meta) {
+		return "", false
+	}
+	f := strings.Fields(cmd)
+	if len(f) == 0 {
+		return "", false
+	}
+	name := ProgramName(f[0])
+	return name, name != ""
 }

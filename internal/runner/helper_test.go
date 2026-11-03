@@ -50,6 +50,8 @@ func helperMain(mode string) {
 	case "exit":
 		n, _ := strconv.Atoi(arg)
 		os.Exit(n)
+	case "selfkill":
+		selfKill()
 	case "sleep":
 		time.Sleep(time.Minute)
 	case "partial-sleep":

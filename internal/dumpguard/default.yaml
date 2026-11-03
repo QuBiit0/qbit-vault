@@ -23,3 +23,22 @@ patterns:
   - '^node\s+-p\s+process\.env'
   - '(base64|xxd|od|hexdump)\s*<<<\s*"?\$\{?{NAME}'
   - '^(curl|wget|http|nc|ncat|socat)\s+.*\$\{?{NAME}\}?'   # literal use of the value in a network command; use the binary's own env support instead
+  - '^export$'
+  - '^(declare|typeset)$'
+  - '^(declare|typeset)\s+-\S*p'
+  - '^(declare|typeset)\s+(-\S+\s+)*{NAME}'
+  - '^compgen\s+(-\S*[ev]|-A\s+(variable|export))'
+  - '/proc/(self|thread-self|\d+|\$\$|\$\{?BASHPID\}?)(/task/\d+)?/environ'   # any program or redirect
+  - '^find\s+.*-(exec|execdir|ok|okdir)\s+(\S*/)?(env|printenv)(\s|;|$)'
+  - '\$\{!'                       # indirect expansion
+  - '<<.*\$\{?{NAME}'             # here-strings and here-documents
+  - '^(awk|gawk|mawk|nawk)\s+.*ENVIRON'
+  - '^perl\s+.*(%ENV|\$ENV\s*\{)'
+  - '^(python3?|py)\s+.*(os\.(getenv|environ)|from\s+os\s+import\s+.*(environ|getenv))'
+  - '^node\s+.*process\.env'
+  - '^ruby\s+.*\bENV\b'
+  - '(?i)\$\{?env:{NAME}'
+  - '(?i)^(get-content|gc|cat|type)\s+(-\S+\s+)*env:'
+  - '(?i)\[(system\.)?environment\]::getenvironmentvariable\b'
+  - '(?i)^set\s+"?[a-z_][a-z0-9_]*"?$'   # cmd: set PREFIX lists matching variables
+  - '%{NAME}:[^%\s]*%'                     # cmd: %NAME:~0,5% substring and replace forms

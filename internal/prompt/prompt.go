@@ -108,7 +108,7 @@ type Terminal interface {
 // set, else the platform's native dialog when a desktop session is available,
 // else the terminal (L2). The wait is bounded by GENTLE_VAULT_PROMPT_TIMEOUT.
 func Select(getenv func(string) string) (Backend, error) {
-	return SelectWith(Env{GOOS: runtime.GOOS, Getenv: getenv, LookPath: exec.LookPath, Interactive: interactiveSession})
+	return SelectWith(Env{GOOS: runtime.GOOS, Getenv: getenv, LookPath: exec.LookPath, Interactive: interactiveSession, SystemRoot: systemRoot})
 }
 
 // SelectWith is Select over an Env, for tests.

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuBiit0/gentle-vault/internal/secret"
@@ -106,6 +108,10 @@ type Env struct {
 	// Interactive reports whether this is a desktop session (Windows: not
 	// session 0). Nil counts as true.
 	Interactive func() bool
+	// Exists reports whether a file is there (system helper locations).
+	Exists func(string) bool
+	// SystemRoot is the Windows directory from the system API; "" if unknown.
+	SystemRoot func() string
 
 	run runner // tests; nil means execRunner
 }
@@ -114,7 +120,7 @@ type Env struct {
 // is available, or nil (L2).
 func nativeFor(e Env) (tool, string) {
 	look := func(t tool) (tool, string) {
-		if p, err := e.LookPath(t.program()); err == nil {
+		if p, err := locate(e, t); err == nil {
 			return t, p
 		}
 		return nil, ""
@@ -153,9 +159,60 @@ func forced(e Env, t tool) (string, error) {
 	if t.name() == "powershell" && e.Interactive != nil && !e.Interactive() {
 		return "", unavailableError{"prompt backend powershell is unavailable: this is not an interactive desktop session"}
 	}
-	p, err := e.LookPath(t.program())
+	p, err := locate(e, t)
 	if err != nil {
-		return "", unavailableError{fmt.Sprintf("prompt backend %s is unavailable: %s not found on PATH", t.name(), t.program())}
+		return "", unavailableError{fmt.Sprintf("prompt backend %s is unavailable: %v", t.name(), err)}
+	}
+	return p, nil
+}
+
+// Fixed locations of the system helpers. They are never looked up on PATH:
+// anything that can put a file earlier on PATH could otherwise stand in for
+// the dialog and receive the value. zenity and kdialog have no fixed
+// location on Linux (distributions and package managers differ), so they
+// are looked up on PATH.
+const (
+	winSystemRoot = `C:\Windows`
+	winPowerShell = `\System32\WindowsPowerShell\v1.0\powershell.exe`
+	wslPowerShell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+	osascriptPath = "/usr/bin/osascript"
+)
+
+// locate finds the helper of t, or says where it looked.
+func locate(e Env, t tool) (string, error) {
+	has := func(p string) bool {
+		if e.Exists != nil {
+			return e.Exists(p)
+		}
+		st, err := os.Stat(p)
+		return err == nil && !st.IsDir()
+	}
+	var p string
+	switch {
+	case t.name() == "powershell" && e.GOOS == "windows":
+		root := ""
+		if e.SystemRoot != nil {
+			root = e.SystemRoot()
+		}
+		if root == "" {
+			root = winSystemRoot
+		}
+		p = strings.TrimRight(root, `\/`) + winPowerShell
+	case t.name() == "powershell" && e.GOOS == "linux": // WSL
+		p = wslPowerShell
+	case t.name() == "osascript" && e.GOOS == "darwin":
+		p = osascriptPath
+	case t.name() == "powershell" || t.name() == "osascript":
+		return "", fmt.Errorf("%s is not available on %s", t.program(), e.GOOS)
+	default:
+		found, err := e.LookPath(t.program())
+		if err != nil {
+			return "", fmt.Errorf("%s not found on PATH", t.program())
+		}
+		return found, nil
+	}
+	if !has(p) {
+		return "", fmt.Errorf("%s not found at %s", t.program(), p)
 	}
 	return p, nil
 }

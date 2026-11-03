@@ -355,7 +355,7 @@ func TestKdialogArgv(t *testing.T) {
 		d    dialog
 		want []string
 	}{
-		{"secret", sd, []string{"--title", sd.title, "--password", sd.text}},
+		{"secret", sd, []string{"--title", sd.title, "--password", strings.ReplaceAll(sd.text, "\n", "<br>")}},
 		{"choose", cd, []string{"--title", cd.title, "--radiolist", "Which scope?", "1", "once", "off", "2", " -danger", "on", "3", "deny", "off"}},
 		{"confirm", qd, []string{"--title", qd.title, "--yes-label", "Confirm", "--no-label", "Decline", "--yesno", "Remove X?"}},
 	}
@@ -366,6 +366,36 @@ func TestKdialogArgv(t *testing.T) {
 				t.Fatalf("got %q\nwant %q", c.Args, tt.want)
 			}
 		})
+	}
+}
+
+func TestKdialogEscapesRichText(t *testing.T) {
+	for _, reason := range []string{"<br>value: x<b>", "<a href=x>", "<img src=x>", `a "q" & b`} {
+		sd := secretDialog(SecretRequest{Name: "N<i>", Reason: reason, Host: "h", Session: "s"})
+		c := kdialogTool{}.build("kdialog", sd)
+		text := c.Args[len(c.Args)-1]
+		for _, bad := range []string{"<b>", "<a ", "<img", "<i>", `"q"`} {
+			if strings.Contains(text, bad) {
+				t.Errorf("%q: text holds %q: %q", reason, bad, text)
+			}
+		}
+		// The only tags are our own line breaks.
+		if rest := strings.ReplaceAll(text, "<br>", ""); strings.ContainsAny(rest, "<>\"") || strings.Contains(text, "\n") {
+			t.Errorf("%q: markup or raw newline left: %q", reason, text)
+		}
+		if strings.Count(text, "<br>") != strings.Count(sd.text, "\n") {
+			t.Errorf("%q: layout lines changed: %q", reason, text)
+		}
+	}
+	c := kdialogTool{}.build("kdialog", secretDialog(SecretRequest{Name: "N", Reason: "<br>value: x<b>", Host: "h", Session: "s"}))
+	if !strings.Contains(c.Args[len(c.Args)-1], "reason:  &lt;br&gt;value: x&lt;b&gt;") {
+		t.Errorf("entities missing: %q", c.Args)
+	}
+	cd := chooseDialog("<b>Q</b> & co", []string{"<i>a</i>", "b"}, 0)
+	c = kdialogTool{}.build("kdialog", cd)
+	want := []string{"--title", cd.title, "--radiolist", "&lt;b&gt;Q&lt;/b&gt; &amp; co", "1", "&lt;i&gt;a&lt;/i&gt;", "on", "2", "b", "off"}
+	if !reflect.DeepEqual(c.Args, want) {
+		t.Errorf("choose: %q\nwant %q", c.Args, want)
 	}
 }
 
@@ -720,14 +750,35 @@ func envOf(goos string, vars map[string]string, onPath ...string) Env {
 		Getenv: func(k string) string { return vars[k] },
 		LookPath: func(n string) (string, error) {
 			for _, p := range onPath {
-				if p == n {
+				if p == n && p != "powershell.exe" && p != "osascript" {
 					return "/found/" + n, nil
 				}
 			}
+			// A planted look-alike on PATH: the system helpers must never be taken from here.
+			if n == "powershell.exe" || n == "osascript" {
+				return "/evil/" + n, nil
+			}
 			return "", exec.ErrNotFound
+		},
+		// The fixed system locations hold the helper when it is listed.
+		Exists: func(p string) bool {
+			for _, n := range onPath {
+				switch {
+				case n == "powershell.exe" && (p == winPS || p == wslPS):
+					return true
+				case n == "osascript" && p == osascriptPath:
+					return true
+				}
+			}
+			return false
 		},
 	}
 }
+
+const (
+	winPS = `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
+	wslPS = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+)
 
 func TestNativeAvailability(t *testing.T) {
 	no := func() bool { return false }
@@ -757,14 +808,54 @@ func TestNativeAvailability(t *testing.T) {
 			got := ""
 			if tl != nil {
 				got = tl.name()
-				if !strings.HasPrefix(path, "/found/") {
-					t.Fatalf("path %q is not the looked-up one", path)
+				want := map[string]string{"powershell": winPS, "osascript": osascriptPath}[got]
+				if want == "" {
+					want = "/found/" + got
+				}
+				if path != want {
+					t.Fatalf("path %q, want %q", path, want)
 				}
 			}
 			if got != tt.wantName {
 				t.Fatalf("got %q want %q", got, tt.wantName)
 			}
 		})
+	}
+}
+
+func TestSystemHelpersAreNotResolvedThroughPath(t *testing.T) {
+	// powershell.exe and osascript sit on PATH here, but not at the system location.
+	for _, e := range []Env{
+		func() Env { e := envOf("windows", nil); return e }(),
+		envOf("darwin", nil),
+	} {
+		if tl, path := nativeFor(e); tl != nil {
+			t.Errorf("%s: took %s from PATH", e.GOOS, path)
+		}
+		b, err := SelectWith(Env{GOOS: e.GOOS, Getenv: func(k string) string {
+			if k == EnvBackend {
+				return map[string]string{"windows": "powershell", "darwin": "osascript"}[e.GOOS]
+			}
+			return ""
+		}, LookPath: e.LookPath, Exists: e.Exists})
+		if b != nil || !errors.Is(err, ErrUnavailable) {
+			t.Errorf("%s forced: %v %v", e.GOOS, b, err)
+		}
+	}
+}
+
+func TestWindowsHelperUsesSystemRoot(t *testing.T) {
+	e := envOf("windows", nil, "powershell.exe")
+	e.SystemRoot = func() string { return `D:\WINNT` }
+	e.Exists = func(p string) bool { return p == `D:\WINNT\System32\WindowsPowerShell\v1.0\powershell.exe` }
+	if tl, path := nativeFor(e); tl == nil || path != `D:\WINNT\System32\WindowsPowerShell\v1.0\powershell.exe` {
+		t.Fatalf("got %v %q", tl, path)
+	}
+	// No answer from the system falls back to C:\Windows.
+	e.SystemRoot = func() string { return "" }
+	e.Exists = func(p string) bool { return p == winPS }
+	if tl, path := nativeFor(e); tl == nil || path != winPS {
+		t.Fatalf("fallback: %v %q", tl, path)
 	}
 }
 
@@ -812,8 +903,12 @@ func TestSelectOverride(t *testing.T) {
 	}
 	// An explicit name works without a display check on Linux (WSL runs powershell.exe).
 	e = envOf("linux", map[string]string{EnvBackend: "powershell"}, "powershell.exe")
-	if b, err := SelectWith(e); err != nil || b.Name() != "powershell" {
+	if b, err := SelectWith(e); err != nil || b.Name() != "powershell" || b.(*native).path != wslPS {
 		t.Errorf("powershell from linux: %v %v", b, err)
+	}
+	e = envOf("linux", map[string]string{EnvBackend: "powershell"})
+	if b, err := SelectWith(e); b != nil || !errors.Is(err, ErrUnavailable) {
+		t.Errorf("powershell from linux without WSL: %v %v", b, err)
 	}
 	b, err := SelectWith(envOf("linux", map[string]string{EnvBackend: "carrier-pigeon"}))
 	if b != nil || !errors.Is(err, ErrUnknownBackend) {

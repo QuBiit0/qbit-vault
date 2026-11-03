@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"fmt"
+	"html"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -61,22 +62,30 @@ type kdialogTool struct{}
 func (kdialogTool) name() string    { return "kdialog" }
 func (kdialogTool) program() string { return "kdialog" }
 
+// rich makes s safe for kdialog, which renders every text as rich text and
+// has no flag to turn that off: markup characters become entities, and the
+// newlines left are the layout's own (request fields had theirs escaped by
+// escape), which become <br>.
+func rich(s string) string {
+	return strings.ReplaceAll(html.EscapeString(s), "\n", "<br>")
+}
+
 func (kdialogTool) build(path string, d dialog) command {
-	args := []string{"--title", d.title}
+	args := []string{"--title", rich(d.title)}
 	switch d.kind {
 	case dialogSecret:
-		args = append(args, "--password", d.text)
+		args = append(args, "--password", rich(d.text))
 	case dialogChoose:
-		args = append(args, "--radiolist", d.text)
+		args = append(args, "--radiolist", rich(d.text))
 		for i, o := range d.options {
 			state := "off"
 			if i == d.def {
 				state = "on"
 			}
-			args = append(args, fmt.Sprint(i+1), noDash(o), state)
+			args = append(args, fmt.Sprint(i+1), rich(noDash(o)), state)
 		}
 	case dialogConfirm:
-		args = append(args, "--yes-label", "Confirm", "--no-label", "Decline", "--yesno", d.text)
+		args = append(args, "--yes-label", "Confirm", "--no-label", "Decline", "--yesno", rich(d.text))
 	}
 	return command{Path: path, Args: args}
 }

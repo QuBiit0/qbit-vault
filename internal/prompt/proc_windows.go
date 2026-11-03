@@ -14,6 +14,16 @@ func detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 }
 
+// systemRoot is the Windows directory as the system API reports it, not as
+// an environment variable that the caller could have changed.
+func systemRoot() string {
+	d, err := windows.GetSystemWindowsDirectory()
+	if err != nil {
+		return ""
+	}
+	return d
+}
+
 // interactiveSession reports whether this process runs in a user session
 // rather than session 0, where services live and no dialog can be seen.
 func interactiveSession() bool {

@@ -12,6 +12,7 @@ Values are **never** accepted as arguments. `set` and `import` read from the mas
 
 | Command | What it does |
 | --- | --- |
+| `version [--json]` | Print version, commit and platform. Human: `gentle-vault <version> (<commit>, <os>/<arch>)`. JSON: `{"ok":true,"version":…,"commit":…,"go":…,"os":…,"arch":…}`. |
 | `init [--agents claude-code,codex,opencode,pi,gentle-shell] [--no-extension] [--passphrase]` | Full one-shot setup. See INSTALL.md. Idempotent. |
 | `sync` | Re-apply host registrations from `state.json` receipts (after upgrades). |
 | `doctor [--json]` | Read-only health report. Exit 0 healthy, 1 warnings, 2 errors. |
@@ -91,6 +92,8 @@ gentle-vault exec --session S --secret NAME[=ENV] [--secret …] [--timeout 10m]
 | 4 | Vault locked |
 | 5 | Vault corrupt / rollback detected |
 | N | `exec`: child's exit code when > 5 is ambiguous; `--json` always carries the real `exit_code` |
+
+Failures that are not typed refusals (usage errors, internal errors, panics) never print free-form output in `--json` mode: stdout carries exactly one object `{"ok":false,"error":{"code":"usage"|"internal","message":"…"}}` and nothing else. Without `--json`, stderr gets `error: <message>` (usage errors add `Run 'gentle-vault --help' for usage.`). A usage error includes an invalid `--session` (must match `^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$`) and running with `--json` but no command. `--help` is always human text with exit 0. Panics print only `internal error`, never the panic value.
 
 ## Environment variables
 

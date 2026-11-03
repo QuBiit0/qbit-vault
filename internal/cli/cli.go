@@ -1,0 +1,211 @@
+// Package cli implements the gentle-vault command line (docs/CLI.md).
+package cli
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+
+	"github.com/spf13/cobra"
+
+	"github.com/QuBiit0/gentle-vault/internal/exitcode"
+)
+
+// Set by ldflags at release time.
+var (
+	Version = "dev"
+	Commit  = "unknown"
+)
+
+const (
+	envHome    = "GENTLE_VAULT_HOME"
+	envSession = "GENTLE_VAULT_SESSION"
+	envNoColor = "NO_COLOR"
+)
+
+var sessionRE = regexp.MustCompile(`^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$`)
+
+// globals holds the persistent flags shared by every command.
+type globals struct {
+	getenv  func(string) string
+	home    string
+	JSON    bool
+	Session string
+	Quiet   bool
+	NoColor bool
+}
+
+// Home returns the vault directory: --home, else $GENTLE_VAULT_HOME, else
+// ~/.gentle-vault. It is resolved lazily so commands that do not need it
+// never touch the user's home directory.
+func (g *globals) Home() string {
+	if g.home != "" {
+		return g.home
+	}
+	if h := g.getenv(envHome); h != "" {
+		return h
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(h, ".gentle-vault")
+	}
+	return ".gentle-vault"
+}
+
+// NoColorEnabled reports whether colored output must be suppressed.
+func (g *globals) NoColorEnabled() bool {
+	return g.NoColor || g.getenv(envNoColor) != ""
+}
+
+type usageError struct{ msg string }
+
+func (e usageError) Error() string { return e.msg }
+
+// Execute runs the CLI and returns the process exit code.
+func Execute(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+	return execute(args, stdout, stderr, getenv)
+}
+
+// execute is Execute plus extra commands, which tests use to inject probes.
+func execute(args []string, stdout, stderr io.Writer, getenv func(string) string, extra ...func(*globals) *cobra.Command) (code int) {
+	g := &globals{getenv: getenv}
+
+	defer func() {
+		// Never print the panic value: it could hold a secret.
+		if recover() != nil {
+			code = report(stdout, stderr, g.JSON || jsonRequested(args), "internal", "internal error", exitcode.Failure)
+		}
+	}()
+
+	entered := false
+	root := newRoot(g, &entered)
+	root.SetArgs(args)
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	for _, mk := range extra {
+		root.AddCommand(mk(g))
+	}
+
+	err := root.Execute()
+	if err == nil {
+		return exitcode.OK
+	}
+	asJSON := g.JSON || jsonRequested(args)
+	var ue usageError
+	switch {
+	case errors.As(err, &ue), !entered:
+		// Failures before the command ran are cobra's parse errors.
+		return report(stdout, stderr, asJSON, "usage", err.Error(), exitcode.Usage)
+	default:
+		return report(stdout, stderr, asJSON, "internal", err.Error(), exitcode.Failure)
+	}
+}
+
+// jsonRequested covers failures that happen before --json has been parsed.
+func jsonRequested(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--json" || a == "--json=true" {
+			return true
+		}
+	}
+	return false
+}
+
+func report(stdout, stderr io.Writer, asJSON bool, code, msg string, exit int) int {
+	if asJSON {
+		_ = writeJSON(stdout, errorBody{OK: false, Error: errorDetail{Code: code, Message: msg}})
+		return exit
+	}
+	fmt.Fprintf(stderr, "error: %s\n", msg)
+	if code == "usage" {
+		fmt.Fprintln(stderr, "Run 'gentle-vault --help' for usage.")
+	}
+	return exit
+}
+
+type errorDetail struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type errorBody struct {
+	OK    bool        `json:"ok"`
+	Error errorDetail `json:"error"`
+}
+
+type versionBody struct {
+	OK      bool   `json:"ok"`
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	Go      string `json:"go"`
+	OS      string `json:"os"`
+	Arch    string `json:"arch"`
+}
+
+func writeJSON(w io.Writer, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(append(b, '\n'))
+	return err
+}
+
+func newRoot(g *globals, entered *bool) *cobra.Command {
+	root := &cobra.Command{
+		Use:           "gentle-vault",
+		Short:         "Local secrets broker for coding agents",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		PersistentPreRunE: func(*cobra.Command, []string) error {
+			if g.Session != "" && !sessionRE.MatchString(g.Session) {
+				return usageError{"invalid --session: must match " + sessionRE.String()}
+			}
+			*entered = true
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if g.JSON {
+				return usageError{"no command given"}
+			}
+			return cmd.Help()
+		},
+	}
+	root.CompletionOptions.DisableDefaultCmd = true
+
+	f := root.PersistentFlags()
+	f.StringVar(&g.home, "home", "", "vault directory (default $"+envHome+" or ~/.gentle-vault)")
+	f.BoolVar(&g.JSON, "json", false, "machine output: exactly one JSON object on stdout")
+	f.StringVar(&g.Session, "session", g.getenv(envSession), "host session id (default $"+envSession+")")
+	f.BoolVar(&g.Quiet, "quiet", false, "suppress non-essential output")
+	f.BoolVar(&g.NoColor, "no-color", false, "disable colored output (also honors "+envNoColor+")")
+
+	root.AddCommand(newVersion(g))
+	return root
+}
+
+func newVersion(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out := cmd.OutOrStdout()
+			if g.JSON {
+				return writeJSON(out, versionBody{
+					OK: true, Version: Version, Commit: Commit,
+					Go: runtime.Version(), OS: runtime.GOOS, Arch: runtime.GOARCH,
+				})
+			}
+			_, err := fmt.Fprintf(out, "gentle-vault %s (%s, %s/%s)\n", Version, Commit, runtime.GOOS, runtime.GOARCH)
+			return err
+		},
+	}
+}

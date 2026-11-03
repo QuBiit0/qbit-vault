@@ -48,3 +48,7 @@ func checkLayer(l Layer) error {
 	}
 	return nil
 }
+
+// ValidName reports whether name is a legal secret name (R-VAULT-05). It lets
+// callers reject a name before they need the vault.
+func ValidName(name string) bool { return nameRE.MatchString(name) }

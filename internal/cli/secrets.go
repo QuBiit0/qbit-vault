@@ -1,0 +1,653 @@
+package cli
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/QuBiit0/gentle-vault/internal/refusal"
+	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/gentle-vault/internal/vault"
+)
+
+// maxValueBytes bounds a value read from stdin (docs/CLI.md § set).
+const maxValueBytes = 64 * 1024
+
+type projectRef struct {
+	Root  string `json:"root"`
+	Label string `json:"label"`
+}
+
+type setBody struct {
+	OK       bool        `json:"ok"`
+	Name     string      `json:"name"`
+	Layer    string      `json:"layer"`
+	Project  *projectRef `json:"project"`
+	Replaced bool        `json:"replaced"`
+}
+
+type removeBody struct {
+	OK      bool   `json:"ok"`
+	Name    string `json:"name"`
+	Layer   string `json:"layer"`
+	Removed bool   `json:"removed"`
+}
+
+type editBody struct {
+	OK      bool        `json:"ok"`
+	Name    string      `json:"name"`
+	Layer   string      `json:"layer"`
+	Project *projectRef `json:"project"`
+	Updated bool        `json:"updated"`
+}
+
+type describeBody struct {
+	OK              bool        `json:"ok"`
+	Name            string      `json:"name"`
+	Layer           string      `json:"layer"`
+	Project         *projectRef `json:"project"`
+	OverridesGlobal bool        `json:"overrides_global"`
+	Description     string      `json:"description"`
+	Sensitive       bool        `json:"sensitive"`
+	Binaries        []string    `json:"binaries"`
+	Hosts           []string    `json:"hosts"`
+	CreatedAt       string      `json:"created_at"`
+	UpdatedAt       string      `json:"updated_at"`
+	Grants          []string    `json:"grants"` // always empty until slice 1.6
+}
+
+type listEntry struct {
+	Name            string   `json:"name"`
+	Layer           string   `json:"layer"`
+	ProjectLabel    string   `json:"project_label,omitempty"`
+	OverridesGlobal bool     `json:"overrides_global"`
+	Description     string   `json:"description"`
+	Sensitive       bool     `json:"sensitive"`
+	Binaries        []string `json:"binaries"`
+	Hosts           []string `json:"hosts"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
+}
+
+type listBody struct {
+	OK      bool        `json:"ok"`
+	Project *projectRef `json:"project"`
+	Secrets []listEntry `json:"secrets"`
+}
+
+// layerFlags are --global and --project, shared by the NAME commands.
+type layerFlags struct{ global, project bool }
+
+func (l *layerFlags) bind(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&l.global, "global", false, "act on the global layer")
+	cmd.Flags().BoolVar(&l.project, "project", false, "act on the project layer of the current repository")
+}
+
+func (l layerFlags) validate() error {
+	if l.global && l.project {
+		return usageError{"choose only one of --global and --project"}
+	}
+	return nil
+}
+
+func (l layerFlags) explicit() bool { return l.global || l.project }
+
+// pick returns the layer named by the flags. --project outside a repository
+// is the no_project refusal.
+func (l layerFlags) pick(cwd string) (vault.Layer, error) {
+	if l.global {
+		return vault.Global(), nil
+	}
+	layer, err := vault.ProjectLayer(cwd)
+	if err != nil {
+		return vault.Layer{}, mapErr(err, "")
+	}
+	return layer, nil
+}
+
+// metaFlags are the metadata flags of set and edit.
+type metaFlags struct {
+	description string
+	sensitive   bool
+	binaries    []string
+	hosts       []string
+}
+
+func (m *metaFlags) bind(cmd *cobra.Command) {
+	f := cmd.Flags()
+	f.StringVar(&m.description, "description", "", "what the secret is for")
+	f.BoolVar(&m.sensitive, "sensitive", false, "restrict grants to a single use (--sensitive=false to clear)")
+	f.StringSliceVar(&m.binaries, "binaries", nil, "executables allowed to receive it, comma-separated (empty = any)")
+	f.StringSliceVar(&m.hosts, "hosts", nil, "hostnames it is meant for, comma-separated (advisory)")
+}
+
+// apply copies the metadata flags the user actually passed onto rec and
+// reports whether there was any.
+func (m *metaFlags) apply(cmd *cobra.Command, rec *vault.Record) bool {
+	f, changed := cmd.Flags(), false
+	if f.Changed("description") {
+		rec.Description, changed = m.description, true
+	}
+	if f.Changed("sensitive") {
+		rec.Sensitive, changed = m.sensitive, true
+	}
+	if f.Changed("binaries") {
+		rec.Binaries, changed = cleanList(m.binaries), true
+	}
+	if f.Changed("hosts") {
+		rec.Hosts, changed = cleanList(m.hosts), true
+	}
+	return changed
+}
+
+func cleanList(in []string) []string {
+	out := []string{}
+	for _, s := range in {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func nameArg(_ *cobra.Command, args []string) error {
+	switch {
+	case len(args) == 0:
+		return usageError{"missing NAME"}
+	case len(args) > 1:
+		return usageError{"unexpected arguments"}
+	}
+	return nil
+}
+
+// checkName rejects an illegal name before the vault is needed. The name is
+// never echoed.
+func checkName(name string) error {
+	if !vault.ValidName(name) {
+		return refusal.New(refusal.InvalidName, "")
+	}
+	return nil
+}
+
+func getwd() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", errors.New("cannot determine the working directory")
+	}
+	return cwd, nil
+}
+
+func layerName(l vault.Layer) string {
+	if l.Project {
+		return "project"
+	}
+	return "global"
+}
+
+func projectOf(l vault.Layer) *projectRef {
+	if !l.Project {
+		return nil
+	}
+	return &projectRef{Root: l.Root, Label: l.Label}
+}
+
+// layerText is "global" or "project <label>", for human output.
+func layerText(l vault.Layer) string {
+	if l.Project {
+		return "project " + l.Label
+	}
+	return "global"
+}
+
+func sameLayer(a, b vault.Layer) bool {
+	return a.Project == b.Project && (!a.Project || a.Root == b.Root)
+}
+
+func wipeEntries(es []vault.Entry) {
+	for _, e := range es {
+		e.Record.Value.Wipe()
+	}
+}
+
+// findEntry returns the record NAME refers to: the layer the flags name, else
+// the layer NAME resolves to from cwd. The caller wipes the entry's value.
+func findEntry(s *session, name string, lf layerFlags, cwd string) (vault.Entry, error) {
+	var layer vault.Layer
+	if lf.explicit() {
+		var err error
+		if layer, err = lf.pick(cwd); err != nil {
+			return vault.Entry{}, err
+		}
+	} else {
+		rec, l, err := s.v.Resolve(name, cwd)
+		if err != nil {
+			return vault.Entry{}, mapErr(err, name)
+		}
+		rec.Value.Wipe()
+		layer = l
+	}
+	all, err := s.v.ListAll()
+	if err != nil {
+		return vault.Entry{}, mapErr(err, name)
+	}
+	defer wipeEntries(all)
+	for _, e := range all {
+		if e.Name == name && sameLayer(e.Layer, layer) {
+			// Return a copy of the value so wiping all does not blank it.
+			b := e.Record.Value.Reveal()
+			e.Record.Value = secret.New(name, b)
+			clear(b)
+			return e, nil
+		}
+	}
+	return vault.Entry{}, mapErr(vault.ErrNotFound, name)
+}
+
+// readValue reads the secret value from r: at most maxValueBytes, surrounding
+// whitespace trimmed, blank refused (R-CAP-04). The caller wipes the result.
+func readValue(r io.Reader) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, maxValueBytes+1))
+	if err != nil {
+		return nil, errors.New("cannot read the value from stdin")
+	}
+	if len(b) > maxValueBytes {
+		clear(b)
+		return nil, usageError{"value too large"}
+	}
+	v := bytes.TrimSpace(b)
+	if len(v) == 0 {
+		clear(b)
+		return nil, usageError{"empty value"}
+	}
+	return v, nil
+}
+
+func newSet(g *globals) *cobra.Command {
+	var (
+		lf    layerFlags
+		meta  metaFlags
+		stdin bool
+	)
+	cmd := &cobra.Command{
+		Use:   "set NAME (--global|--project) --stdin",
+		Short: "Store or replace a secret value read from stdin",
+		Args:  nameArg,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			if !stdin {
+				return usageError{"interactive capture is not available yet; use --stdin"}
+			}
+			if err := lf.validate(); err != nil {
+				return err
+			}
+			if err := checkName(name); err != nil {
+				return err
+			}
+			cwd, err := getwd()
+			if err != nil {
+				return err
+			}
+			var layer vault.Layer
+			switch {
+			case lf.explicit():
+				if layer, err = lf.pick(cwd); err != nil {
+					return err
+				}
+			default:
+				// The interactive layer question arrives with slice 1.9.
+				switch _, perr := vault.ProjectLayer(cwd); {
+				case perr == nil:
+					return usageError{"choose --global or --project"}
+				case errors.Is(perr, vault.ErrNoProject):
+					layer = vault.Global()
+				default:
+					return mapErr(perr, "")
+				}
+			}
+			value, err := readValue(stdinOf(cmd))
+			if err != nil {
+				return err
+			}
+			defer clear(value)
+
+			s, err := g.openSession()
+			if err != nil {
+				return err
+			}
+			defer s.close()
+
+			rec := vault.Record{Value: secret.New(name, value)}
+			replaced := false
+			all, err := s.v.ListAll()
+			if err != nil {
+				return mapErr(err, name)
+			}
+			for _, e := range all {
+				if e.Name == name && sameLayer(e.Layer, layer) {
+					replaced = true
+					// Metadata the user did not pass again survives a replace.
+					rec.Description, rec.Sensitive = e.Record.Description, e.Record.Sensitive
+					rec.Binaries, rec.Hosts = e.Record.Binaries, e.Record.Hosts
+				}
+			}
+			wipeEntries(all)
+			meta.apply(cmd, &rec)
+			if err := s.v.Put(layer, name, rec); err != nil {
+				return mapErr(err, name)
+			}
+			if g.JSON {
+				return writeJSON(cmd.OutOrStdout(), setBody{OK: true, Name: name, Layer: layerName(layer), Project: projectOf(layer), Replaced: replaced})
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "stored %s (%s)\n", name, layerText(layer))
+			return err
+		},
+	}
+	lf.bind(cmd)
+	meta.bind(cmd)
+	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the value from stdin")
+	return cmd
+}
+
+func newRm(g *globals) *cobra.Command {
+	var (
+		lf  layerFlags
+		yes bool
+	)
+	cmd := &cobra.Command{
+		Use:   "rm NAME [--global|--project] --yes",
+		Short: "Delete a secret",
+		Args:  nameArg,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			if err := lf.validate(); err != nil {
+				return err
+			}
+			// Until the interactive confirmation (slice 1.9), --yes is
+			// required whether or not stdin is a terminal.
+			if !yes {
+				return usageError{"confirmation required; pass --yes"}
+			}
+			if err := checkName(name); err != nil {
+				return err
+			}
+			cwd, err := getwd()
+			if err != nil {
+				return err
+			}
+			s, err := g.openSession()
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			e, err := findEntry(s, name, lf, cwd)
+			if err != nil {
+				return err
+			}
+			e.Record.Value.Wipe()
+			// TODO(slice 1.6): drop the grants of this record here.
+			if err := s.v.Remove(e.Layer, name); err != nil {
+				return mapErr(err, name)
+			}
+			if g.JSON {
+				return writeJSON(cmd.OutOrStdout(), removeBody{OK: true, Name: name, Layer: layerName(e.Layer), Removed: true})
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "removed %s (%s)\n", name, layerText(e.Layer))
+			return err
+		},
+	}
+	lf.bind(cmd)
+	cmd.Flags().BoolVar(&yes, "yes", false, "confirm the removal")
+	return cmd
+}
+
+func newDescribe(g *globals) *cobra.Command {
+	var lf layerFlags
+	cmd := &cobra.Command{
+		Use:   "describe NAME [--global|--project]",
+		Short: "Show a secret's metadata (never its value)",
+		Args:  nameArg,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			if err := lf.validate(); err != nil {
+				return err
+			}
+			if err := checkName(name); err != nil {
+				return err
+			}
+			cwd, err := getwd()
+			if err != nil {
+				return err
+			}
+			s, err := g.openSession()
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			e, err := findEntry(s, name, lf, cwd)
+			if err != nil {
+				return err
+			}
+			e.Record.Value.Wipe()
+			r := e.Record
+			if g.JSON {
+				return writeJSON(cmd.OutOrStdout(), describeBody{
+					OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer),
+					OverridesGlobal: e.OverridesGlobal, Description: r.Description, Sensitive: r.Sensitive,
+					Binaries: nonNil(r.Binaries), Hosts: nonNil(r.Hosts), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+					Grants: []string{},
+				})
+			}
+			var b strings.Builder
+			fmt.Fprintf(&b, "%s (%s)\n", name, layerText(e.Layer))
+			fmt.Fprintf(&b, "  description: %s\n", oneLine(r.Description))
+			fmt.Fprintf(&b, "  sensitive:   %s\n", yesNo(r.Sensitive))
+			fmt.Fprintf(&b, "  binaries:    %s\n", listText(r.Binaries))
+			fmt.Fprintf(&b, "  hosts:       %s\n", listText(r.Hosts))
+			if e.OverridesGlobal {
+				fmt.Fprintf(&b, "  overrides:   global %s\n", name)
+			}
+			fmt.Fprintf(&b, "  created:     %s\n", r.CreatedAt)
+			fmt.Fprintf(&b, "  updated:     %s\n", r.UpdatedAt)
+			fmt.Fprintf(&b, "  grants:      none\n")
+			_, err = io.WriteString(cmd.OutOrStdout(), b.String())
+			return err
+		},
+	}
+	lf.bind(cmd)
+	return cmd
+}
+
+func newEdit(g *globals) *cobra.Command {
+	var (
+		lf   layerFlags
+		meta metaFlags
+	)
+	cmd := &cobra.Command{
+		Use:   "edit NAME [--global|--project] [--description D] [--sensitive=true|false] [--binaries a,b] [--hosts h]",
+		Short: "Change a secret's metadata (never its value)",
+		Args:  nameArg,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			if err := lf.validate(); err != nil {
+				return err
+			}
+			f := cmd.Flags()
+			if !f.Changed("description") && !f.Changed("sensitive") && !f.Changed("binaries") && !f.Changed("hosts") {
+				return usageError{"nothing to change; pass --description, --sensitive, --binaries or --hosts"}
+			}
+			if err := checkName(name); err != nil {
+				return err
+			}
+			cwd, err := getwd()
+			if err != nil {
+				return err
+			}
+			s, err := g.openSession()
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			e, err := findEntry(s, name, lf, cwd)
+			if err != nil {
+				return err
+			}
+			defer e.Record.Value.Wipe()
+			meta.apply(cmd, &e.Record)
+			if err := s.v.Put(e.Layer, name, e.Record); err != nil {
+				return mapErr(err, name)
+			}
+			if g.JSON {
+				return writeJSON(cmd.OutOrStdout(), editBody{OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer), Updated: true})
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "updated %s (%s)\n", name, layerText(e.Layer))
+			return err
+		},
+	}
+	lf.bind(cmd)
+	meta.bind(cmd)
+	return cmd
+}
+
+func newList(g *globals) *cobra.Command {
+	var layer string
+	cmd := &cobra.Command{
+		Use:   "list [--layer here|global|project|all]",
+		Short: "List secret names and metadata (never values)",
+		Args:  noArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			switch layer {
+			case "here", "global", "project", "all":
+			default:
+				return usageError{"invalid --layer: must be here, global, project or all"}
+			}
+			cwd, err := getwd()
+			if err != nil {
+				return err
+			}
+			cur, perr := vault.ProjectLayer(cwd)
+			if perr != nil && !errors.Is(perr, vault.ErrNoProject) {
+				return mapErr(perr, "")
+			}
+			if layer == "project" && perr != nil {
+				return mapErr(perr, "")
+			}
+			s, err := g.openSession()
+			if err != nil {
+				return err
+			}
+			defer s.close()
+
+			var entries []vault.Entry
+			if layer == "here" {
+				entries, err = s.v.List(cwd)
+			} else {
+				entries, err = s.v.ListAll()
+			}
+			if err != nil {
+				return mapErr(err, "")
+			}
+			defer wipeEntries(entries)
+			var shown []vault.Entry
+			for _, e := range entries {
+				switch layer {
+				case "global":
+					if e.Layer.Project {
+						continue
+					}
+				case "project":
+					if !sameLayer(e.Layer, cur) {
+						continue
+					}
+				}
+				shown = append(shown, e)
+			}
+			out := cmd.OutOrStdout()
+			if g.JSON {
+				body := listBody{OK: true, Project: projectOf(cur), Secrets: []listEntry{}}
+				for _, e := range shown {
+					le := listEntry{
+						Name: e.Name, Layer: layerName(e.Layer), OverridesGlobal: e.OverridesGlobal,
+						Description: e.Record.Description, Sensitive: e.Record.Sensitive,
+						Binaries: nonNil(e.Record.Binaries), Hosts: nonNil(e.Record.Hosts),
+						CreatedAt: e.Record.CreatedAt, UpdatedAt: e.Record.UpdatedAt,
+					}
+					if e.Layer.Project {
+						le.ProjectLabel = e.Layer.Label
+					}
+					body.Secrets = append(body.Secrets, le)
+				}
+				return writeJSON(out, body)
+			}
+			_, err = io.WriteString(out, listTable(shown))
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&layer, "layer", "here", "which layers to show: here, global, project or all")
+	return cmd
+}
+
+// listTable renders entries as an aligned NAME / LAYER / DESCRIPTION table.
+func listTable(es []vault.Entry) string {
+	if len(es) == 0 {
+		return "no secrets\n"
+	}
+	rows := [][3]string{{"NAME", "LAYER", "DESCRIPTION"}}
+	for _, e := range es {
+		layer := "global"
+		if e.Layer.Project {
+			layer = "project:" + e.Layer.Label
+		}
+		desc := oneLine(e.Record.Description)
+		if e.OverridesGlobal {
+			desc = strings.TrimSpace(desc + " (overrides global)")
+		}
+		rows = append(rows, [3]string{e.Name, oneLine(layer), desc})
+	}
+	var w [2]int
+	for _, r := range rows {
+		w[0], w[1] = max(w[0], len(r[0])), max(w[1], len(r[1]))
+	}
+	var b strings.Builder
+	for _, r := range rows {
+		line := fmt.Sprintf("%-*s  %-*s  %s", w[0], r[0], w[1], r[1], r[2])
+		b.WriteString(strings.TrimRight(line, " "))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// oneLine keeps stored text on one line so it cannot forge extra output rows.
+func oneLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
+func listText(s []string) string {
+	if len(s) == 0 {
+		return "-"
+	}
+	return oneLine(strings.Join(s, ", "))
+}

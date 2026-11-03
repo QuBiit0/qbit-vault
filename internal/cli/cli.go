@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/QuBiit0/gentle-vault/internal/exitcode"
+	"github.com/QuBiit0/gentle-vault/internal/refusal"
 )
 
 // Set by ldflags at release time.
@@ -98,10 +99,18 @@ func execute(args []string, stdout, stderr io.Writer, getenv func(string) string
 		return exitcode.OK
 	}
 	asJSON := g.JSON || jsonRequested(args)
-	var ue usageError
+	var (
+		ue usageError
+		rf refusal.Refusal
+		ce codedError
+	)
 	switch {
 	case errors.As(err, &ue):
 		return report(stdout, stderr, asJSON, "usage", ue.msg, exitcode.Usage)
+	case errors.As(err, &rf):
+		return reportRefusal(stdout, stderr, asJSON, rf)
+	case errors.As(err, &ce):
+		return report(stdout, stderr, asJSON, ce.code, ce.msg, ce.exit)
 	case !entered:
 		// Any other failure before the command ran is cobra's parse error.
 		// Its text can embed the user's input, so it is never shown.
@@ -201,6 +210,8 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	f.BoolVar(&g.NoColor, "no-color", false, "disable colored output (also honors "+envNoColor+")")
 
 	root.AddCommand(newVersion(g))
+	root.AddCommand(newInit(g))
+	root.AddCommand(newSet(g), newRm(g), newDescribe(g), newEdit(g), newList(g), newMv(g), newRelink(g))
 	return root
 }
 

@@ -1,0 +1,389 @@
+// Package grants is the grant model: what the user allowed, for which record,
+// to whom and for how long (docs/STORAGE.md § Grants, PRD § 5.3). It is pure
+// logic over a decoded Store and an injected clock; persistence is the
+// vault's (grants.enc) and every caller decides when to write.
+package grants
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Scope is how far a grant reaches.
+type Scope string
+
+const (
+	ScopeOnce    Scope = "once"
+	ScopeSession Scope = "session"
+	ScopeProject Scope = "project"
+)
+
+// ParseScope accepts exactly the three scope names.
+func ParseScope(s string) (Scope, bool) {
+	switch sc := Scope(s); sc {
+	case ScopeOnce, ScopeSession, ScopeProject:
+		return sc, true
+	}
+	return "", false
+}
+
+const (
+	// GlobalLayer is the layer text of the global record.
+	GlobalLayer   = "global"
+	projectPrefix = "project:"
+
+	// DefaultSessionTTL is the session scope lifetime without --ttl.
+	DefaultSessionTTL = 30 * time.Minute
+	// MinTTL and MaxTTL bound a session grant's lifetime.
+	MinTTL = time.Minute
+	MaxTTL = 24 * time.Hour
+	// OnceTTL is how long an unused once grant stays valid.
+	OnceTTL = 10 * time.Minute
+)
+
+// Typed failures. The CLI maps them to contract refusals.
+var (
+	ErrScopeNotAllowed = errors.New("scope_not_allowed")
+	ErrGrantRequired   = errors.New("grant_required")
+	ErrBadToken        = errors.New("bad_prompt_token")
+	ErrInvalidRequest  = errors.New("invalid_grant_request")
+	ErrInvalidTTL      = errors.New("invalid_ttl")
+)
+
+// ProjectLayer is the layer text of the project record rooted at root.
+func ProjectLayer(root string) string { return projectPrefix + root }
+
+// ProjectRootOf returns the root of a project layer text.
+func ProjectRootOf(layer string) (string, bool) {
+	root, ok := strings.CutPrefix(layer, projectPrefix)
+	return root, ok && root != ""
+}
+
+// Grant is one permission. Session is empty and ExpiresAt nil for project
+// scope; ProjectRoot is set only for project scope.
+type Grant struct {
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	Layer           string     `json:"layer"`
+	RecordID        string     `json:"record_id"`
+	Session         string     `json:"session"`
+	Scope           Scope      `json:"scope"`
+	CreatedAt       time.Time  `json:"created_at"`
+	ExpiresAt       *time.Time `json:"expires_at"`
+	Consumed        bool       `json:"consumed"`
+	ProjectRoot     string     `json:"project_root,omitempty"`
+	PromptTokenHash string     `json:"prompt_token_hash,omitempty"`
+}
+
+// Store is the decrypted body of grants.enc.
+type Store struct {
+	Grants []Grant `json:"grants"`
+	Tokens []Token `json:"tokens"`
+}
+
+// Decode parses a grants body; nil or empty is an empty store.
+func Decode(body []byte) (*Store, error) {
+	s := &Store{}
+	if len(body) == 0 {
+		return s, nil
+	}
+	if err := json.Unmarshal(body, s); err != nil {
+		return nil, errors.New("grants: unreadable grants body")
+	}
+	return s, nil
+}
+
+// Encode renders the store as a grants body.
+func Encode(s *Store) ([]byte, error) {
+	out := Store{Grants: s.Grants, Tokens: s.Tokens}
+	if out.Grants == nil {
+		out.Grants = []Grant{}
+	}
+	if out.Tokens == nil {
+		out.Tokens = []Token{}
+	}
+	return json.Marshal(out)
+}
+
+// Request is what the user confirmed.
+type Request struct {
+	Name            string
+	Layer           string
+	RecordID        string // id of the resolved record the user granted
+	Session         string
+	Scope           Scope
+	TTL             time.Duration // session scope only; 0 means DefaultSessionTTL
+	Sensitive       bool          // the record's flag; sensitive records accept once only
+	PromptTokenHash string
+}
+
+// Validate applies the scope rules (R-GRANT-02) without touching a store.
+func Validate(req Request) error {
+	if req.Name == "" {
+		return ErrInvalidRequest
+	}
+	_, isProject := ProjectRootOf(req.Layer)
+	if req.Layer != GlobalLayer && !isProject {
+		return ErrInvalidRequest
+	}
+	switch req.Scope {
+	case ScopeOnce, ScopeSession, ScopeProject:
+	default:
+		return ErrInvalidRequest
+	}
+	if req.Sensitive && req.Scope != ScopeOnce {
+		return ErrScopeNotAllowed
+	}
+	if req.Scope == ScopeProject && !isProject {
+		return ErrScopeNotAllowed
+	}
+	if req.Scope != ScopeProject && req.Session == "" {
+		return ErrInvalidRequest
+	}
+	if req.TTL != 0 && req.Scope != ScopeSession {
+		return ErrInvalidTTL
+	}
+	if req.Scope == ScopeSession && req.TTL != 0 && (req.TTL < MinTTL || req.TTL > MaxTTL) {
+		return ErrInvalidTTL
+	}
+	return nil
+}
+
+// Add records a grant after validating it, replacing any identical (name,
+// layer, session, scope) grant and purging what has expired.
+func Add(s *Store, req Request, now time.Time) (Grant, error) {
+	if err := Validate(req); err != nil {
+		return Grant{}, err
+	}
+	if req.RecordID == "" {
+		return Grant{}, ErrInvalidRequest
+	}
+	now = now.UTC()
+	purge(s, now)
+	g := Grant{
+		ID: newID(), Name: req.Name, Layer: req.Layer, RecordID: req.RecordID, Scope: req.Scope,
+		CreatedAt: now, PromptTokenHash: req.PromptTokenHash,
+	}
+	switch req.Scope {
+	case ScopeOnce:
+		g.Session = req.Session
+		g.ExpiresAt = at(now.Add(OnceTTL))
+	case ScopeSession:
+		ttl := req.TTL
+		if ttl == 0 {
+			ttl = DefaultSessionTTL
+		}
+		g.Session = req.Session
+		g.ExpiresAt = at(now.Add(ttl))
+	case ScopeProject:
+		g.ProjectRoot, _ = ProjectRootOf(req.Layer)
+	}
+	kept := s.Grants[:0]
+	for _, old := range s.Grants {
+		if old.Name == g.Name && old.Layer == g.Layer && old.RecordID == g.RecordID && old.Session == g.Session && old.Scope == g.Scope {
+			continue
+		}
+		kept = append(kept, old)
+	}
+	s.Grants = append(kept, g)
+	return g, nil
+}
+
+func at(t time.Time) *time.Time { return &t }
+
+func newID() string {
+	var b [10]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("grants: random source failed")
+	}
+	return "g_" + hex.EncodeToString(b[:])
+}
+
+func expired(exp *time.Time, now time.Time) bool { return exp != nil && !now.Before(*exp) }
+
+// purge drops expired and consumed grants and expired tokens.
+func purge(s *Store, now time.Time) bool {
+	changed := false
+	kept := s.Grants[:0]
+	for _, g := range s.Grants {
+		if g.Consumed || expired(g.ExpiresAt, now) {
+			changed = true
+			continue
+		}
+		kept = append(kept, g)
+	}
+	s.Grants = kept
+	keptTokens := s.Tokens[:0]
+	for _, t := range s.Tokens {
+		if !now.Before(t.ExpiresAt) {
+			changed = true
+			continue
+		}
+		keptTokens = append(keptTokens, t)
+	}
+	s.Tokens = keptTokens
+	return changed
+}
+
+// Purge removes expired and consumed grants and expired tokens and reports
+// whether anything went.
+func Purge(s *Store, now time.Time) bool { return purge(s, now.UTC()) }
+
+// Decision is the outcome of Check.
+type Decision struct {
+	Allowed bool
+	Scope   Scope  // the scope that allowed it
+	GrantID string // the grant that allowed it
+	Err     error  // nil when allowed, else ErrGrantRequired
+}
+
+// Check evaluates docs/STORAGE.md § Grants for one resolved record: layer is
+// the record's layer text, recordID its id (a grant for another record, even
+// with the same name and layer, never matches; an empty id matches nothing)
+// and cwd the canonical working directory (or its
+// repository root). A once grant is consumed exactly once. mutated tells the
+// caller to persist the store (a purge or a consumption happened).
+func Check(s *Store, name, layer, recordID, session, cwd string, now time.Time) (d Decision, mutated bool) {
+	now = now.UTC()
+	mutated = purge(s, now)
+	// Grants that are not spent by use first, so a once grant outlives a
+	// session grant that already covers the call.
+	if recordID == "" {
+		return Decision{Err: ErrGrantRequired}, mutated
+	}
+	for _, g := range s.Grants {
+		if g.Name != name || g.Layer != layer || g.RecordID != recordID {
+			continue
+		}
+		switch g.Scope {
+		case ScopeSession:
+			if session != "" && g.Session == session {
+				return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, mutated
+			}
+		case ScopeProject:
+			if g.ProjectRoot != "" && inside(g.ProjectRoot, cwd) {
+				return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, mutated
+			}
+		}
+	}
+	for i, g := range s.Grants {
+		if g.Name == name && g.Layer == layer && g.RecordID == recordID && g.Scope == ScopeOnce && !g.Consumed && session != "" && g.Session == session {
+			s.Grants[i].Consumed = true
+			return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, true
+		}
+	}
+	return Decision{Err: ErrGrantRequired}, mutated
+}
+
+// inside reports whether p is root or below it, on path boundaries.
+func inside(root, p string) bool {
+	if root == "" || p == "" {
+		return false
+	}
+	if p == root {
+		return true
+	}
+	sep := string(filepath.Separator)
+	return strings.HasPrefix(p, strings.TrimSuffix(root, sep)+sep)
+}
+
+// Active returns the live grants (not expired, not consumed) sorted by name,
+// layer, session and scope.
+func Active(s *Store, now time.Time) []Grant {
+	now = now.UTC()
+	var out []Grant
+	for _, g := range s.Grants {
+		if !g.Consumed && !expired(g.ExpiresAt, now) {
+			out = append(out, g)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		switch {
+		case a.Name != b.Name:
+			return a.Name < b.Name
+		case a.Layer != b.Layer:
+			return a.Layer < b.Layer
+		case a.Session != b.Session:
+			return a.Session < b.Session
+		}
+		return a.Scope < b.Scope
+	})
+	return out
+}
+
+// ForRecord returns the live grants of one record (name, layer, record id).
+func ForRecord(s *Store, name, layer, recordID string, now time.Time) []Grant {
+	var out []Grant
+	for _, g := range Active(s, now) {
+		if g.Name == name && g.Layer == layer && g.RecordID == recordID {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+func removeWhere(s *Store, drop func(Grant) bool) int {
+	n := 0
+	kept := s.Grants[:0]
+	for _, g := range s.Grants {
+		if drop(g) {
+			n++
+			continue
+		}
+		kept = append(kept, g)
+	}
+	s.Grants = kept
+	return n
+}
+
+// RevokeName removes the grants of name in layer; an empty layer means every
+// layer. It returns how many went.
+func RevokeName(s *Store, name, layer string) int {
+	return removeWhere(s, func(g Grant) bool { return g.Name == name && (layer == "" || g.Layer == layer) })
+}
+
+// RevokeAll removes every grant and every pending prompt token.
+func RevokeAll(s *Store) int {
+	n := len(s.Grants)
+	s.Grants, s.Tokens = nil, nil
+	return n
+}
+
+// RevokeSession removes the grants bound to session (project grants have no
+// session and stay).
+func RevokeSession(s *Store, session string) int {
+	if session == "" {
+		return 0
+	}
+	return removeWhere(s, func(g Grant) bool { return g.Session == session })
+}
+
+// DropRecord removes the grants of one record (rm, mv, value replace).
+func DropRecord(s *Store, name, layer string) int {
+	return RevokeName(s, name, layer)
+}
+
+// RelinkProject moves the grants of layer project:<oldRoot> to
+// project:<newRoot>, rewriting project_root too, and returns how many.
+func RelinkProject(s *Store, oldRoot, newRoot string) int {
+	n := 0
+	oldLayer, newLayer := ProjectLayer(oldRoot), ProjectLayer(newRoot)
+	for i, g := range s.Grants {
+		if g.Layer != oldLayer {
+			continue
+		}
+		s.Grants[i].Layer = newLayer
+		if g.ProjectRoot != "" {
+			s.Grants[i].ProjectRoot = newRoot
+		}
+		n++
+	}
+	return n
+}

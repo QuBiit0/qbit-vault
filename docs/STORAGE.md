@@ -50,7 +50,8 @@ A JSON envelope with a cleartext header and one AEAD-encrypted body. The header 
 
 - `global` holds secrets usable from any directory. `projects` maps a canonical repository root to that project's own secrets. `label` is the root's base name, shown in prompts and `list`.
 - **Resolution** of `NAME` for a `cwd`: find the repository root of `cwd` (`git rev-parse --show-toplevel`, else the nearest ancestor containing `.git`); if `projects[root].secrets[NAME]` exists use it, else `global[NAME]`, else `unknown_secret`. A project secret therefore overrides a global one with the same name only inside that repository (PRD R-LAYER-02).
-- Project roots are canonicalized (symlinks resolved, case-folded on Windows and macOS) before lookup. Linked Git worktrees resolve to their own top level, so each worktree is its own project unless the user runs `gentle-vault relink` to point it at an existing layer.
+- **Project root rule (v1):** the root is the nearest ancestor of `cwd` that contains a `.git` entry, either a directory or the file of a linked worktree. gentle-vault never spawns `git`; for normal checkouts and linked worktrees this equals `git rev-parse --show-toplevel`. Outside such an ancestor there is no project and only the global layer applies.
+- Project roots are canonicalized (absolute, symlinks resolved, case-folded on Windows and macOS) before lookup. Linked Git worktrees resolve to their own top level, so each worktree is its own project unless the user runs `gentle-vault relink` to point it at an existing layer.
 - Both layers live in this one encrypted body. Project paths, names and descriptions are as protected as the values. Nothing is ever written inside the repository.
 
 The body is only ever materialized inside `internal/vault` for the duration of one operation, then zeroed (`crypto/subtle`-style wipe of the byte slices; Go cannot guarantee it against GC copies, which is accepted).
@@ -69,12 +70,14 @@ The body is only ever materialized inside `internal/vault` for the duration of o
 
 Every mutation of `vault.enc`, `grants.enc`, `state.json`:
 
-1. Copy current file to `backups/<RFC3339-compact>/<filename>` (the vault copy is already encrypted; no extra handling).
+1. Copy current file to `backups/<UTC timestamp>/<filename>`, where the directory name is the UTC time formatted with the Go layout `20060102T150405.000000000Z` (for example `20261103T141500.123456789Z`; fixed width, so names sort chronologically) (the vault copy is already encrypted; no extra handling).
 2. Write new content to `<filename>.tmp.<pid>` in the same directory, `fsync`.
 3. `rename` over the target (atomic on POSIX; `MoveFileEx` with `REPLACE_EXISTING|WRITE_THROUGH` on Windows).
 4. `fsync` the directory on POSIX.
 
-Backups are pruned to the last 20 by default (`config.backups_keep`). `gentle-vault restore --from <ts>` swaps a backup back in (with its own backup of the current state first).
+A save of `vault.enc` also rewrites `state.json`; step 1 then copies **both** current files into the **same** `backups/<timestamp>/` directory before either is written, so every snapshot is a consistent (`vault.enc`, `state.json`) pair. The first save of a fresh vault has nothing to copy and creates no snapshot. Writes of a single file outside a vault save get their own snapshot directory.
+
+Backups are pruned to the last 20 snapshots by default (`config.backups_keep`), which for vault saves means the last 20 saves. `gentle-vault restore --from <ts>` swaps a backup back in (with its own backup of the current state first).
 
 ## File permissions
 

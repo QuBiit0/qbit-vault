@@ -71,10 +71,20 @@ func newMv(g *globals) *cobra.Command {
 			defer s.close()
 			// The moved record's grants no longer apply (R-LAYER-05).
 			res, err := s.v.MoveWithGrants(name, from, dest, yes, newGrantsEditor())
-			if err != nil {
-				if errors.Is(err, vault.ErrExists) {
-					return usageError{name + " already exists in " + layerName(dest) + "; pass --yes to overwrite"}
+			if errors.Is(err, vault.ErrExists) {
+				// Overwriting asks on the controlling terminal (L4); with none,
+				// --yes is required.
+				exists := usageError{name + " already exists in " + layerName(dest) + "; pass --yes to overwrite"}
+				ask, berr := g.backend()
+				if berr != nil {
+					return orInstead(berr, exists)
 				}
+				if err := confirmChange(ask, name+" already exists in "+layerName(dest)+"; overwrite?", exists); err != nil {
+					return err
+				}
+				res, err = s.v.MoveWithGrants(name, from, dest, true, newGrantsEditor())
+			}
+			if err != nil {
 				return mapErr(err, name)
 			}
 			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
@@ -87,7 +97,7 @@ func newMv(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&to, "to", "", "target layer: global or project")
-	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite a same-named secret in the target layer")
+	cmd.Flags().BoolVar(&yes, "yes", false, "overwrite a same-named secret in the target layer without asking")
 	return cmd
 }
 

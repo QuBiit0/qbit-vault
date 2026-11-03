@@ -35,6 +35,7 @@ var sessionRE = regexp.MustCompile(`^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$`)
 // globals holds the persistent flags shared by every command.
 type globals struct {
 	getenv  func(string) string
+	stderr  io.Writer // for test prompt backends that play the terminal
 	home    string
 	JSON    bool
 	Session string
@@ -76,7 +77,7 @@ func Execute(args []string, stdout, stderr io.Writer, getenv func(string) string
 
 // execute is Execute plus extra commands, which tests use to inject probes.
 func execute(args []string, stdout, stderr io.Writer, getenv func(string) string, extra ...func(*globals) *cobra.Command) (code int) {
-	g := &globals{getenv: getenv}
+	g := &globals{getenv: getenv, stderr: stderr}
 
 	defer func() {
 		// Never print the panic value: it could hold a secret.
@@ -220,6 +221,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newGrant(g), newRevoke(g), newGrantsList(g))
 	root.AddCommand(newAudit(g))
 	root.AddCommand(newExec(g))
+	root.AddCommand(newPromptCmd(g))
 	return root
 }
 

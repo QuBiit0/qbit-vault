@@ -160,7 +160,7 @@ func TestSetUsageErrorsLeaveVaultUnchanged(t *testing.T) {
 		args  []string
 		msg   string
 	}{
-		{"no stdin flag", false, "", []string{"set", "A_KEY", "--global"}, "interactive capture is not available yet; use --stdin"},
+		{"no stdin flag", false, "", []string{"set", "A_KEY", "--global"}, "no controlling terminal available; use --stdin"},
 		{"inside repo without layer", true, fxVal, []string{"set", "A_KEY", "--stdin"}, "choose --global or --project"},
 		{"both layers", true, fxVal, []string{"set", "A_KEY", "--global", "--project", "--stdin"}, "choose only one of --global and --project"},
 		{"extra arguments", false, fxVal, []string{"set", "A_KEY", "TESTSECRET_arg", "--stdin"}, "unexpected arguments"},

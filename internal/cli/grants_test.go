@@ -11,6 +11,8 @@ import (
 
 	"github.com/QuBiit0/gentle-vault/internal/exitcode"
 	"github.com/QuBiit0/gentle-vault/internal/grants"
+	"github.com/QuBiit0/gentle-vault/internal/prompt"
+	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
 )
 
@@ -35,15 +37,26 @@ func pinClock(t *testing.T) (at func(time.Time)) {
 	return func(n time.Time) { now = n }
 }
 
-// asTerminal makes the confirmation seam see (or not see) a terminal.
+// asTerminal makes the prompt seam offer (or not offer) a terminal. The
+// simulated one reads its answers line by line from the command's stdin and
+// writes the questions to its stderr; the real backend logic is in between.
 func asTerminal(t *testing.T, on bool) {
 	t.Helper()
-	old := isTerminal
-	isTerminal = func(io.Reader, io.Writer) bool { return on }
-	t.Cleanup(func() { isTerminal = old })
+	old := newPrompt
+	newPrompt = func(g *globals) (prompt.Backend, error) {
+		if !on {
+			return nil, prompt.ErrNoTerminal
+		}
+		var in io.Reader = strings.NewReader("")
+		if stdinOverride != nil {
+			in = stdinOverride
+		}
+		return prompttest.Stream(in, g.stderr), nil
+	}
+	t.Cleanup(func() { newPrompt = old })
 }
 
-func prompt(name, layer, who string, scope string) string {
+func grantPrompt(name, layer, who string, scope string) string {
 	return fmt.Sprintf("Grant %s (%s) to %s, scope %s? [y/N] ", name, layer, who, scope)
 }
 
@@ -106,7 +119,7 @@ func TestGrantSessionOnTerminal(t *testing.T) {
 
 	code, out, errs := w.run("y\n", "--session", sessA, "grant", "A_KEY", "--scope", "session")
 	want := "granted A_KEY (global): session, for pi:sess-aaaa, until 2026-11-03T12:30:00Z\n"
-	if code != exitcode.OK || out != want || errs != prompt("A_KEY", "global", sessA, "session") {
+	if code != exitcode.OK || out != want || errs != grantPrompt("A_KEY", "global", sessA, "session") {
 		t.Fatalf("code=%d\nstdout=%q\nstderr=%q", code, out, errs)
 	}
 	exp := fmt.Sprintf("%-5s  %-6s  %-7s  %-12s  %-20s  %s\n", "NAME", "LAYER", "SCOPE", "SESSION", "EXPIRES", "REMAINING") +
@@ -126,12 +139,12 @@ func TestGrantJSONAndTTL(t *testing.T) {
 	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
 	code, out, errs := w.run("yes\n", "--json", "--session", sessA, "grant", "A_KEY", "--scope", "session", "--ttl", "90m")
 	want := `{"ok":true,"grant":{"name":"A_KEY","layer":"global","scope":"session","session":"pi:sess-aaaa","expires_at":"2026-11-03T13:30:00Z"}}` + "\n"
-	if code != 0 || out != want || errs != prompt("A_KEY", "global", sessA, "session") {
+	if code != 0 || out != want || errs != grantPrompt("A_KEY", "global", sessA, "session") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	code, out, errs = w.run("Y\n", "--json", "--session", sessA, "grant", "A_KEY", "--scope", "once")
 	want = `{"ok":true,"grant":{"name":"A_KEY","layer":"global","scope":"once","session":"pi:sess-aaaa","expires_at":"2026-11-03T12:10:00Z"}}` + "\n"
-	if code != 0 || out != want || errs != prompt("A_KEY", "global", sessA, "once") {
+	if code != 0 || out != want || errs != grantPrompt("A_KEY", "global", sessA, "once") {
 		t.Fatalf("once: code=%d out=%q err=%q", code, out, errs)
 	}
 }
@@ -143,7 +156,7 @@ func TestGrantProjectScope(t *testing.T) {
 	w.inRepo()
 	w.mustRun(fxVal, "set", "DB_URL", "--project", "--stdin")
 	code, out, errs := w.run("y\n", "grant", "DB_URL", "--scope", "project")
-	if code != 0 || out != "granted DB_URL (project shop-api): project, until revoked\n" || errs != prompt("DB_URL", "project shop-api", "this project", "project") {
+	if code != 0 || out != "granted DB_URL (project shop-api): project, until revoked\n" || errs != grantPrompt("DB_URL", "project shop-api", "this project", "project") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	want := `{"ok":true,"grants":[{"name":"DB_URL","layer":"project","project":` + w.projectJSON() + `,"scope":"project","session":null,"expires_at":null,"remaining":null}]}` + "\n"
@@ -173,7 +186,7 @@ func TestGrantDeclined(t *testing.T) {
 	before := w.grantsState()
 	for _, answer := range []string{"n\n", "\n", "", "nope\n", "yy\n", "yes please\n"} {
 		code, out, errs := w.run(answer, "--session", sessA, "grant", "A_KEY", "--scope", "session")
-		if code != exitcode.Refusal || out != "" || errs != prompt("A_KEY", "global", sessA, "session")+"error: "+msgDeclined+"\n" {
+		if code != exitcode.Refusal || out != "" || errs != grantPrompt("A_KEY", "global", sessA, "session")+"error: "+msgDeclined+"\n" {
 			t.Fatalf("%q: code=%d out=%q err=%q", answer, code, out, errs)
 		}
 	}
@@ -367,7 +380,7 @@ func TestGrantFailsClosedWhenAuditFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := w.run("y\n", "--session", sessA, "grant", "A_KEY", "--scope", "session")
-	if code != exitcode.Refusal || out != "" || errs != prompt("A_KEY", "global", sessA, "session")+"error: internal error\n"+auditWarning {
+	if code != exitcode.Refusal || out != "" || errs != grantPrompt("A_KEY", "global", sessA, "session")+"error: internal error\n"+auditWarning {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if w.grantsState() != before {

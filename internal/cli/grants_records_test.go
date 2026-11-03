@@ -398,7 +398,7 @@ func TestEndToEndGrants(t *testing.T) {
 
 	// grant (terminal, answer y) → grants → describe → revoke → grants.
 	step("y\n", 0, "granted GITHUB_TOKEN (global): session, for pi:sess-aaaa, until TS\n",
-		prompt("GITHUB_TOKEN", "global", sessA, "session"), sessQ, "grant", "GITHUB_TOKEN", "--scope", "session")
+		grantPrompt("GITHUB_TOKEN", "global", sessA, "session"), sessQ, "grant", "GITHUB_TOKEN", "--scope", "session")
 	step("", 0, `{"ok":true,"grants":[{"name":"GITHUB_TOKEN","layer":"global","project":null,"scope":"session","session":"pi:sess-aaaa","expires_at":"TS","remaining":"30m0s"}]}`+"\n", "", "--json", "grants")
 	_, out, _ := w.run("", "describe", "GITHUB_TOKEN")
 	if !strings.Contains(norm(out), "  grants:      session, for pi:sess-aaaa, until TS\n") {
@@ -419,7 +419,7 @@ func TestEndToEndGrants(t *testing.T) {
 
 	// A sensitive secret refuses the session scope and accepts once.
 	step("y\n", 3, "", "error: "+msgScope+"\n", sessQ, "grant", "STRIPE_KEY", "--scope", "session")
-	step("y\n", 0, "granted STRIPE_KEY (global): once, for pi:sess-aaaa, until TS\n", prompt("STRIPE_KEY", "global", sessA, "once"),
+	step("y\n", 0, "granted STRIPE_KEY (global): once, for pi:sess-aaaa, until TS\n", grantPrompt("STRIPE_KEY", "global", sessA, "once"),
 		sessQ, "grant", "STRIPE_KEY", "--scope", "once")
 
 	// mv drops the grants of the moved record.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/grants"
+	"github.com/QuBiit0/gentle-vault/internal/prompt"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 	"github.com/QuBiit0/gentle-vault/internal/vault"
@@ -295,22 +296,20 @@ func newSet(g *globals) *cobra.Command {
 		token    string
 	)
 	cmd := &cobra.Command{
-		Use:   "set NAME (--global|--project) --stdin [--grant once|session|project --from-prompt-token T]",
-		Short: "Store or replace a secret value read from stdin",
+		Use:   "set NAME [--global|--project] [--stdin] [--grant once|session|project [--from-prompt-token T]]",
+		Short: "Store or replace a secret value (masked prompt, or --stdin)",
 		Args:  nameArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			if !stdin {
-				return usageError{"interactive capture is not available yet; use --stdin"}
-			}
 			if err := lf.validate(); err != nil {
 				return err
 			}
 			if err := checkName(name); err != nil {
 				return err
 			}
-			// stdin carries the value, so the grant cannot be confirmed by
-			// asking a question: it needs a prompt token.
+			// With --stdin the value is on stdin, so a grant cannot be
+			// confirmed by asking: it needs a prompt token. Interactively the
+			// scope question after the value is the confirmation.
 			f := cmd.Flags()
 			tokenGiven := f.Changed("from-prompt-token")
 			var (
@@ -319,8 +318,11 @@ func newSet(g *globals) *cobra.Command {
 			)
 			switch {
 			case f.Changed("grant"):
-				if !tokenGiven {
+				switch {
+				case stdin && !tokenGiven:
 					return usageError{"--grant requires --from-prompt-token"}
+				case !stdin && tokenGiven:
+					return usageError{"--from-prompt-token needs --stdin"}
 				}
 				var err error
 				if scope, ttl, err = (grantFlags{}).parse(cmd, grantStr, g.Session); err != nil {
@@ -328,6 +330,13 @@ func newSet(g *globals) *cobra.Command {
 				}
 			case tokenGiven:
 				return usageError{"--from-prompt-token requires --grant"}
+			}
+			var ask prompt.Backend
+			if !stdin {
+				var err error
+				if ask, err = g.backend(); err != nil {
+					return promptFail(err, "use --stdin")
+				}
 			}
 			cwd, err := getwd()
 			if err != nil {
@@ -340,21 +349,31 @@ func newSet(g *globals) *cobra.Command {
 					return err
 				}
 			default:
-				// The interactive layer question arrives with slice 1.9.
-				switch _, perr := vault.ProjectLayer(cwd); {
-				case perr == nil:
+				switch proj, perr := vault.ProjectLayer(cwd); {
+				case perr == nil && stdin:
 					return usageError{"choose --global or --project"}
+				case perr == nil:
+					i, err := ask.Choose("Where should "+name+" live?", []string{"global", "this project (" + proj.Label + ")"}, 0)
+					if err != nil {
+						return promptFail(err, "use --stdin")
+					}
+					layer = vault.Global()
+					if i == 1 {
+						layer = proj
+					}
 				case errors.Is(perr, vault.ErrNoProject):
 					layer = vault.Global()
 				default:
 					return mapErr(perr, "")
 				}
 			}
-			value, err := readValue(stdinOf(cmd))
-			if err != nil {
-				return err
+			var value []byte
+			if stdin {
+				if value, err = readValue(stdinOf(cmd)); err != nil {
+					return err
+				}
+				defer clear(value)
 			}
-			defer clear(value)
 
 			s, err := g.openSession()
 			if err != nil {
@@ -362,7 +381,7 @@ func newSet(g *globals) *cobra.Command {
 			}
 			defer s.close()
 
-			rec := vault.Record{Value: secret.New(name, value)}
+			var rec vault.Record
 			replaced := false
 			all, err := s.v.ListAll()
 			if err != nil {
@@ -379,6 +398,23 @@ func newSet(g *globals) *cobra.Command {
 			wipeEntries(all)
 			meta.apply(cmd, &rec)
 
+			if !stdin {
+				// Refuse a grant that cannot be made before asking for the
+				// value, so nothing is typed in vain.
+				if scope != "" {
+					if err := grants.Validate(g.grantRequest(name, layer, "", scope, ttl, rec.Sensitive)); err != nil {
+						return grantErr(err, name)
+					}
+				}
+				raw, chosen, err := g.captureValue(ask, name, layer, replaced, scope, rec.Sensitive)
+				if err != nil {
+					return err
+				}
+				defer clear(raw)
+				value, scope = bytes.TrimSpace(raw), chosen
+			}
+			rec.Value = secret.New(name, value)
+
 			// Settle the grant before anything is stored, so a refused
 			// grant leaves the vault as it was.
 			var (
@@ -387,14 +423,16 @@ func newSet(g *globals) *cobra.Command {
 			)
 			if scope != "" {
 				// The record id does not exist until the value is stored.
-				req = grants.Request{Name: name, Layer: layer.Key(), Scope: scope, TTL: ttl, Sensitive: rec.Sensitive}
-				if scope != grants.ScopeProject {
-					req.Session = g.Session
-				}
+				req = g.grantRequest(name, layer, "", scope, ttl, rec.Sensitive)
 				if err := grants.Validate(req); err != nil {
 					return grantErr(err, name)
 				}
-				if tokenHash, err = g.confirm(cmd, s, req, layer, token, true); err != nil {
+				if stdin {
+					tokenHash, err = g.confirm(cmd, s, req, layer, token, true)
+				} else {
+					tokenHash, err = g.promptToken(cmd, s, req)
+				}
+				if err != nil {
 					return err
 				}
 			}
@@ -435,9 +473,9 @@ func newSet(g *globals) *cobra.Command {
 	}
 	lf.bind(cmd)
 	meta.bind(cmd)
-	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the value from stdin")
-	cmd.Flags().StringVar(&grantStr, "grant", "", "also grant the secret to --session: once, session or project (needs --from-prompt-token)")
-	cmd.Flags().StringVar(&token, "from-prompt-token", "", "prompt token that confirms --grant")
+	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the value from stdin instead of the masked prompt")
+	cmd.Flags().StringVar(&grantStr, "grant", "", "also grant the secret to --session: once, session or project (with --stdin it needs --from-prompt-token; interactively it is the proposed scope)")
+	cmd.Flags().StringVar(&token, "from-prompt-token", "", "prompt token that confirms --grant (with --stdin)")
 	return cmd
 }
 
@@ -447,7 +485,7 @@ func newRm(g *globals) *cobra.Command {
 		yes bool
 	)
 	cmd := &cobra.Command{
-		Use:   "rm NAME [--global|--project] --yes",
+		Use:   "rm NAME [--global|--project] [--yes]",
 		Short: "Delete a secret",
 		Args:  nameArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -455,10 +493,14 @@ func newRm(g *globals) *cobra.Command {
 			if err := lf.validate(); err != nil {
 				return err
 			}
-			// Until the interactive confirmation (slice 1.9), --yes is
-			// required whether or not stdin is a terminal.
+			// Without --yes the user is asked on the controlling terminal (L4);
+			// with none, --yes is required.
+			var ask prompt.Backend
 			if !yes {
-				return usageError{"confirmation required; pass --yes"}
+				var err error
+				if ask, err = g.backend(); err != nil {
+					return orInstead(err, usageError{"confirmation required; pass --yes"})
+				}
 			}
 			if err := checkName(name); err != nil {
 				return err
@@ -477,6 +519,11 @@ func newRm(g *globals) *cobra.Command {
 				return err
 			}
 			e.Record.Value.Wipe()
+			if !yes {
+				if err := confirmChange(ask, fmt.Sprintf("Remove %s (%s)?", name, layerText(e.Layer)), usageError{"confirmation required; pass --yes"}); err != nil {
+					return err
+				}
+			}
 			res, err := s.v.RemoveWithGrants(e.Layer, name, newGrantsEditor())
 			if err != nil {
 				return mapErr(err, name)
@@ -491,7 +538,7 @@ func newRm(g *globals) *cobra.Command {
 		},
 	}
 	lf.bind(cmd)
-	cmd.Flags().BoolVar(&yes, "yes", false, "confirm the removal")
+	cmd.Flags().BoolVar(&yes, "yes", false, "remove without asking (for scripts)")
 	return cmd
 }
 

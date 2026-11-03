@@ -1,11 +1,9 @@
 package cli
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,29 +12,13 @@ import (
 
 	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/grants"
+	"github.com/QuBiit0/gentle-vault/internal/prompt"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
 	"github.com/QuBiit0/gentle-vault/internal/vault"
 )
 
 // clock is the time source of everything with a TTL; tests pin it.
 var clock = time.Now
-
-// isTerminal reports whether both stdin and stdout are interactive terminals:
-// the only way, besides a prompt token, to confirm a grant (L5). It is a
-// seam; tests replace it. A character device is a terminal here; on Windows
-// that also admits NUL, which can never answer the question.
-var isTerminal = func(stdin io.Reader, stdout io.Writer) bool {
-	return charDevice(stdin) && charDevice(stdout)
-}
-
-func charDevice(v any) bool {
-	f, ok := v.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
 
 const grantsResetWarning = "warning: grants were reset (store unreadable or rolled back)\n"
 
@@ -177,7 +159,8 @@ func (gf grantFlags) parse(cmd *cobra.Command, scope, session string) (grants.Sc
 }
 
 // confirm obtains the explicit user action behind a grant (R-GRANT-03, L5):
-// a valid prompt token, or a y/N answer on a terminal. Anything else is
+// a valid prompt token, or a yes on the prompt backend (the controlling
+// terminal, never stdin). Anything else is
 // not_model_callable. It returns the hash of the token used, if any.
 func (g *globals) confirm(cmd *cobra.Command, s *session, req grants.Request, layer vault.Layer, token string, tokenGiven bool) (string, error) {
 	stderr := cmd.ErrOrStderr()
@@ -199,21 +182,51 @@ func (g *globals) confirm(cmd *cobra.Command, s *session, req grants.Request, la
 		}
 		return hash, nil
 	}
-	stdin, stdout := stdinOf(cmd), cmd.OutOrStdout()
-	if !isTerminal(stdin, stdout) {
-		return "", refusal.New(refusal.NotModelCallable, req.Name)
+	b, err := g.backend()
+	if err != nil {
+		if errors.Is(err, prompt.ErrUnavailable) {
+			return "", refusal.New(refusal.NotModelCallable, req.Name)
+		}
+		return "", mapErr(err, "")
 	}
 	who := "this project"
 	if req.Scope != grants.ScopeProject {
 		who = req.Session
 	}
-	fmt.Fprintf(stderr, "Grant %s (%s) to %s, scope %s? [y/N] ", req.Name, layerText(layer), who, req.Scope)
-	line, _ := bufio.NewReader(stdin).ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return "", nil
+	ok, err := b.Confirm(fmt.Sprintf("Grant %s (%s) to %s, scope %s?", req.Name, layerText(layer), who, req.Scope))
+	switch {
+	case errors.Is(err, prompt.ErrUnavailable):
+		return "", refusal.New(refusal.NotModelCallable, req.Name)
+	case err != nil && !errors.Is(err, prompt.ErrCancelled):
+		return "", mapErr(err, "")
+	case err != nil || !ok:
+		return "", refusal.New(refusal.UserDeclined, req.Name)
 	}
-	return "", refusal.New(refusal.UserDeclined, req.Name)
+	return "", nil
+}
+
+// promptToken is the confirmation of a grant the user just asked for in an
+// interactive prompt (set --grant): the choice itself is the explicit action.
+// It issues a token and redeems it in the same step, so the grant is audited
+// as a prompt-token grant like every other one the broker's own prompt makes.
+func (g *globals) promptToken(cmd *cobra.Command, s *session, req grants.Request) (string, error) {
+	var (
+		hash string
+		cerr error
+	)
+	err := g.mutateGrants(cmd.ErrOrStderr(), s, func(st *grants.Store) (bool, error) {
+		now := clock()
+		tok := grants.IssueToken(st, req.Name, req.Layer, req.RecordID, req.Scope, req.Session, req.TTL, now)
+		hash, cerr = grants.ConsumeToken(st, tok, req.Name, req.Layer, req.RecordID, req.Scope, req.Session, req.TTL, now)
+		return false, nil // issued and redeemed: the stored tokens do not change
+	})
+	if err != nil {
+		return "", err
+	}
+	if cerr != nil {
+		return "", grantErr(cerr, req.Name)
+	}
+	return hash, nil
 }
 
 // create persists the confirmed grant. The audit record is written first and

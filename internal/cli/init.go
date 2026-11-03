@@ -41,9 +41,6 @@ func newInit(g *globals) *cobra.Command {
 			if passphraseStdin && !passphrase {
 				return usageError{"--passphrase-stdin requires --passphrase"}
 			}
-			if passphrase && !passphraseStdin {
-				return usageError{"passphrase mode needs --passphrase-stdin until interactive prompts are available"}
-			}
 			home := g.Home()
 			out := cmd.OutOrStdout()
 			switch _, err := vault.ReadID(home); {
@@ -58,13 +55,17 @@ func newInit(g *globals) *cobra.Command {
 			}
 
 			opts := keychain.Options{ForcePassphrase: passphrase}
-			if passphrase {
+			switch {
+			case passphrase && passphraseStdin:
 				pass, err := readPassphrase(stdinOf(cmd))
 				if err != nil {
 					return err
 				}
 				defer clear(pass)
 				opts.Passphrase = func(bool) (secret.Secret, error) { return secret.New("passphrase", pass), nil }
+			case passphrase:
+				// Asked twice on the controlling terminal, never from stdin.
+				opts.Passphrase = g.askPassphrase
 			}
 
 			id := newVaultID()
@@ -73,7 +74,7 @@ func newInit(g *globals) *cobra.Command {
 				if errors.Is(err, keychain.ErrKeyExists) {
 					return errors.New("a key already exists for this vault location")
 				}
-				return mapErr(err, "")
+				return promptFail(err, "use --passphrase-stdin")
 			}
 			defer key.Wipe()
 			if _, err := vault.Init(home, id, key); err != nil {
@@ -94,7 +95,7 @@ func newInit(g *globals) *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.BoolVar(&passphrase, "passphrase", false, "protect the master key with a passphrase instead of the OS keychain")
-	f.BoolVar(&passphraseStdin, "passphrase-stdin", false, "read the passphrase from the first line of stdin (until interactive prompts exist)")
+	f.BoolVar(&passphraseStdin, "passphrase-stdin", false, "read the passphrase from the first line of stdin instead of asking on the terminal")
 	return cmd
 }
 

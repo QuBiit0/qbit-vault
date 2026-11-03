@@ -7,6 +7,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
+	"github.com/QuBiit0/gentle-vault/internal/prompt"
 	"github.com/QuBiit0/gentle-vault/internal/vault"
 )
 
@@ -18,6 +19,9 @@ func TestMain(m *testing.M) {
 		childMain(mode)
 	}
 	keyring.MockInit()
+	// No test may reach a real terminal: by default there is none. Tests that
+	// need one install a fake with withBackend or asTerminal.
+	newPrompt = func(*globals) (prompt.Backend, error) { return nil, prompt.ErrNoTerminal }
 	// Isolate repository discovery from any checkout that contains %TEMP%.
 	if tmp, err := filepath.EvalSymlinks(os.TempDir()); err == nil {
 		vault.SetWalkStopForTesting(tmp)

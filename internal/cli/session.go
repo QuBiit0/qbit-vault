@@ -10,6 +10,7 @@ import (
 
 	"github.com/QuBiit0/gentle-vault/internal/exitcode"
 	"github.com/QuBiit0/gentle-vault/internal/keychain"
+	"github.com/QuBiit0/gentle-vault/internal/prompt"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 	"github.com/QuBiit0/gentle-vault/internal/vault"
@@ -50,15 +51,16 @@ func (s *session) close() { s.key.Wipe() }
 
 // openSession resolves the vault home, reads the vault id, unlocks the master
 // key and opens the vault. Failures are already mapped to typed refusals or
-// coded errors. There is no passphrase prompt yet (slice 1.9), so a
-// passphrase-mode vault opens only through an unexpired unlock cache.
+// coded errors. A passphrase-mode vault opens through an unexpired unlock
+// cache or, when there is a controlling terminal, a passphrase prompt (L6);
+// otherwise it is locked.
 func (g *globals) openSession() (*session, error) {
 	home := g.Home()
 	id, err := vault.ReadID(home)
 	if err != nil {
 		return nil, mapErr(err, "")
 	}
-	key, mode, err := keychain.Unlock(home, id, keychain.Options{})
+	key, mode, err := keychain.Unlock(home, id, keychain.Options{Passphrase: g.unlockPassphrase})
 	if err != nil {
 		return nil, mapErr(err, "")
 	}
@@ -86,6 +88,14 @@ func mapErr(err error, name string) error {
 	case errors.Is(err, vault.ErrLocked):
 		// Until the contract has a dedicated type (slice 2.1 follow-up).
 		return refusal.New(refusal.Internal, "").WithMessage("vault is busy").WithRetryable(true)
+	case errors.Is(err, prompt.ErrCancelled):
+		return errCancelled
+	case errors.Is(err, prompt.ErrMismatch):
+		return usageError{"passphrases do not match"}
+	case errors.Is(err, keychain.ErrEmptyPassphrase):
+		return usageError{"empty passphrase"}
+	case errors.Is(err, prompt.ErrUnknownBackend):
+		return usageError{err.Error()}
 	case errors.Is(err, vault.ErrCorrupt), errors.Is(err, keychain.ErrCorrupt):
 		return refusal.New(refusal.VaultCorrupt, "")
 	case errors.Is(err, keychain.ErrBadPassphrase), errors.Is(err, keychain.ErrNoKey), errors.Is(err, keychain.ErrUnavailable):

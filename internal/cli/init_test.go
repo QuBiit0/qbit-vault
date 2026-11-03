@@ -118,7 +118,7 @@ func TestInitPassphraseUsageErrors(t *testing.T) {
 		args  []string
 		msg   string
 	}{
-		{"passphrase without stdin flag", "", []string{"init", "--passphrase"}, "passphrase mode needs --passphrase-stdin until interactive prompts are available"},
+		{"passphrase without stdin flag", "", []string{"init", "--passphrase"}, "no controlling terminal available; use --passphrase-stdin"},
 		{"stdin flag without passphrase", fxPass + "\n", []string{"init", "--passphrase-stdin"}, "--passphrase-stdin requires --passphrase"},
 		{"empty passphrase", "\n", []string{"init", "--passphrase", "--passphrase-stdin"}, "empty passphrase"},
 		{"blank passphrase", "   \n", []string{"init", "--passphrase", "--passphrase-stdin"}, "empty passphrase"},

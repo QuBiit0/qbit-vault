@@ -1,0 +1,25 @@
+# Commands refused while any secret is injected (refusal type: dump_command).
+# Patterns are RE2, matched against each pipeline segment after shell-word normalization.
+# `{NAME}` expands to every injected name. User-extendable; never shortened by `sync`.
+format: gentle-vault-dumpguard/1
+patterns:
+  - '^env$'
+  - '^env\s+-\S*0'                # env -0
+  - '^printenv(\s|$)'
+  - '^set$'
+  - '^export\s+-p$'
+  - '^declare\s+-x'
+  - '^typeset\s+-x'
+  - '^(cat|less|more|head|tail|strings|xxd|od)\s+(/proc/(self|\d+)/environ)'
+  - '^(cat|less|more|head|tail)\s+/dev/fd/'
+  - '(?i)^(gci|get-childitem|ls|dir)\s+env:'
+  - '(?i)\[environment\]::getenvironmentvariables'
+  - '(?i)^get-item\s+env:'
+  - '^echo\s+.*\$\{?{NAME}\}?'
+  - '^printf\s+.*\$\{?{NAME}\}?'
+  - '(?i)^(echo|write-output|write-host)\s+.*\$env:{NAME}'
+  - '^echo\s+.*%{NAME}%'
+  - '^(python3?|node|ruby|perl)\s+-[ce]\s+.*(os\.environ|process\.env|ENV\[)'
+  - '^node\s+-p\s+process\.env'
+  - '(base64|xxd|od|hexdump)\s*<<<\s*"?\$\{?{NAME}'
+  - '^(curl|wget|http|nc|ncat|socat)\s+.*\$\{?{NAME}\}?'   # literal use of the value in a network command; use the binary's own env support instead

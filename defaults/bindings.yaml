@@ -1,0 +1,32 @@
+# Implicit bindings: binary → env vars it reads.
+# A binding only proposes names. Injection still requires the secret to exist
+# in the vault AND an active grant for the session. User-editable; validated by `doctor`.
+format: gentle-vault-bindings/1
+bindings:
+  gh:        [GITHUB_TOKEN, GH_TOKEN]
+  git:       [GITHUB_TOKEN]
+  aws:       [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN]
+  gcloud:    [CLOUDSDK_AUTH_ACCESS_TOKEN]
+  az:        [AZURE_CLIENT_SECRET]
+  vercel:    [VERCEL_TOKEN]
+  netlify:   [NETLIFY_AUTH_TOKEN]
+  fly:       [FLY_API_TOKEN]
+  flyctl:    [FLY_API_TOKEN]
+  npm:       [NPM_TOKEN]
+  pnpm:      [NPM_TOKEN]
+  docker:    [DOCKER_PASSWORD]
+  psql:      [PGPASSWORD, DATABASE_URL]
+  pg_dump:   [PGPASSWORD, DATABASE_URL]
+  prisma:    [DATABASE_URL]
+  drizzle-kit: [DATABASE_URL]
+  mysql:     [MYSQL_PWD]
+  redis-cli: [REDISCLI_AUTH]
+  stripe:    [STRIPE_API_KEY]
+  openai:    [OPENAI_API_KEY]
+  anthropic: [ANTHROPIC_API_KEY]
+  claude:    [ANTHROPIC_API_KEY]
+  terraform: [TF_TOKEN_app_terraform_io]
+  pulumi:    [PULUMI_ACCESS_TOKEN]
+  cargo:     [CARGO_REGISTRY_TOKEN]
+  twine:     [TWINE_PASSWORD]
+  sentry-cli: [SENTRY_AUTH_TOKEN]

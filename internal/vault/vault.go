@@ -162,67 +162,59 @@ func (v *Vault) Put(layer Layer, name string, rec Record) error {
 		return err
 	}
 	return v.mutate(func(b *body) error {
-		secrets := b.secrets(layer, true)
-		ts := stamp()
-		rec.CreatedAt, rec.UpdatedAt = ts, ts
-		if old, ok := secrets[name]; ok && old.CreatedAt != "" {
-			rec.CreatedAt = old.CreatedAt
-		}
-		secrets[name] = toWire(rec)
+		putIn(b.secrets(layer, true), name, rec, true)
 		return nil
 	})
 }
 
+// putIn stores rec under name in secrets, keeping the CreatedAt of a record
+// it replaces. The record keeps its ID only when keepID is set and rec
+// carries the ID of the record being replaced (a metadata edit); a new
+// record or a replaced value gets a fresh one.
+func putIn(secrets map[string]wireRecord, name string, rec Record, keepID bool) {
+	old, existed := secrets[name]
+	if !(keepID && existed && old.ID != "" && rec.ID == old.ID) {
+		rec.ID = newRecordID()
+	}
+	ts := stamp()
+	rec.CreatedAt, rec.UpdatedAt = ts, ts
+	if old, ok := secrets[name]; ok && old.CreatedAt != "" {
+		rec.CreatedAt = old.CreatedAt
+	}
+	secrets[name] = toWire(rec)
+}
+
 // Remove deletes name from layer.
 func (v *Vault) Remove(layer Layer, name string) error {
-	if err := checkName(name); err != nil {
-		return err
-	}
-	if err := checkLayer(layer); err != nil {
-		return err
-	}
-	return v.mutate(func(b *body) error {
-		secrets := b.secrets(layer, false)
-		if _, ok := secrets[name]; !ok {
-			return withName(ErrNotFound, name)
-		}
-		delete(secrets, name)
-		b.dropEmptyProject(layer)
-		return nil
-	})
+	_, err := v.RemoveWithGrants(layer, name, nil)
+	return err
 }
 
 // Move relocates name between layers keeping value and metadata. If the
 // target already holds the name, Move fails with ErrExists unless overwrite.
 func (v *Vault) Move(name string, from, to Layer, overwrite bool) error {
-	if err := checkName(name); err != nil {
-		return err
+	_, err := v.MoveWithGrants(name, from, to, overwrite, nil)
+	return err
+}
+
+func moveIn(b *body, name string, from, to Layer, overwrite bool) error {
+	src := b.secrets(from, false)
+	w, ok := src[name]
+	if !ok {
+		return withName(ErrNotFound, name)
 	}
-	if err := checkLayer(from); err != nil {
-		return err
-	}
-	if err := checkLayer(to); err != nil {
-		return err
-	}
-	return v.mutate(func(b *body) error {
-		src := b.secrets(from, false)
-		w, ok := src[name]
-		if !ok {
-			return withName(ErrNotFound, name)
-		}
-		if from.same(to) {
-			return nil
-		}
-		dst := b.secrets(to, true)
-		if _, exists := dst[name]; exists && !overwrite {
-			b.dropEmptyProject(to)
-			return withName(ErrExists, name)
-		}
-		dst[name] = w
-		delete(src, name)
-		b.dropEmptyProject(from)
+	if from.same(to) {
 		return nil
-	})
+	}
+	dst := b.secrets(to, true)
+	if _, exists := dst[name]; exists && !overwrite {
+		b.dropEmptyProject(to)
+		return withName(ErrExists, name)
+	}
+	dst[name] = w
+	delete(src, name)
+	b.dropEmptyProject(from)
+	return nil
 }
 
 // Resolve finds name for cwd: the project of cwd first, then global.

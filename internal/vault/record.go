@@ -1,11 +1,19 @@
 package vault
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 )
 
 // Record is one stored secret and its metadata (PRD R-VAULT-06).
 type Record struct {
+	// ID identifies this record instance. It is created with the record,
+	// regenerated when the value is replaced, and kept by metadata edits,
+	// mv and relink; grants bind to it so a grant can never authorize a
+	// different record that reuses the name.
+	ID          string
 	Value       secret.Secret
 	Description string
 	Sensitive   bool
@@ -27,6 +35,7 @@ type Entry struct {
 // inside one vault operation. The value is a Go string while encoded or
 // decoded, which cannot be wiped; the byte buffers around it are.
 type wireRecord struct {
+	ID          string   `json:"id"`
 	Value       string   `json:"value"`
 	Description string   `json:"description"`
 	Sensitive   bool     `json:"sensitive"`
@@ -54,6 +63,7 @@ func toWire(r Record) wireRecord {
 	v := r.Value.Reveal()
 	defer clear(v)
 	return wireRecord{
+		ID:          r.ID,
 		Value:       string(v),
 		Description: r.Description,
 		Sensitive:   r.Sensitive,
@@ -66,6 +76,7 @@ func toWire(r Record) wireRecord {
 
 func fromWire(name string, w wireRecord) Record {
 	return Record{
+		ID:          w.ID,
 		Value:       secret.New(name, []byte(w.Value)),
 		Description: w.Description,
 		Sensitive:   w.Sensitive,
@@ -112,4 +123,13 @@ func (b *body) dropEmptyProject(l Layer) {
 			delete(b.Projects, l.Root)
 		}
 	}
+}
+
+// newRecordID returns 16 random bytes as hex.
+func newRecordID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("vault: random source failed")
+	}
+	return hex.EncodeToString(b[:])
 }

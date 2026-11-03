@@ -20,7 +20,9 @@ var now = time.Now
 func baseName(root string) string { return filepath.Base(root) }
 
 // Vault is an open, key-holding handle on one vault home. Every operation
-// loads, mutates and persists the whole body; nothing is cached in memory.
+// takes the cross-process lock (see acquireLock), then loads, mutates and
+// persists the whole body; nothing is cached in memory, so reads see other
+// processes' writes.
 type Vault struct {
 	mu sync.Mutex
 	st *store
@@ -32,13 +34,16 @@ func Init(home string, key secret.Secret) (*Vault, error) {
 	if err := checkKey(key); err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(filepath.Join(home, vaultFile)); err == nil {
-		return nil, ErrExists
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("vault: stat vault: %w", err)
-	}
 	v := &Vault{st: &store{home: home, key: key}}
-	if err := v.mutate(func(*body) error { return nil }); err != nil {
+	err := v.locked(true, func() error {
+		if _, err := os.Stat(filepath.Join(home, vaultFile)); err == nil {
+			return ErrExists
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("vault: stat vault: %w", bare(err))
+		}
+		return v.mutateLocked(func(*body) error { return nil })
+	})
+	if err != nil {
 		return nil, err
 	}
 	return v, nil
@@ -83,19 +88,43 @@ func (v *Vault) load() (*body, error) {
 	return b, nil
 }
 
-func (v *Vault) read(fn func(*body) error) error {
+// locked runs fn holding the in-process mutex and the vault lock file. With
+// create false a missing home is reported as not-exist instead of created.
+func (v *Vault) locked(create bool, fn func() error) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	b, err := v.load()
+	if create {
+		if err := os.MkdirAll(v.st.home, dirMode); err != nil {
+			return fmt.Errorf("vault: create home: %w", bare(err))
+		}
+	}
+	release, err := acquireLock(v.st.home)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("vault: read vault: %w", os.ErrNotExist)
+		}
 		return err
 	}
-	return fn(b)
+	defer release()
+	return fn()
+}
+
+func (v *Vault) read(fn func(*body) error) error {
+	return v.locked(false, func() error {
+		b, err := v.load()
+		if err != nil {
+			return err
+		}
+		return fn(b)
+	})
 }
 
 func (v *Vault) mutate(fn func(*body) error) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	return v.locked(true, func() error { return v.mutateLocked(fn) })
+}
+
+// mutateLocked is mutate for a caller that already holds the lock.
+func (v *Vault) mutateLocked(fn func(*body) error) error {
 	b := newBody()
 	if _, err := os.Stat(filepath.Join(v.st.home, vaultFile)); err == nil {
 		if b, err = v.load(); err != nil {

@@ -138,20 +138,27 @@ func (s *store) saveState(st *state) error {
 	if err != nil {
 		return errors.New("vault: state encoding failed")
 	}
-	return writeAtomic(s.home, stateFile, b, s.keep)
+	// A repair restates a counter the vault file already proved; it is not a
+	// user mutation, so it gets no snapshot and spends no backup slot.
+	return replaceFile(s.home, stateFile, b)
 }
 
 // savePair snapshots the current vault.enc and state.json into one backup
 // directory, writes both, then prunes: one snapshot per save, always a
-// consistent pair that restore can swap back.
+// consistent pair that restore can swap back. A save that fails before it
+// replaces anything removes the snapshot it made; once vault.enc has been
+// replaced the snapshot is kept, because it is then the only copy of the
+// previous consistent pair.
 func (s *store) savePair(vaultBytes, stateBytes []byte) error {
 	if err := os.MkdirAll(s.home, dirMode); err != nil {
-		return fmt.Errorf("vault: create home: %w", err)
+		return fmt.Errorf("vault: create home: %w", bare(err))
 	}
-	if err := snapshot(s.home, vaultFile, stateFile); err != nil {
+	dir, err := snapshot(s.home, vaultFile, stateFile)
+	if err != nil {
 		return err
 	}
 	if err := replaceFile(s.home, vaultFile, vaultBytes); err != nil {
+		removeSnapshot(dir)
 		return err
 	}
 	if err := replaceFile(s.home, stateFile, stateBytes); err != nil {

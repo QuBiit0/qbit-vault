@@ -68,12 +68,18 @@ The body is only ever materialized inside `internal/vault` for the duration of o
 
 ## Atomic writes and backups
 
-Every mutation of `vault.enc`, `grants.enc`, `state.json`:
+Every mutation of `vault.enc`, `grants.enc`, `state.json` runs under the vault lock (below), then:
 
-1. Copy current file to `backups/<UTC timestamp>/<filename>`, where the directory name is the UTC time formatted with the Go layout `20060102T150405.000000000Z` (for example `20261103T141500.123456789Z`; fixed width, so names sort chronologically) (the vault copy is already encrypted; no extra handling).
-2. Write new content to `<filename>.tmp.<pid>` in the same directory, `fsync`.
-3. `rename` over the target (atomic on POSIX; `MoveFileEx` with `REPLACE_EXISTING|WRITE_THROUGH` on Windows).
+1. Copy current file to `backups/<UTC timestamp>/<filename>`, where the directory name is the UTC time formatted with the Go layout `20060102T150405.000000000Z` (for example `20261103T141500.123456789Z`; fixed width, so names sort chronologically) (the vault copy is already encrypted; no extra handling). If that directory already exists (two saves on the same clock tick, which coarse Windows clocks allow), a fixed-width `-001`, `-002`, … suffix is appended, so snapshots never share a directory.
+2. Remove leftover `<filename>.tmp.*` files from a crashed save (safe: the lock is held), then write new content to `<filename>.tmp.<pid>.<8 random hex>` in the same directory, `fsync`. The random suffix keeps two handles in one process from colliding.
+3. `rename` over the target (atomic on POSIX; on Windows Go's `os.Rename` calls `MoveFileEx` with `MOVEFILE_REPLACE_EXISTING`, with no `WRITE_THROUGH`: durability comes from the temp file's `fsync` before the rename). On Windows a rename can fail while another process (antivirus, indexer) briefly has the target open (access denied, sharing or lock violation); those errors are retried with backoff (1 ms doubling to 100 ms) for up to 2 s in total, after which the save fails with the file name only and the vault untouched.
 4. `fsync` the directory on POSIX.
+
+If a save fails before it replaced anything, the snapshot it created is removed, so failed saves do not consume backup slots. If it fails after `vault.enc` was replaced but before `state.json` was, the snapshot is kept: it is the only copy of the previous consistent pair.
+
+The repair of `state.json` on load (vault file ahead of the counter after a crash between the two writes) rewrites `state.json` atomically with no snapshot: it restates a counter the vault file already proves and is not a user mutation.
+
+**Vault lock.** Every operation that reads or writes the vault, including load and repair, first creates `$GENTLE_VAULT_HOME/vault.lock` with `O_CREATE|O_EXCL` (0600); the file holds the pid and an RFC3339 timestamp. Acquisition retries every few milliseconds for up to 5 s, then fails with the typed `ErrLocked` ("vault is busy"). A lock file older than 30 s is presumed left by a crashed process: it is removed once and acquisition retried. Two processes that both judge the same lock stale can race on that removal; the window is a few file operations and a live holder that exceeds 30 s loses its lock, which is accepted. The lock is released on return, error or panic, and only if the file is still the one this handle wrote. Reads re-load from disk under the same lock, so they see other processes' writes.
 
 A save of `vault.enc` also rewrites `state.json`; step 1 then copies **both** current files into the **same** `backups/<timestamp>/` directory before either is written, so every snapshot is a consistent (`vault.enc`, `state.json`) pair. The first save of a fresh vault has nothing to copy and creates no snapshot. Writes of a single file outside a vault save get their own snapshot directory.
 

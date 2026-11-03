@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-var backupDirRE = regexp.MustCompile(`^\d{8}T\d{6}\.\d{9}Z$`)
+var backupDirRE = regexp.MustCompile(`^\d{8}T\d{6}\.\d{9}Z(-[0-9]{3})?$`)
 
 func backupDirs(t *testing.T, home string) []string {
 	t.Helper()

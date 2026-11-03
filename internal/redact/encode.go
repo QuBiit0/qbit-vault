@@ -1,6 +1,7 @@
 package redact
 
 import (
+	"bytes"
 	"encoding/base64"
 	"unicode/utf8"
 )
@@ -33,6 +34,8 @@ const (
 	pctQuery  pctMode = iota // url.QueryEscape: space becomes '+'
 	pctPath                  // url.PathEscape: keeps $&+=:@
 	pctStrict                // RFC 3986 unreserved only, space becomes %20
+	pctPython                // urllib.parse.quote: unreserved plus '/'
+	pctJS                    // encodeURIComponent: unreserved plus !*'()
 )
 
 func pctKeep(c byte, mode pctMode) bool {
@@ -42,13 +45,20 @@ func pctKeep(c byte, mode pctMode) bool {
 	case c == '-' || c == '_' || c == '.' || c == '~':
 		return true
 	}
-	if mode == pctPath {
-		switch c {
-		case '$', '&', '+', '=', ':', '@':
-			return true
-		}
+	switch mode {
+	case pctPath:
+		return c == '$' || c == '&' || c == '+' || c == '=' || c == ':' || c == '@'
+	case pctPython:
+		return c == '/'
+	case pctJS:
+		return c == '!' || c == '*' || c == '\'' || c == '(' || c == ')'
 	}
 	return false
+}
+
+// escapeSlashes escapes every '/' as `\/` (PHP, some JSON emitters).
+func escapeSlashes(b []byte) []byte {
+	return bytes.ReplaceAll(b, []byte("/"), []byte(`\/`))
 }
 
 // percent percent-encodes v. lower selects lowercase hex digits.

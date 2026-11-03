@@ -586,6 +586,12 @@ func fuzzForms(v string) []string {
 	var out []string
 	for _, f := range forms(v) {
 		out = append(out, f.text)
+		if f.label == "json" {
+			out = append(out, strings.ReplaceAll(f.text, "/", `\/`))
+		}
+	}
+	if strings.Contains(v, "\n") && !strings.Contains(v, "\r\n") {
+		out = append(out, strings.ReplaceAll(v, "\n", "\r\n"))
 	}
 	return out
 }

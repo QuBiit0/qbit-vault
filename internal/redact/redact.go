@@ -39,6 +39,10 @@ const ShortLen = 8
 // constantly. The raw value itself is always kept.
 const minPattern = 4
 
+// minLine is the shortest trimmed line of a multi-line value kept as its own
+// pattern.
+const minLine = 16
+
 var (
 	// ErrInvalidName is returned by New for a secret whose name is not valid.
 	ErrInvalidName = errors.New("redact: invalid secret name")
@@ -132,6 +136,24 @@ func (s *state) addSecret(name string, v []byte) {
 		bases = append(bases, append([]byte(nil), v[1:n-1]...))
 		s.add(append([]byte(nil), v[1:n-1]...), tok, false)
 	}
+	if bytes.IndexByte(v, '\n') >= 0 {
+		// Same value with the other line-ending convention.
+		var alt []byte
+		if bytes.Contains(v, []byte("\r\n")) {
+			alt = bytes.ReplaceAll(v, []byte("\r\n"), []byte("\n"))
+		} else {
+			alt = bytes.ReplaceAll(v, []byte("\n"), []byte("\r\n"))
+		}
+		s.add(append([]byte(nil), alt...), tok, false)
+		bases = append(bases, alt)
+		// Each long line on its own: the value printed line by line or
+		// re-wrapped. The 16-byte threshold keeps lines like "}" out.
+		for _, line := range bytes.Split(v, []byte("\n")) {
+			if line = bytes.TrimSpace(line); len(line) >= minLine {
+				s.add(append([]byte(nil), line...), tok, false)
+			}
+		}
+	}
 	for _, b := range bases {
 		s.addEncodings(b, tok)
 		clear(b)
@@ -151,7 +173,7 @@ func (s *state) addEncodings(b []byte, tok int) {
 		s.add(b64(enc, b), tok, false)
 		s.add(b64(enc.WithPadding(base64.NoPadding), b), tok, false)
 	}
-	for _, mode := range []pctMode{pctQuery, pctPath, pctStrict} {
+	for _, mode := range []pctMode{pctQuery, pctPath, pctStrict, pctPython, pctJS} {
 		for _, lower := range []bool{false, true} {
 			s.add(percent(b, mode, lower), tok, false)
 		}
@@ -159,7 +181,11 @@ func (s *state) addEncodings(b []byte, tok int) {
 	for _, html := range []bool{false, true} {
 		for _, ascii := range []bool{false, true} {
 			for _, upper := range []bool{false, true} {
-				s.add(jsonEscape(b, html, ascii, upper), tok, false)
+				j := jsonEscape(b, html, ascii, upper)
+				if bytes.IndexByte(j, '/') >= 0 {
+					s.add(escapeSlashes(j), tok, false)
+				}
+				s.add(j, tok, false)
 			}
 		}
 	}

@@ -49,7 +49,7 @@ Two rules shape everything:
 
 - No daemon. Every host operation is a fresh `gentle-vault` process (CLI) or a long-lived stdio MCP server **started and owned by the host** (one per host session). Both are stateless apart from the files in `$GENTLE_VAULT_HOME`.
 - Session identity: the host passes `--session <id>` (Pi session id, Claude Code `session_id` from hook input, MCP server gets it at startup from the host's env or generates one and reports it in `doctor`). Grants are keyed by it.
-- Keychain unlock happens per process; the OS caches it. In passphrase mode the derived key is cached in a `0600` file under `$XDG_RUNTIME_DIR` (or `%LOCALAPPDATA%\Temp` with ACL) with a TTL, so the user is not asked on every exec.
+- Keychain unlock happens per process; the OS caches it. In passphrase mode the unlocked key is cached with a TTL only in a `0600` file under `$XDG_RUNTIME_DIR` (tmpfs on Linux), so the user is not asked on every exec; where no such memory-backed directory exists there is no cache and the passphrase is asked on each unlock.
 
 ## Data flows
 

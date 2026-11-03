@@ -61,7 +61,7 @@ The whole design is the single rule: **nothing above the model boundary ever hol
 | L7 | Agent asks for a secret it does not need, or loops asking | T1 | Reason shown to the user; rate limit on refused requests; audit of every request | R-CAP-02, R-CAP-05, R-AUD-01 |
 | L8 | Grant widened without consent (e.g. MCP call "grant me project scope") | T1 | Grants only from host UI/native prompt; MCP surface cannot create grants; `sensitive` secrets accept `once` only | R-GRANT-03, R-GRANT-02 |
 | L9 | Vault file, grants file or backups read or copied from disk (stolen backup, synced folder, leaked directory) | T4 | AEAD encryption of values, names, project roots and grants; key in keychain, never in the directory; 0600; no plaintext derivatives. See `STORAGE.md` § What a leaked directory reveals | R-VAULT-01..03, R-VAULT-07, R-VAULT-09 |
-| L10 | Key file read from disk (no keychain) | T4 | Argon2id-wrapped with user passphrase; memory-hard parameters | R-VAULT-02 |
+| L10 | Key file read from disk (no keychain) | T4 | Argon2id-wrapped with user passphrase; memory-hard parameters, authenticated as AAD and bounds-checked before Argon2 runs, so they cannot be weakened or inflated by editing the file | R-VAULT-02 |
 | L11 | Audit log tampered to hide use | T1 (via commands), T4 | Hash chain; `audit --verify`; log is append-only and 0600 | R-AUD-02 |
 | L12 | Tampered binary/extension | T5 | Minisign-signed checksums; npm provenance; checksum embedded in launcher; no postinstall; pinned versions | R-NFR-03 |
 | L13 | `init` weakens the agent's deny list or breaks config | bug | Snapshot + atomic merge; explicit check that Gentle AI deny list entries survive; `doctor` verifies | R-INS-04, R-INS-05 |

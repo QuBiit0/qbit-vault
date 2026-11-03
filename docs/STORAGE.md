@@ -8,14 +8,13 @@ A JSON envelope with a cleartext header and one AEAD-encrypted body. The header 
 {
   "format": "gentle-vault/1",
   "cipher": "xchacha20poly1305",
-  "kdf": null,
   "nonce": "<24 bytes, base64>",
-  "aad": { "format": "gentle-vault/1", "created_at": "…", "writes": 42 },
+  "aad": { "format": "gentle-vault/1", "cipher": "xchacha20poly1305", "created_at": "…", "writes": 42 },
   "ct": "<ciphertext+tag, base64>"
 }
 ```
 
-- `kdf` is `null` in keychain mode. In passphrase mode it is `{ "alg": "argon2id", "salt": "<16B>", "t": 3, "m_kib": 65536, "p": 4 }` and describes how `key.enc` was wrapped, not how the vault body is encrypted (the body is always encrypted with the 32-byte master key).
+- There is no `kdf` field: the body is always encrypted with the 32-byte master key, and `key.enc` (§ Master key) is the only place that describes how a key was wrapped. The top-level `format` and `cipher` repeat the values inside `aad`, which is the authenticated copy: the two must match, any other mismatch, an edited header field or an unknown top-level field is `vault_corrupt`.
 - A fresh 24-byte nonce is generated for every write. XChaCha20's 192-bit nonce makes random nonces safe without a counter.
 - `aad.writes` is a monotonically increasing counter, also stored in `state.json`; a vault file with a lower counter than `state.json` is treated as a rollback and `vault_corrupt` is raised until the user runs `restore`.
 
@@ -63,7 +62,9 @@ The body is only ever materialized inside `internal/vault` for the duration of o
   - macOS: login Keychain item; user may be asked to allow `gentle-vault` on first access.
   - Windows: Credential Manager generic credential; DPAPI-protected to the user.
   - Linux: Secret Service (GNOME Keyring, KWallet via bridge). If D-Bus/Secret Service is not reachable, fall back to passphrase mode and say so in `doctor`.
-- **Passphrase mode**: `key.enc` = `{ kdf, nonce, ct }` where `ct` = XChaCha20-Poly1305(derived_key, master_key). `derived_key` = Argon2id(passphrase, salt, t=3, m=64 MiB, p=4, 32 bytes). Unlock caches the master key in a runtime file (`$XDG_RUNTIME_DIR/gentle-vault/<vault-id>.key`, 0600, or `%LOCALAPPDATA%\gentle-vault\run\` with owner-only ACL) for `config.unlock_ttl` (default 8 h); `gentle-vault lock` deletes it.
+- **Passphrase mode**: `key.enc` = `{ format, kdf, nonce, ct }` with `format` = `gentle-vault-key/1` and `kdf` = `{ alg: "argon2id", salt: <16 B, base64>, t: 3, m_kib: 65536, p: 4 }`. `ct` = XChaCha20-Poly1305(derived_key, master_key) with a 24-byte random nonce. `derived_key` = Argon2id(passphrase, salt, t=3, m=64 MiB, p=4, 32 bytes). The AAD is the canonical JSON of `{ format, kdf }`, so the KDF parameters and salt are authenticated: altering them makes decryption fail. Before running Argon2, parameters outside `t` 1..10, `m_kib` 65536..1048576, `p` 1..16, or a salt that is not 16 bytes, are refused as corrupt, so a doctored file cannot make the process allocate gigabytes. A wrong passphrase and a tampered file are indistinguishable by design (`ErrBadPassphrase`, fixed message, never echoing input). A blank or whitespace-only passphrase is refused. `key.enc` is written atomically (temp file, `fsync`, rename; 0600 on POSIX).
+- **Mode is implied by the files**: `key.enc` present means passphrase mode; otherwise the OS keychain. There is no mode field in `state.json`.
+- **Unlock cache**: the unlocked key is cached only in a memory-backed runtime directory: `$XDG_RUNTIME_DIR/gentle-vault/<vault-id>.key` (0600 file in a 0700 directory, tmpfs on Linux), content `{ expires_at, key }`, for `config.unlock_ttl` (default 8 h). It is used only when `$XDG_RUNTIME_DIR` is set and names an existing directory. Everywhere else (Windows, macOS, Linux without `XDG_RUNTIME_DIR`) there is no cache and the passphrase is asked on every unlock: those platforms ship an OS keychain, so passphrase mode is rare there, and a disk-backed cache would put the key on disk unencrypted. An expired entry is deleted and ignored; `gentle-vault lock` deletes the file.
 - `gentle-vault rekey` rotates the master key: decrypt, generate new key, encrypt, swap, and update keychain/key.enc atomically with a backup of the old envelope.
 
 ## Atomic writes and backups

@@ -378,8 +378,12 @@ func TestReadHidden(t *testing.T) {
 
 func TestReadHiddenBoundsInput(t *testing.T) {
 	got, err := readHidden(strings.NewReader(strings.Repeat("a", maxInput*2)+"\r"), io.Discard, func() {})
+	if !errors.Is(err, ErrTooLarge) || got != nil {
+		t.Fatalf("len = %d, err = %v, want ErrTooLarge", len(got), err)
+	}
+	got, err = readHidden(strings.NewReader(strings.Repeat("a", maxInput)+""), io.Discard, func() {})
 	if err != nil || len(got) != maxInput {
-		t.Fatalf("len = %d, err = %v, want %d", len(got), err, maxInput)
+		t.Fatalf("at the bound: len = %d, err = %v", len(got), err)
 	}
 }
 

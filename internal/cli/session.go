@@ -94,6 +94,8 @@ func mapErr(err error, name string) error {
 		return errTimedOut
 	case errors.Is(err, prompt.ErrTrailingInput), errors.Is(err, prompt.ErrBadTimeout):
 		return usageError{err.Error()}
+	case errors.Is(err, prompt.ErrTooLarge):
+		return usageError{"value too large"} // same message as set --stdin
 	case errors.Is(err, prompt.ErrMismatch):
 		return usageError{"passphrases do not match"}
 	case errors.Is(err, keychain.ErrEmptyPassphrase):

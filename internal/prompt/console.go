@@ -123,19 +123,27 @@ func readByte(r io.Reader) (byte, error) {
 
 // readLine reads up to the next LF, dropping the LF and a CR before it. At
 // the end of input it returns what it has, or io.EOF when that is nothing.
-// Bytes past maxInput are dropped.
+// A line longer than maxInput is refused with ErrTooLarge, never truncated.
 func readLine(r io.Reader) ([]byte, error) {
 	var buf []byte
+	over := false
 	for {
 		b, err := readByte(r)
 		if err != nil {
-			if err == io.EOF && len(buf) > 0 {
+			if err == io.EOF && len(buf) > 0 && !over {
 				return buf, nil
 			}
 			clear(buf)
+			if over {
+				return nil, ErrTooLarge
+			}
 			return nil, err
 		}
 		if b == '\n' {
+			if over {
+				clear(buf)
+				return nil, ErrTooLarge
+			}
 			if n := len(buf); n > 0 && buf[n-1] == '\r' {
 				buf = buf[:n-1]
 			}
@@ -143,6 +151,8 @@ func readLine(r io.Reader) ([]byte, error) {
 		}
 		if len(buf) < maxInput {
 			buf = append(buf, b)
+		} else {
+			over = true
 		}
 	}
 }

@@ -7,7 +7,6 @@
 package prompt
 
 import (
-	"bytes"
 	"context"
 	"crypto/subtle"
 	"errors"
@@ -55,6 +54,9 @@ var (
 	// with a multi-line paste. The extra text is discarded, not left for the
 	// next program on the terminal.
 	ErrTrailingInput = errors.New("the input continued after Enter; paste a single line, or use --stdin for multi-line values")
+	// ErrTooLarge means the input exceeded the read bound; it is refused and
+	// wiped, never truncated.
+	ErrTooLarge = errors.New("the value is too large (over 64 KiB)")
 )
 
 // unavailableError is an ErrUnavailable with its own message.
@@ -207,7 +209,7 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 			return readErr(err)
 		}
 		defer clear(raw)
-		out = secret.New(req.Name, bytes.TrimSpace(raw))
+		out = secret.New(req.Name, normalize(raw, valueInput))
 		return nil
 	})
 	return out, err

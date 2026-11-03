@@ -716,10 +716,7 @@ func TestExecRunner(t *testing.T) {
 	if err != nil || string(r.Stdout) != "hello\r\n" || r.Exit != 3 || !strings.Contains(string(r.Stderr), "-128") {
 		t.Fatalf("got %q %q %d, %v", r.Stdout, r.Stderr, r.Exit, err)
 	}
-	r, err = execRunner(context.Background(), helper("flood", ""))
-	if err != nil || len(r.Stdout) != maxInput {
-		t.Fatalf("flood: %d bytes, %v", len(r.Stdout), err)
-	}
+	// An oversized helper output is refused (TestOversizeIsRefused).
 }
 
 func TestExecRunnerMissingBinary(t *testing.T) {
@@ -768,6 +765,8 @@ func envOf(goos string, vars map[string]string, onPath ...string) Env {
 					return true
 				case n == "osascript" && p == osascriptPath:
 					return true
+				case (n == "zenity" || n == "kdialog") && p == "/usr/bin/"+n:
+					return true
 				}
 			}
 			return false
@@ -810,7 +809,7 @@ func TestNativeAvailability(t *testing.T) {
 				got = tl.name()
 				want := map[string]string{"powershell": winPS, "osascript": osascriptPath}[got]
 				if want == "" {
-					want = "/found/" + got
+					want = "/usr/bin/" + got
 				}
 				if path != want {
 					t.Fatalf("path %q, want %q", path, want)

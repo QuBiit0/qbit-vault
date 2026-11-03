@@ -178,6 +178,10 @@ const (
 	osascriptPath = "/usr/bin/osascript"
 )
 
+// linuxHelperDirs are the only places zenity and kdialog are looked up, in
+// order.
+var linuxHelperDirs = []string{"/usr/bin", "/bin", "/usr/local/bin"}
+
 // locate finds the helper of t, or says where it looked.
 func locate(e Env, t tool) (string, error) {
 	has := func(p string) bool {
@@ -205,11 +209,15 @@ func locate(e Env, t tool) (string, error) {
 	case t.name() == "powershell" || t.name() == "osascript":
 		return "", fmt.Errorf("%s is not available on %s", t.program(), e.GOOS)
 	default:
-		found, err := e.LookPath(t.program())
-		if err != nil {
-			return "", fmt.Errorf("%s not found on PATH", t.program())
+		// zenity and kdialog have no single fixed location on Linux, but they
+		// are never taken from PATH either: a caller who controls PATH could
+		// substitute a helper that answers by itself.
+		for _, dir := range linuxHelperDirs {
+			if c := dir + "/" + t.program(); has(c) {
+				return c, nil
+			}
 		}
-		return found, nil
+		return "", fmt.Errorf("%s not found in %s", t.program(), strings.Join(linuxHelperDirs, ", "))
 	}
 	if !has(p) {
 		return "", fmt.Errorf("%s not found at %s", t.program(), p)
@@ -247,6 +255,9 @@ func (n *native) ask(d dialog) (result, status, error) {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return result{}, statusFail, ErrTimeout
 		}
+		if errors.Is(err, ErrTooLarge) {
+			return result{}, statusFail, ErrTooLarge
+		}
 		return result{}, statusFail, unavailableError{"cannot start the " + n.t.name() + " dialog"}
 	}
 	st := n.t.classify(d, r)
@@ -265,7 +276,7 @@ func (n *native) ask(d dialog) (result, status, error) {
 }
 
 // read asks for a masked value and returns it as a secret named name.
-func (n *native) read(name string, d dialog) (secret.Secret, error) {
+func (n *native) read(name string, d dialog, kind inputKind) (secret.Secret, error) {
 	r, st, err := n.ask(d)
 	if err != nil {
 		return secret.Secret{}, err
@@ -274,19 +285,19 @@ func (n *native) read(name string, d dialog) (secret.Secret, error) {
 		return secret.Secret{}, ErrCancelled
 	}
 	defer clear(r.Stdout)
-	return secret.New(name, bytes.TrimSpace(r.Stdout)), nil
+	return secret.New(name, normalize(r.Stdout, kind)), nil
 }
 
 func (n *native) Secret(req SecretRequest) (secret.Secret, error) {
-	return n.read(req.Name, secretDialog(req))
+	return n.read(req.Name, secretDialog(req), valueInput)
 }
 
 func (n *native) Passphrase(confirm bool) (secret.Secret, error) {
-	first, err := n.read("passphrase", passphraseDialog(false))
+	first, err := n.read("passphrase", passphraseDialog(false), passphraseInput)
 	if err != nil || !confirm {
 		return first, err
 	}
-	second, err := n.read("passphrase", passphraseDialog(true))
+	second, err := n.read("passphrase", passphraseDialog(true), passphraseInput)
 	defer second.Wipe()
 	if err != nil {
 		first.Wipe()
@@ -381,13 +392,19 @@ func execRunner(ctx context.Context, c command) (result, error) {
 	}
 	buf := make([]byte, maxInput)
 	n, _ := io.ReadFull(pipe, buf)
-	if n == len(buf) {
+	over := n == len(buf)
+	if over {
 		_, _ = io.Copy(io.Discard, pipe)
 	}
 	werr := cmd.Wait()
 	if ctx.Err() != nil {
 		clear(buf)
 		return result{}, ctx.Err()
+	}
+	if over {
+		// Refuse rather than return a truncated value.
+		clear(buf)
+		return result{}, ErrTooLarge
 	}
 	res := result{Stdout: buf[:n], Stderr: errOut.b}
 	var ee *exec.ExitError

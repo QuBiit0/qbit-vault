@@ -192,12 +192,12 @@ func TestSetInteractiveBadBackendEnv(t *testing.T) {
 	old := newPrompt
 	newPrompt = func(g *globals) (prompt.Backend, error) {
 		// A machine with no helper installed, whatever this one has.
-		return prompt.SelectWith(prompt.Env{GOOS: "linux", Getenv: g.getenv, LookPath: func(string) (string, error) { return "", exec.ErrNotFound }})
+		return prompt.SelectWith(prompt.Env{GOOS: "linux", Getenv: g.getenv, LookPath: func(string) (string, error) { return "", exec.ErrNotFound }, Exists: func(string) bool { return false }})
 	}
 	t.Cleanup(func() { newPrompt = old })
 	var out, errb bytes.Buffer
 	code := execute([]string{"--home", w.home, "set", "A_KEY"}, &out, &errb, envFrom(map[string]string{prompt.EnvBackend: "zenity"}))
-	if code != exitcode.Usage || errb.String() != usageErr("prompt backend zenity is unavailable: zenity not found on PATH; use --stdin") {
+	if code != exitcode.Usage || errb.String() != usageErr("prompt backend zenity is unavailable: zenity not found in /usr/bin, /bin, /usr/local/bin; use --stdin") {
 		t.Fatalf("code=%d err=%q", code, errb.String())
 	}
 	errb.Reset()

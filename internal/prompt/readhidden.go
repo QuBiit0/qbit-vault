@@ -27,6 +27,7 @@ func readHidden(r io.Reader, w io.Writer, flush func()) ([]byte, error) {
 	var (
 		buf   []byte
 		esc   = escNone
+		over  bool
 		chunk = make([]byte, 4096)
 	)
 	defer clear(chunk)
@@ -69,6 +70,9 @@ func readHidden(r io.Reader, w io.Writer, flush func()) ([]byte, error) {
 				if len(rest) > 0 {
 					return fail(ErrTrailingInput)
 				}
+				if over {
+					return fail(ErrTooLarge)
+				}
 				_, _ = io.WriteString(w, "\r\n")
 				return buf, nil
 			case b == 0x03:
@@ -90,9 +94,14 @@ func readHidden(r io.Reader, w io.Writer, flush func()) ([]byte, error) {
 			case b < 0x20:
 			case len(buf) < maxInput:
 				buf = append(buf, b)
+			default:
+				over = true // refused at the end, never truncated
 			}
 		}
 		if err != nil {
+			if over {
+				return fail(ErrTooLarge)
+			}
 			if err == io.EOF && len(buf) > 0 {
 				_, _ = io.WriteString(w, "\r\n")
 				return buf, nil

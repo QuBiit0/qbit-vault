@@ -57,6 +57,9 @@ type editBody struct {
 	Layer   string      `json:"layer"`
 	Project *projectRef `json:"project"`
 	Updated bool        `json:"updated"`
+	// GrantsDropped counts the grants an edit to sensitive dropped; omitted
+	// when none.
+	GrantsDropped int `json:"grants_dropped,omitempty"`
 }
 
 type describeBody struct {
@@ -601,12 +604,15 @@ func newEdit(g *globals) *cobra.Command {
 			}
 			defer e.Record.Value.Wipe()
 			meta.apply(cmd, &e.Record)
-			if err := s.v.Put(e.Layer, name, e.Record); err != nil {
+			// Becoming sensitive drops the record's session and project grants.
+			res, err := s.v.EditWithGrants(e.Layer, name, e.Record, newGrantsEditor())
+			if err != nil {
 				return mapErr(err, name)
 			}
+			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventEdit, Names: []string{name}, Layer: auditLayer(e.Layer)})
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), editBody{OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer), Updated: true})
+				return writeJSON(cmd.OutOrStdout(), editBody{OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer), Updated: true, GrantsDropped: res.Changed})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "updated %s (%s)\n", name, layerText(e.Layer))
 			return err

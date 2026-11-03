@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -54,6 +55,9 @@ var (
 	ErrBadToken        = errors.New("bad_prompt_token")
 	ErrInvalidRequest  = errors.New("invalid_grant_request")
 	ErrInvalidTTL      = errors.New("invalid_ttl")
+	// ErrNeedsProject is a scope_not_allowed refusal with its own message:
+	// project scope on a global record has no project to bind to.
+	ErrNeedsProject = fmt.Errorf("%w: project scope needs a project secret", ErrScopeNotAllowed)
 )
 
 // ProjectLayer is the layer text of the project record rooted at root.
@@ -141,7 +145,7 @@ func Validate(req Request) error {
 		return ErrScopeNotAllowed
 	}
 	if req.Scope == ScopeProject && !isProject {
-		return ErrScopeNotAllowed
+		return ErrNeedsProject
 	}
 	if req.Scope != ScopeProject && req.Session == "" {
 		return ErrInvalidRequest
@@ -244,12 +248,13 @@ type Decision struct {
 }
 
 // Check evaluates docs/STORAGE.md § Grants for one resolved record: layer is
-// the record's layer text, recordID its id (a grant for another record, even
+// the record's layer text, sensitive the record's flag (a sensitive record
+// only matches once grants, even if broader ones exist), recordID its id (a grant for another record, even
 // with the same name and layer, never matches; an empty id matches nothing)
 // and cwd the canonical working directory (or its
 // repository root). A once grant is consumed exactly once. mutated tells the
 // caller to persist the store (a purge or a consumption happened).
-func Check(s *Store, name, layer, recordID, session, cwd string, now time.Time) (d Decision, mutated bool) {
+func Check(s *Store, name, layer, recordID string, sensitive bool, session, cwd string, now time.Time) (d Decision, mutated bool) {
 	now = now.UTC()
 	mutated = purge(s, now)
 	// Grants that are not spent by use first, so a once grant outlives a
@@ -260,6 +265,9 @@ func Check(s *Store, name, layer, recordID, session, cwd string, now time.Time) 
 	for _, g := range s.Grants {
 		if g.Name != name || g.Layer != layer || g.RecordID != recordID {
 			continue
+		}
+		if sensitive {
+			continue // only the once loop below may allow it
 		}
 		switch g.Scope {
 		case ScopeSession:
@@ -370,20 +378,16 @@ func DropRecord(s *Store, name, layer string) int {
 	return RevokeName(s, name, layer)
 }
 
-// RelinkProject moves the grants of layer project:<oldRoot> to
-// project:<newRoot>, rewriting project_root too, and returns how many.
-func RelinkProject(s *Store, oldRoot, newRoot string) int {
-	n := 0
-	oldLayer, newLayer := ProjectLayer(oldRoot), ProjectLayer(newRoot)
-	for i, g := range s.Grants {
-		if g.Layer != oldLayer {
-			continue
-		}
-		s.Grants[i].Layer = newLayer
-		if g.ProjectRoot != "" {
-			s.Grants[i].ProjectRoot = newRoot
-		}
-		n++
-	}
-	return n
+// DropNonOnce removes the session and project grants of one record, keeping
+// its once grants (a record that became sensitive accepts once only).
+func DropNonOnce(s *Store, name, layer, recordID string) int {
+	return removeWhere(s, func(g Grant) bool {
+		return g.Name == name && g.Layer == layer && g.RecordID == recordID && g.Scope != ScopeOnce
+	})
+}
+
+// DropLayer removes every grant of one layer. relink uses it for the old
+// project layer: grants never follow a layer to a new root.
+func DropLayer(s *Store, layer string) int {
+	return removeWhere(s, func(g Grant) bool { return g.Layer == layer })
 }

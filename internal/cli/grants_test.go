@@ -62,6 +62,12 @@ func (w *world) grantsState() string {
 // prompt backend will.
 func (w *world) issueToken(name, layer string, scope grants.Scope, session string) string {
 	w.t.Helper()
+	return w.issueTokenFor(name, layer, "", scope, session, 0)
+}
+
+// issueTokenFor is issueToken with the record id and ttl bindings.
+func (w *world) issueTokenFor(name, layer, recordID string, scope grants.Scope, session string, ttl time.Duration) string {
+	w.t.Helper()
 	g := &globals{getenv: envFrom(nil), home: w.home}
 	s, err := g.openSession()
 	if err != nil {
@@ -74,7 +80,7 @@ func (w *world) issueToken(name, layer string, scope grants.Scope, session strin
 		if err != nil {
 			return nil, err
 		}
-		tok = grants.IssueToken(st, name, layer, scope, session, clock())
+		tok = grants.IssueToken(st, name, layer, recordID, scope, session, ttl, clock())
 		return grants.Encode(st)
 	})
 	if err != nil {
@@ -222,7 +228,7 @@ func TestGrantRefusesSensitiveBroadScopes(t *testing.T) {
 		}
 	}
 	// A project scope grant on a global record has no project to bind to.
-	if code, _, errs := w.run("y\n", "grant", "PLAIN_KEY", "--scope", "project"); code != exitcode.Refusal || errs != "error: "+msgScope+"\n" {
+	if code, _, errs := w.run("y\n", "grant", "PLAIN_KEY", "--scope", "project"); code != exitcode.Refusal || errs != "error: project scope needs a project secret\n" {
 		t.Fatalf("project on global: code=%d err=%q", code, errs)
 	}
 	if w.grantsState() != before {

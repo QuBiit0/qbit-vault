@@ -19,7 +19,11 @@ func (failingDrop) DropRecord([]byte, string, string) ([]byte, int, error) {
 	return nil, 0, errors.New("simulated drop failure")
 }
 
-func (failingDrop) RelinkProject([]byte, string, string) ([]byte, int, error) {
+func (failingDrop) DropNonOnce([]byte, string, string, string) ([]byte, int, error) {
+	return nil, 0, errors.New("simulated drop failure")
+}
+
+func (failingDrop) DropLayer([]byte, string) ([]byte, int, error) {
 	return nil, 0, errors.New("simulated drop failure")
 }
 
@@ -45,7 +49,7 @@ func (w *world) execCheck(name, session string) error {
 		if err != nil {
 			return nil, err
 		}
-		decision, _ = grants.Check(st, name, layer.Key(), rec.ID, session, cwd, clock())
+		decision, _ = grants.Check(st, name, layer.Key(), rec.ID, rec.Sensitive, session, cwd, clock())
 		return nil, nil
 	})
 	if err != nil {

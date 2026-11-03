@@ -20,6 +20,8 @@ type Token struct {
 	Layer     string    `json:"layer"`
 	Scope     Scope     `json:"scope"`
 	Session   string    `json:"session"`
+	RecordID  string    `json:"record_id"`
+	TTLNanos  int64     `json:"ttl_ns"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
@@ -28,9 +30,25 @@ func hashToken(plaintext string) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+// bindTTL is the TTL a token is bound to: the session scope's effective
+// lifetime (omitted means the default), 0 for scopes without one.
+func bindTTL(scope Scope, ttl time.Duration) int64 {
+	if scope != ScopeSession {
+		return 0
+	}
+	if ttl == 0 {
+		ttl = DefaultSessionTTL
+	}
+	return int64(ttl)
+}
+
 // IssueToken creates a prompt token for the broker's own prompt backend and
 // returns its plaintext, which is never stored. Expired tokens are purged.
-func IssueToken(s *Store, name, layer string, scope Scope, session string, now time.Time) string {
+//
+// The token is bound to (name, layer, scope, session, ttl) and, when recordID
+// is not empty, to that record. A token issued for a value that does not
+// exist yet (set --grant) passes an empty recordID.
+func IssueToken(s *Store, name, layer, recordID string, scope Scope, session string, ttl time.Duration, now time.Time) string {
 	var b [32]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		panic("grants: random source failed")
@@ -40,7 +58,7 @@ func IssueToken(s *Store, name, layer string, scope Scope, session string, now t
 	purge(s, now)
 	s.Tokens = append(s.Tokens, Token{
 		Hash: hashToken(plaintext), Name: name, Layer: layer, Scope: scope,
-		Session: session, ExpiresAt: now.Add(TokenTTL),
+		Session: session, RecordID: recordID, TTLNanos: bindTTL(scope, ttl), ExpiresAt: now.Add(TokenTTL),
 	})
 	return plaintext
 }
@@ -50,7 +68,7 @@ func IssueToken(s *Store, name, layer string, scope Scope, session string, now t
 // found is removed whether or not it matches, so a token used for the wrong
 // request is dead. Unknown, expired, reused and mismatched tokens are all
 // ErrBadToken, and the message never carries the token.
-func ConsumeToken(s *Store, plaintext, name, layer string, scope Scope, session string, now time.Time) (string, error) {
+func ConsumeToken(s *Store, plaintext, name, layer, recordID string, scope Scope, session string, ttl time.Duration, now time.Time) (string, error) {
 	h := hashToken(plaintext)
 	found := -1
 	for i, t := range s.Tokens {
@@ -66,7 +84,7 @@ func ConsumeToken(s *Store, plaintext, name, layer string, scope Scope, session 
 	if !now.UTC().Before(t.ExpiresAt) {
 		return "", ErrBadToken
 	}
-	if t.Name != name || t.Layer != layer || t.Scope != scope || t.Session != session {
+	if t.Name != name || t.Layer != layer || t.Scope != scope || t.Session != session || t.TTLNanos != bindTTL(scope, ttl) || (t.RecordID != "" && t.RecordID != recordID) {
 		return "", ErrBadToken
 	}
 	return t.Hash, nil

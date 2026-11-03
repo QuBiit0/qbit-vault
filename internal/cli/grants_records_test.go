@@ -10,7 +10,7 @@ import (
 	"github.com/QuBiit0/gentle-vault/internal/exitcode"
 	"github.com/QuBiit0/gentle-vault/internal/grants"
 	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/gentle-vault/internal/refusal"
 )
 
 func TestSetGrantNeedsPromptToken(t *testing.T) {
@@ -181,10 +181,12 @@ func TestMvDropsItsGrants(t *testing.T) {
 	}
 }
 
-func TestRelinkRewritesProjectGrants(t *testing.T) {
+func TestRelinkDropsProjectGrants(t *testing.T) {
 	pinClock(t)
 	asTerminal(t, true)
 	w := newWorld(t)
+	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
+	w.mustRun("y\n", "--session", sessA, "grant", "A_KEY", "--global", "--scope", "session")
 	w.inRepo()
 	w.mustRun(fxVal, "set", "A_KEY", "--project", "--stdin")
 	w.mustRun("y\n", "grant", "A_KEY", "--scope", "project")
@@ -194,26 +196,95 @@ func TestRelinkRewritesProjectGrants(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(moved, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	newRoot, _, err := vault.ProjectRoot(moved)
-	if err != nil {
-		t.Fatal(err)
-	}
 	code, out, errs := w.run("", "--json", "relink", w.repo, moved)
-	want := jsonOf(t, relinkBody{OK: true, From: w.repo, To: moved, Secrets: 1, GrantsRewritten: 2})
+	want := jsonOf(t, relinkBody{OK: true, From: w.repo, To: moved, Secrets: 1, GrantsDropped: 2})
+	if code != 0 || out != want || errs != "" {
+		t.Fatalf("code=%d out=%q err=%q want=%q", code, out, errs, want)
+	}
+	if strings.Contains(out, "grants_rewritten") {
+		t.Fatal("relink still reports rewritten grants")
+	}
+	// Nothing follows the layer to the new root; the global grant is untouched.
+	state := w.grantsState()
+	if strings.Contains(state, `"layer":"project"`) || strings.Count(state, `"name"`) != 1 {
+		t.Fatalf("grants after relink: %s", state)
+	}
+	t.Chdir(moved)
+	_, out, _ = w.run("", "describe", "A_KEY")
+	if !strings.Contains(out, "  grants:      none\n") {
+		t.Fatalf("describe from the new root: %q", out)
+	}
+}
+
+func TestEditSensitiveDropsBroadGrants(t *testing.T) {
+	pinClock(t)
+	asTerminal(t, true)
+	w := newWorld(t)
+	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
+	w.mustRun(fxVal, "set", "B_KEY", "--global", "--stdin")
+	for _, a := range [][]string{
+		{"--session", sessA, "grant", "A_KEY", "--scope", "session"},
+		{"--session", sessB, "grant", "A_KEY", "--scope", "session"},
+		{"--session", sessA, "grant", "A_KEY", "--scope", "once"},
+		{"--session", sessA, "grant", "B_KEY", "--scope", "session"},
+	} {
+		w.mustRun("y\n", a...)
+	}
+	// Edits that do not make it sensitive keep every grant.
+	w.mustRun("", "edit", "A_KEY", "--description", "d")
+	w.mustRun("", "edit", "A_KEY", "--sensitive=false")
+	if strings.Count(w.grantsState(), `"name"`) != 4 {
+		t.Fatal("a harmless edit dropped grants")
+	}
+	code, out, errs := w.run("", "--json", "edit", "A_KEY", "--sensitive")
+	want := `{"ok":true,"name":"A_KEY","layer":"global","project":null,"updated":true,"grants_dropped":2}` + "\n"
 	if code != 0 || out != want || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	state := w.grantsState()
-	if strings.Contains(state, filepath.ToSlash(w.root)) && strings.Contains(state, `"root":`+mustJSON(t, w.root)) {
-		t.Fatalf("old root still referenced: %s", state)
+	if strings.Count(state, `"scope":"session"`) != 1 || strings.Count(state, `"scope":"once"`) != 1 || !strings.Contains(state, `"B_KEY"`) {
+		t.Fatalf("grants after edit --sensitive: %s", state)
 	}
-	if !strings.Contains(state, `"root":`+mustJSON(t, newRoot)) || !strings.Contains(state, `"label":"shop-api-v2"`) {
-		t.Fatalf("new root not referenced: %s", state)
+	// Already sensitive: nothing more to drop, nothing reported.
+	if _, out, _ = w.run("", "--json", "edit", "A_KEY", "--sensitive"); strings.Contains(out, "grants_dropped") {
+		t.Fatalf("out=%s", out)
 	}
-	t.Chdir(moved)
-	_, out, _ = w.run("", "describe", "A_KEY")
-	if !strings.Contains(out, "project, until revoked") || !strings.Contains(out, "session, for pi:sess-aaaa") {
-		t.Fatalf("describe from the new root: %q", out)
+}
+
+func TestEditSensitiveDropsProjectGrant(t *testing.T) {
+	pinClock(t)
+	asTerminal(t, true)
+	w := newWorld(t)
+	w.inRepo()
+	w.mustRun(fxVal, "set", "A_KEY", "--project", "--stdin")
+	w.mustRun("y\n", "grant", "A_KEY", "--scope", "project")
+	code, out, _ := w.run("", "--json", "edit", "A_KEY", "--sensitive")
+	if code != 0 || !strings.Contains(out, `"grants_dropped":1`) {
+		t.Fatalf("code=%d out=%q", code, out)
+	}
+	if got := w.grantsState(); got != `{"ok":true,"grants":[]}`+"\n" {
+		t.Fatalf("grants: %s", got)
+	}
+}
+
+func TestProjectScopeOnGlobalHasItsOwnMessage(t *testing.T) {
+	pinClock(t)
+	asTerminal(t, true)
+	w := newWorld(t)
+	w.mustRun(fxVal, "set", "PLAIN_KEY", "--global", "--stdin")
+	before := w.grantsState()
+	const msg = "project scope needs a project secret"
+	code, out, errs := w.run("y\n", "grant", "PLAIN_KEY", "--scope", "project")
+	if code != exitcode.Refusal || out != "" || errs != "error: "+msg+"\n" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	code, out, errs = w.run("y\n", "--json", "grant", "PLAIN_KEY", "--scope", "project")
+	wantJSON := jsonOf(t, refusal.New(refusal.ScopeNotAllowed, "PLAIN_KEY").WithMessage(msg).Envelope())
+	if code != exitcode.Refusal || out != wantJSON || errs != "" {
+		t.Fatalf("json: code=%d out=%q err=%q", code, out, errs)
+	}
+	if w.grantsState() != before {
+		t.Fatal("refusal changed the grants")
 	}
 }
 

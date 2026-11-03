@@ -26,7 +26,7 @@ const testRec = "rec-1"
 
 // chk is Check for the record every fixture grant was made for.
 func chk(s *Store, name, layer, session, cwd string, now time.Time) (Decision, bool) {
-	return Check(s, name, layer, testRec, session, cwd, now)
+	return Check(s, name, layer, testRec, false, session, cwd, now)
 }
 
 func mustAdd(t *testing.T, s *Store, req Request, at time.Time) Grant {
@@ -385,7 +385,7 @@ func TestRevoke(t *testing.T) {
 	})
 	t.Run("all", func(t *testing.T) {
 		s := build()
-		IssueToken(s, "A_KEY", GlobalLayer, ScopeSession, sessA, t0)
+		IssueToken(s, "A_KEY", GlobalLayer, "", ScopeSession, sessA, 0, t0)
 		if n := RevokeAll(s); n != 5 {
 			t.Fatalf("revoked %d", n)
 		}
@@ -401,47 +401,103 @@ func TestRevoke(t *testing.T) {
 	})
 }
 
-func TestDropRecordAndRelinkProject(t *testing.T) {
-	oldRoot, newRoot := rootOf("old"), rootOf("renamed")
+func TestDropRecordAndDropLayer(t *testing.T) {
+	oldRoot := rootOf("old")
 	s := &Store{}
 	mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
 	mustAdd(t, s, sessionReq("A_KEY", ProjectLayer(oldRoot), sessA), t0)
 	mustAdd(t, s, Request{Name: "B_KEY", Layer: ProjectLayer(oldRoot), Scope: ScopeProject}, t0)
 	mustAdd(t, s, Request{Name: "C_KEY", Layer: ProjectLayer(rootOf("other")), Scope: ScopeProject}, t0)
 
-	if n := RelinkProject(s, oldRoot, newRoot); n != 2 {
-		t.Fatalf("rewrote %d", n)
+	// relink narrows: the old layer's grants go and nothing is carried over.
+	if n := DropLayer(s, ProjectLayer(oldRoot)); n != 2 {
+		t.Fatalf("dropped %d", n)
 	}
 	if allowed(s, "B_KEY", ProjectLayer(oldRoot), "", oldRoot, t0) {
 		t.Fatal("old layer still allowed")
 	}
-	if !allowed(s, "B_KEY", ProjectLayer(newRoot), "", filepath.Join(newRoot, "x"), t0) {
-		t.Fatal("rewritten project grant does not follow the new root")
-	}
-	var moved Grant
-	for _, g := range s.Grants {
-		if g.Name == "B_KEY" {
-			moved = g
-		}
-	}
-	if moved.Layer != ProjectLayer(newRoot) || moved.ProjectRoot != newRoot {
-		t.Fatalf("layer/project_root not rewritten: %+v", moved)
-	}
 	if !allowed(s, "C_KEY", ProjectLayer(rootOf("other")), "", rootOf("other"), t0) || !allowed(s, "A_KEY", GlobalLayer, sessA, "", t0) {
-		t.Fatal("relink touched unrelated grants")
+		t.Fatal("DropLayer touched unrelated grants")
 	}
-	if n := RelinkProject(s, oldRoot, newRoot); n != 0 {
-		t.Fatalf("second relink rewrote %d", n)
+	if n := DropLayer(s, ProjectLayer(oldRoot)); n != 0 {
+		t.Fatalf("second drop removed %d", n)
+	}
+	if n := DropLayer(s, GlobalLayer); n != 1 {
+		t.Fatalf("global layer drop removed %d", n)
 	}
 
-	if n := DropRecord(s, "A_KEY", ProjectLayer(newRoot)); n != 1 {
+	s = &Store{}
+	mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
+	mustAdd(t, s, sessionReq("A_KEY", ProjectLayer(oldRoot), sessA), t0)
+	if n := DropRecord(s, "A_KEY", ProjectLayer(oldRoot)); n != 1 {
 		t.Fatalf("dropped %d", n)
 	}
 	if !allowed(s, "A_KEY", GlobalLayer, sessA, "", t0) {
 		t.Fatal("DropRecord removed the other layer's grant")
 	}
-	if n := DropRecord(s, "A_KEY", ProjectLayer(newRoot)); n != 0 {
+	if n := DropRecord(s, "A_KEY", ProjectLayer(oldRoot)); n != 0 {
 		t.Fatalf("dropped %d twice", n)
+	}
+}
+
+func TestDropNonOnceKeepsOnlyOnce(t *testing.T) {
+	root := rootOf("shop")
+	s := &Store{}
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Session: sessA, Scope: ScopeOnce}, t0)
+	mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
+	mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessB), t0)
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: ProjectLayer(root), Scope: ScopeProject}, t0)
+	mustAdd(t, s, sessionReq("B_KEY", GlobalLayer, sessA), t0)
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Session: sessA, Scope: ScopeSession, RecordID: "other"}, t0)
+	if n := DropNonOnce(s, "A_KEY", GlobalLayer, testRec); n != 2 {
+		t.Fatalf("dropped %d", n)
+	}
+	got := Active(s, t0)
+	if len(got) != 4 {
+		t.Fatalf("left %d: %+v", len(got), got)
+	}
+	if n := DropNonOnce(s, "A_KEY", GlobalLayer, testRec); n != 0 {
+		t.Fatalf("again dropped %d", n)
+	}
+}
+
+// Defensive: even if a broad grant exists for a record that is sensitive,
+// only a once grant may allow it.
+func TestSensitiveRecordOnlyMatchesOnce(t *testing.T) {
+	root := rootOf("shop")
+	s := &Store{}
+	mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: ProjectLayer(root), Scope: ScopeProject}, t0)
+	if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, true, sessA, "", t0); d.Allowed || !errors.Is(d.Err, ErrGrantRequired) {
+		t.Fatalf("session grant allowed a sensitive record: %+v", d)
+	}
+	if d, _ := Check(s, "A_KEY", ProjectLayer(root), testRec, true, sessA, root, t0); d.Allowed {
+		t.Fatalf("project grant allowed a sensitive record: %+v", d)
+	}
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Session: sessA, Scope: ScopeOnce}, t0)
+	if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, true, sessA, "", t0); !d.Allowed || d.Scope != ScopeOnce {
+		t.Fatalf("once grant refused for a sensitive record: %+v", d)
+	}
+	if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, true, sessA, "", t0); d.Allowed {
+		t.Fatal("the once grant was not consumed")
+	}
+	// A non-sensitive record is unaffected.
+	if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, false, sessA, "", t0); !d.Allowed {
+		t.Fatalf("session grant refused for a plain record: %+v", d)
+	}
+}
+
+func TestNeedsProjectIsAScopeRefusal(t *testing.T) {
+	_, err := Add(&Store{}, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec}, t0)
+	if !errors.Is(err, ErrNeedsProject) || !errors.Is(err, ErrScopeNotAllowed) {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.HasSuffix(err.Error(), "project scope needs a project secret") {
+		t.Fatalf("message = %q", err.Error())
+	}
+	_, err = Add(&Store{}, Request{Name: "A_KEY", Layer: GlobalLayer, Session: sessA, Scope: ScopeSession, Sensitive: true, RecordID: testRec}, t0)
+	if errors.Is(err, ErrNeedsProject) || !errors.Is(err, ErrScopeNotAllowed) {
+		t.Fatalf("sensitive err = %v", err)
 	}
 }
 
@@ -472,7 +528,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	s := &Store{}
 	mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
 	mustAdd(t, s, Request{Name: "A_KEY", Layer: projLayer("shop"), Scope: ScopeProject}, t0)
-	IssueToken(s, "A_KEY", GlobalLayer, ScopeSession, sessA, t0)
+	IssueToken(s, "A_KEY", GlobalLayer, "", ScopeSession, sessA, 0, t0)
 	b, err := Encode(s)
 	if err != nil {
 		t.Fatal(err)
@@ -527,18 +583,18 @@ func TestGrantNeverAuthorizesAnotherRecord(t *testing.T) {
 			if g.RecordID != "record-A" {
 				t.Fatalf("record id not stored: %+v", g)
 			}
-			d, _ := Check(s, "A_KEY", req.Layer, "record-B", sessA, root, t0)
+			d, _ := Check(s, "A_KEY", req.Layer, "record-B", false, sessA, root, t0)
 			if d.Allowed || !errors.Is(d.Err, ErrGrantRequired) {
 				t.Fatalf("grant for record A allowed record B: %+v", d)
 			}
-			if d, _ = Check(s, "A_KEY", req.Layer, "", sessA, root, t0); d.Allowed {
+			if d, _ = Check(s, "A_KEY", req.Layer, "", false, sessA, root, t0); d.Allowed {
 				t.Fatal("an empty record id matched")
 			}
 			if len(ForRecord(s, "A_KEY", req.Layer, "record-B", t0)) != 0 || len(ForRecord(s, "A_KEY", req.Layer, "record-A", t0)) != 1 {
 				t.Fatal("ForRecord ignores the record id")
 			}
 			// The once grant of A was not spent by the failed check for B.
-			if d, _ = Check(s, "A_KEY", req.Layer, "record-A", sessA, root, t0); !d.Allowed {
+			if d, _ = Check(s, "A_KEY", req.Layer, "record-A", false, sessA, root, t0); !d.Allowed {
 				t.Fatalf("record A lost its grant: %+v", d)
 			}
 		})

@@ -26,8 +26,8 @@ type relinkBody struct {
 	From    string `json:"from"`
 	To      string `json:"to"`
 	Secrets int    `json:"secrets"`
-	// GrantsRewritten counts the project grants repointed; omitted when none.
-	GrantsRewritten int `json:"grants_rewritten,omitempty"`
+	// GrantsDropped counts the project grants relink dropped; omitted when none.
+	GrantsDropped int `json:"grants_dropped,omitempty"`
 }
 
 func newMv(g *globals) *cobra.Command {
@@ -120,7 +120,7 @@ func newRelink(g *globals) *cobra.Command {
 			cwd, _ := os.Getwd()
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRelink, Cwd: cwd})
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), relinkBody{OK: true, From: args[0], To: args[1], Secrets: n, GrantsRewritten: res.Changed})
+				return writeJSON(cmd.OutOrStdout(), relinkBody{OK: true, From: args[0], To: args[1], Secrets: n, GrantsDropped: res.Changed})
 			}
 			noun := "secrets"
 			if n == 1 {

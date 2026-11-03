@@ -34,8 +34,12 @@ func (l Layer) Key() string {
 type GrantsEditor interface {
 	// DropRecord removes the grants of (name, layer).
 	DropRecord(body []byte, name, layer string) (newBody []byte, n int, err error)
-	// RelinkProject repoints the project grants of oldRoot to newRoot.
-	RelinkProject(body []byte, oldRoot, newRoot string) (newBody []byte, n int, err error)
+	// DropNonOnce removes the session and project grants of one record,
+	// keeping its once grants (the record became sensitive).
+	DropNonOnce(body []byte, name, layer, recordID string) (newBody []byte, n int, err error)
+	// DropLayer removes every grant of a layer (relink: nothing follows a
+	// project layer to its new root).
+	DropLayer(body []byte, layer string) (newBody []byte, n int, err error)
 }
 
 // GrantsResult reports what the grants side of an operation did.
@@ -291,8 +295,46 @@ func (v *Vault) ReplaceWithGrants(layer Layer, name string, rec Record, ed Grant
 	return res, err
 }
 
-// RelinkWithGrants is Relink plus repointing the project grants of the moved
-// layer (layer `project:<old>` becomes `project:<new>`, project_root too).
+// EditWithGrants stores a metadata edit of an existing record, keeping its id
+// (rec must carry the id it was read with). When the result is sensitive, the
+// session and project grants of the record are dropped in the same locked
+// operation and only its once grants stay (R-GRANT-02).
+func (v *Vault) EditWithGrants(layer Layer, name string, rec Record, ed GrantsEditor) (GrantsResult, error) {
+	if err := checkName(name); err != nil {
+		return GrantsResult{}, err
+	}
+	if err := checkLayer(layer); err != nil {
+		return GrantsResult{}, err
+	}
+	var res GrantsResult
+	err := v.locked(true, func() error {
+		id := ""
+		if err := v.mutateLocked(func(b *body) error {
+			secrets := b.secrets(layer, false)
+			if _, ok := secrets[name]; !ok {
+				return withName(ErrNotFound, name)
+			}
+			putIn(secrets, name, rec, true)
+			id = secrets[name].ID
+			return nil
+		}); err != nil {
+			return err
+		}
+		if !rec.Sensitive {
+			return nil
+		}
+		var err error
+		res, err = v.editGrantsLocked(ed, func(ed GrantsEditor, body []byte) ([]byte, int, error) {
+			return ed.DropNonOnce(body, name, layer.Key(), id)
+		})
+		return err
+	})
+	return res, err
+}
+
+// RelinkWithGrants is Relink plus dropping every grant of the old project
+// layer. Grants never follow a layer to the new root: relink can only narrow
+// access, and the user grants again where they want it.
 func (v *Vault) RelinkWithGrants(oldRoot, newRoot string, ed GrantsEditor) (int, GrantsResult, error) {
 	to, label, err := repoRoot(newRoot)
 	if err != nil {
@@ -319,7 +361,7 @@ func (v *Vault) RelinkWithGrants(oldRoot, newRoot string, ed GrantsEditor) (int,
 		}
 		var err error
 		res, err = v.editGrantsLocked(ed, func(ed GrantsEditor, body []byte) ([]byte, int, error) {
-			return ed.RelinkProject(body, from, to)
+			return ed.DropLayer(body, Layer{Project: true, Root: from}.Key())
 		})
 		return err
 	})

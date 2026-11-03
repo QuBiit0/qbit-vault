@@ -55,7 +55,7 @@ func (g *globals) noteGrantsReset(stderr io.Writer, reset bool) {
 var newGrantsEditor = func() vault.GrantsEditor { return grantsEditor{} }
 
 // grantsEditor drops and rewrites grants for the vault operations that
-// change a record (rm, mv, set replace, relink). It adapts internal/grants to
+// change a record (rm, mv, set replace, edit --sensitive, relink). It adapts internal/grants to
 // vault.GrantsEditor.
 type grantsEditor struct{}
 
@@ -63,8 +63,12 @@ func (grantsEditor) DropRecord(body []byte, name, layer string) ([]byte, int, er
 	return edit(body, func(st *grants.Store) int { return grants.DropRecord(st, name, layer) })
 }
 
-func (grantsEditor) RelinkProject(body []byte, oldRoot, newRoot string) ([]byte, int, error) {
-	return edit(body, func(st *grants.Store) int { return grants.RelinkProject(st, oldRoot, newRoot) })
+func (grantsEditor) DropNonOnce(body []byte, name, layer, recordID string) ([]byte, int, error) {
+	return edit(body, func(st *grants.Store) int { return grants.DropNonOnce(st, name, layer, recordID) })
+}
+
+func (grantsEditor) DropLayer(body []byte, layer string) ([]byte, int, error) {
+	return edit(body, func(st *grants.Store) int { return grants.DropLayer(st, layer) })
 }
 
 func edit(body []byte, fn func(*grants.Store) int) ([]byte, int, error) {
@@ -123,6 +127,8 @@ func (g *globals) recordStrict(r audit.Record) error {
 // grantErr maps a grants package failure to what the user sees.
 func grantErr(err error, name string) error {
 	switch {
+	case errors.Is(err, grants.ErrNeedsProject):
+		return refusal.New(refusal.ScopeNotAllowed, name).WithMessage("project scope needs a project secret")
 	case errors.Is(err, grants.ErrScopeNotAllowed):
 		return refusal.New(refusal.ScopeNotAllowed, name)
 	case errors.Is(err, grants.ErrBadToken):
@@ -182,7 +188,7 @@ func (g *globals) confirm(cmd *cobra.Command, s *session, req grants.Request, la
 		)
 		err := g.mutateGrants(stderr, s, func(st *grants.Store) (bool, error) {
 			before := len(st.Tokens)
-			hash, cerr = grants.ConsumeToken(st, token, req.Name, req.Layer, req.Scope, req.Session, clock())
+			hash, cerr = grants.ConsumeToken(st, token, req.Name, req.Layer, req.RecordID, req.Scope, req.Session, req.TTL, clock())
 			return len(st.Tokens) != before, nil
 		})
 		if err != nil {

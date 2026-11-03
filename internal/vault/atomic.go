@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -121,12 +122,17 @@ func renameWithRetry(tmp, target string) error {
 // cleanTemps removes temp files a crashed save left next to target. Only
 // called under the vault lock, so none of them can belong to a live save.
 func cleanTemps(target string) {
-	matches, err := filepath.Glob(filepath.Join(filepath.Dir(target), filepath.Base(target)+".tmp.*"))
+	// os.ReadDir plus a prefix match, not filepath.Glob: the home path may
+	// contain glob metacharacters.
+	dir, prefix := filepath.Dir(target), filepath.Base(target)+".tmp."
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	for _, m := range matches {
-		_ = os.Remove(m)
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), prefix) {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
 	}
 }
 

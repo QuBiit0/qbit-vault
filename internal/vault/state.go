@@ -58,7 +58,7 @@ func (s *state) marshal() ([]byte, error) {
 func loadState(home string) (*state, error) {
 	data, err := os.ReadFile(filepath.Join(home, stateFile))
 	if err != nil {
-		return nil, fmt.Errorf("vault: read state: %w", err)
+		return nil, fmt.Errorf("vault: read state: %w", bare(err))
 	}
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(data, &m); err != nil {
@@ -105,7 +105,7 @@ type header struct {
 func (s *store) load() ([]byte, header, error) {
 	data, err := os.ReadFile(filepath.Join(s.home, vaultFile))
 	if err != nil {
-		return nil, header{}, fmt.Errorf("vault: read vault: %w", err)
+		return nil, header{}, fmt.Errorf("vault: read vault: %w", bare(err))
 	}
 	pt, aad, err := open(s.key, data)
 	if err != nil {

@@ -424,6 +424,12 @@ func TestAppendAfterOverlongLastLine(t *testing.T) {
 func TestConcurrentGoroutinesKeepOneChain(t *testing.T) {
 	home := t.TempDir()
 	const workers, each = 8, 10
+	// 8 writers contending for one lock is far beyond real use; under a
+	// loaded machine one goroutine can wait past the default timeout. The
+	// test checks chain integrity, not lock latency.
+	old := lockOpts
+	lockOpts.Timeout = time.Minute
+	t.Cleanup(func() { lockOpts = old })
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
 	for w := range workers {

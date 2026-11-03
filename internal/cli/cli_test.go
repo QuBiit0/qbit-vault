@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -73,8 +74,13 @@ func jsonUsage(msg string) string {
 }
 
 func TestUsageErrors(t *testing.T) {
-	unknownCmd := `unknown command "bogus" for "gentle-vault"`
-	extraArg := `unknown command "extra" for "gentle-vault version"`
+	const (
+		unknownCmd  = "unknown command"
+		unknownFlag = "unknown flag"
+		extraArg    = "unexpected arguments"
+		badJSON     = "invalid value for --json"
+		badHome     = "invalid value for --home"
+	)
 	tests := []struct {
 		name       string
 		args       []string
@@ -84,13 +90,16 @@ func TestUsageErrors(t *testing.T) {
 	}{
 		{"unknown command human", []string{"bogus"}, nil, "", "error: " + unknownCmd + "\n" + helpHint},
 		{"unknown command json", []string{"--json", "bogus"}, nil, jsonUsage(unknownCmd), ""},
-		{"unknown flag human", []string{"version", "--bogus"}, nil, "", "error: unknown flag: --bogus\n" + helpHint},
-		{"unknown flag json", []string{"version", "--bogus", "--json"}, nil, jsonUsage("unknown flag: --bogus"), ""},
+		{"unknown flag human", []string{"version", "--bogus"}, nil, "", "error: " + unknownFlag + "\n" + helpHint},
+		{"unknown flag json", []string{"version", "--bogus", "--json"}, nil, jsonUsage(unknownFlag), ""},
 		{"bad args human", []string{"version", "extra"}, nil, "", "error: " + extraArg + "\n" + helpHint},
 		{"bad args json", []string{"version", "extra", "--json"}, nil, jsonUsage(extraArg), ""},
 		{"invalid session human", []string{"--session", "nope", "version"}, nil, "", "error: " + sessionHelp + "\n" + helpHint},
 		{"invalid session json", []string{"--session", "nope", "version", "--json"}, nil, jsonUsage(sessionHelp), ""},
 		{"invalid session from env", []string{"version"}, map[string]string{"GENTLE_VAULT_SESSION": "BAD"}, "", "error: " + sessionHelp + "\n" + helpHint},
+		{"bad flag value human", []string{"version", "--json=maybe"}, nil, "", "error: " + badJSON + "\n" + helpHint},
+		{"bad flag value with json requested", []string{"--json", "--home"}, nil, jsonUsage(badHome), ""},
+		{"flag missing value human", []string{"version", "--home"}, nil, "", "error: " + badHome + "\n" + helpHint},
 		{"no command json", []string{"--json"}, nil, jsonUsage("no command given"), ""},
 	}
 	for _, tt := range tests {
@@ -100,6 +109,36 @@ func TestUsageErrors(t *testing.T) {
 				t.Fatalf("code=%d\nstdout=%q\nstderr=%q", code, out, errs)
 			}
 		})
+	}
+}
+
+func TestUsageErrorsNeverEchoInput(t *testing.T) {
+	tests := [][]string{
+		{"TESTSECRET_x"},
+		{"--TESTSECRET_x"},
+		{"-TESTSECRET_x"},
+		{"--TESTSECRET_x=TESTSECRET_y"},
+		{"version", "TESTSECRET_x"},
+		{"version", "--TESTSECRET_x"},
+		{"--json=TESTSECRET_x", "version"},
+		{"--quiet=TESTSECRET_x", "version"},
+		{"--home"},
+		{"--session=TESTSECRET_x", "version"},
+		{"--", "TESTSECRET_x"},
+	}
+	for i, args := range tests {
+		for j, mode := range [][]string{nil, {"--json"}} {
+			full := append(append([]string{}, mode...), args...)
+			t.Run(fmt.Sprintf("case %d/mode %d", i, j), func(t *testing.T) {
+				code, out, errs := run(t, nil, full...)
+				if code != exitcode.Usage {
+					t.Fatalf("code=%d, want %d", code, exitcode.Usage)
+				}
+				if strings.Contains(out, "TESTSECRET_") || strings.Contains(errs, "TESTSECRET_") {
+					t.Fatalf("usage error echoed input (stdout %d bytes, stderr %d bytes)", len(out), len(errs))
+				}
+			})
+		}
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -61,6 +62,8 @@ func (g *globals) NoColorEnabled() bool {
 	return g.NoColor || g.getenv(envNoColor) != ""
 }
 
+// Usage errors are fixed strings: they never include user-supplied text, so
+// a secret pasted by mistake as a command, flag or argument is not echoed.
 type usageError struct{ msg string }
 
 func (e usageError) Error() string { return e.msg }
@@ -97,9 +100,12 @@ func execute(args []string, stdout, stderr io.Writer, getenv func(string) string
 	asJSON := g.JSON || jsonRequested(args)
 	var ue usageError
 	switch {
-	case errors.As(err, &ue), !entered:
-		// Failures before the command ran are cobra's parse errors.
-		return report(stdout, stderr, asJSON, "usage", err.Error(), exitcode.Usage)
+	case errors.As(err, &ue):
+		return report(stdout, stderr, asJSON, "usage", ue.msg, exitcode.Usage)
+	case !entered:
+		// Any other failure before the command ran is cobra's parse error.
+		// Its text can embed the user's input, so it is never shown.
+		return report(stdout, stderr, asJSON, "usage", "invalid usage", exitcode.Usage)
 	default:
 		return report(stdout, stderr, asJSON, "internal", err.Error(), exitcode.Failure)
 	}
@@ -171,6 +177,12 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 			*entered = true
 			return nil
 		},
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return usageError{"unknown command"}
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if g.JSON {
 				return usageError{"no command given"}
@@ -179,6 +191,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
+	root.SetFlagErrorFunc(flagUsageError)
 
 	f := root.PersistentFlags()
 	f.StringVar(&g.home, "home", "", "vault directory (default $"+envHome+" or ~/.gentle-vault)")
@@ -191,11 +204,44 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	return root
 }
 
+var (
+	invalidArgRE = regexp.MustCompile(`for "(?:-[A-Za-z0-9], )?--([A-Za-z0-9][A-Za-z0-9-]*)" flag: `)
+	needsArgRE   = regexp.MustCompile(`^flag needs an argument: --([A-Za-z0-9][A-Za-z0-9-]*)$`)
+)
+
+// flagUsageError maps pflag's parse errors, which quote the offending input,
+// to fixed messages. A flag name is shown only when it is a defined flag.
+func flagUsageError(cmd *cobra.Command, err error) error {
+	msg := err.Error()
+	switch {
+	case strings.HasPrefix(msg, "unknown flag"), strings.HasPrefix(msg, "unknown shorthand flag"):
+		return usageError{"unknown flag"}
+	case strings.HasPrefix(msg, "invalid argument "):
+		if m := invalidArgRE.FindAllStringSubmatch(msg, -1); len(m) > 0 {
+			if name := m[len(m)-1][1]; cmd.Flag(name) != nil {
+				return usageError{"invalid value for --" + name}
+			}
+		}
+	case strings.HasPrefix(msg, "flag needs an argument"):
+		if m := needsArgRE.FindStringSubmatch(msg); m != nil && cmd.Flag(m[1]) != nil {
+			return usageError{"invalid value for --" + m[1]}
+		}
+	}
+	return usageError{"invalid flag usage"}
+}
+
+func noArgs(_ *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return usageError{"unexpected arguments"}
+	}
+	return nil
+}
+
 func newVersion(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print version information",
-		Args:  cobra.NoArgs,
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()
 			if g.JSON {

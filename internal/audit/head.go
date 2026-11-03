@@ -56,6 +56,12 @@ func tailState(f *os.File, home string) (seq uint64, prev string, sep bool, err 
 	raw := body[i+1:]
 	var last Record
 	if !sep && json.Unmarshal(raw, &last) == nil && last.Seq > 0 {
+		// The head is ahead of the log: its tail was removed. Continue from
+		// the head, not from the surviving last line, so the gap stays
+		// visible to verify instead of being healed by this append.
+		if h, ok := readHead(home); ok && h.Seq > last.Seq {
+			return h.Seq + 1, h.Line, false, nil
+		}
 		return last.Seq + 1, sum(raw), false, nil
 	}
 	return fallbackSeq(f, home), sum(raw), sep, nil

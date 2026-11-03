@@ -665,3 +665,24 @@ func FuzzVerify(f *testing.F) {
 		}
 	})
 }
+
+// Removing the tail of the log and then appending must not heal the
+// truncation: the next record continues from the head, so the gap stays
+// visible to verify.
+func TestTailTruncationNotHealedByAppend(t *testing.T) {
+	home := t.TempDir()
+	appendN(t, home, 5)
+	lines := readLines(t, home)
+	kept := strings.Join(lines[:3], "\n") + "\n"
+	if err := os.WriteFile(logPath(home), []byte(kept), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	appendN(t, home, 1)
+	res, err := Verify(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Valid {
+		t.Fatalf("tail truncation healed by the next append")
+	}
+}

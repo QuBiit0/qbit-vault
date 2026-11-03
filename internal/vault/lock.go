@@ -72,6 +72,10 @@ func acquireLock(home string) (func(), error) {
 				_ = os.Remove(path)
 				return nil, errors.New("vault: write lock file")
 			}
+			if err := secureFile(path, "lock file"); err != nil {
+				_ = os.Remove(path)
+				return nil, err
+			}
 			return func() { releaseLock(path, content) }, nil
 		}
 		switch {

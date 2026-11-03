@@ -97,6 +97,8 @@ Backups are pruned to the last 20 snapshots by default (`config.backups_keep`), 
 
 `doctor` reports any file whose mode is wider than this.
 
+**Enforcement.** `internal/perm` (`EnsureDir`, `EnsureFile`, `Check`) applies the table. `internal/vault` calls it as it creates things, before secret-bearing bytes are written or a temp file replaces a live one: the home directory on every locked operation that may create it, the lock file right after it is created, each temp file before the rename over `vault.enc` or `state.json`, and the `backups/` directory, every snapshot directory and every snapshot file. On POSIX a path wider than 0700/0600 is tightened with `chmod`; stricter modes are left alone. On Windows the path gets a protected DACL (inheritance disabled) with a single allow entry for the current user's SID, set through `golang.org/x/sys/windows`; the home directory's entry is inheritable, so files created inside start out private. `Check` reports a Windows path as private when no access-allowed entry names another SID and the DACL is not null. `key.enc` is written by `internal/keychain`, which does not call `internal/perm` yet (follow-up); on POSIX it is already created 0600.
+
 ## Grants: `grants.enc`
 
 Metadata only; losing it loses permissions, never secrets. Stored in the same AEAD envelope as `vault.enc` (own nonce, `format: "gentle-vault-grants/1"` in the header), encrypted with the same master key, so a leaked copy does not reveal which secrets exist, which sessions used them or which repositories they belong to. Decrypted plaintext:

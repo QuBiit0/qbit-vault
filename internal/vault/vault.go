@@ -102,6 +102,9 @@ func (v *Vault) locked(create bool, fn func() error) error {
 		if err := os.MkdirAll(v.st.home, dirMode); err != nil {
 			return fmt.Errorf("vault: create home: %w", bare(err))
 		}
+		if err := secureDir(v.st.home, "home"); err != nil {
+			return err
+		}
 	}
 	release, err := acquireLock(v.st.home)
 	if err != nil {

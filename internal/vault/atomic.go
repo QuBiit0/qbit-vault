@@ -75,6 +75,9 @@ func replaceFile(home, name string, data []byte) error {
 	if err := os.MkdirAll(home, dirMode); err != nil {
 		return fmt.Errorf("vault: create home: %w", bare(err))
 	}
+	if err := secureDir(home, "home"); err != nil {
+		return err
+	}
 	target := filepath.Join(home, name)
 	cleanTemps(target)
 	var sfx [4]byte
@@ -83,6 +86,11 @@ func replaceFile(home, name string, data []byte) error {
 	}
 	tmp := fmt.Sprintf("%s.tmp.%d.%s", target, os.Getpid(), hex.EncodeToString(sfx[:]))
 	if err := writeSynced(tmp, data); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	// Private before it replaces the live file, so the target is never wider.
+	if err := secureFile(tmp, name); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}
@@ -180,6 +188,10 @@ func snapshot(home string, names ...string) (string, error) {
 			removeSnapshot(dir)
 			return "", fmt.Errorf("vault: write backup of %s: %w", name, bare(err))
 		}
+		if err := secureFile(filepath.Join(dir, name), "backup"); err != nil {
+			removeSnapshot(dir)
+			return "", err
+		}
 	}
 	return dir, nil
 }
@@ -189,11 +201,18 @@ func newSnapshotDir(home string) (string, error) {
 	if err := os.MkdirAll(root, dirMode); err != nil {
 		return "", fmt.Errorf("vault: create backup dir: %w", bare(err))
 	}
+	if err := secureDir(root, "backup dir"); err != nil {
+		return "", err
+	}
 	base := filepath.Join(root, snapshotClock().UTC().Format(backupTimeFormat))
 	dir := base
 	for i := 1; ; i++ {
 		err := os.Mkdir(dir, dirMode)
 		if err == nil {
+			if err := secureDir(dir, "backup dir"); err != nil {
+				_ = os.RemoveAll(dir)
+				return "", err
+			}
 			return dir, nil
 		}
 		if !errors.Is(err, os.ErrExist) || i > 999 {

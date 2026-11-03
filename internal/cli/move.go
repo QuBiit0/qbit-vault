@@ -17,6 +17,8 @@ type moveBody struct {
 	From    string      `json:"from"`
 	To      string      `json:"to"`
 	Project *projectRef `json:"project"`
+	// GrantsDropped counts the grants the move dropped; omitted when none.
+	GrantsDropped int `json:"grants_dropped,omitempty"`
 }
 
 type relinkBody struct {
@@ -24,6 +26,8 @@ type relinkBody struct {
 	From    string `json:"from"`
 	To      string `json:"to"`
 	Secrets int    `json:"secrets"`
+	// GrantsRewritten counts the project grants repointed; omitted when none.
+	GrantsRewritten int `json:"grants_rewritten,omitempty"`
 }
 
 func newMv(g *globals) *cobra.Command {
@@ -65,17 +69,18 @@ func newMv(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
-			// TODO(slice 1.6): drop the grants of the moved record here
-			// (R-LAYER-05).
-			if err := s.v.Move(name, from, dest, yes); err != nil {
+			// The moved record's grants no longer apply (R-LAYER-05).
+			res, err := s.v.MoveWithGrants(name, from, dest, yes, newGrantsEditor())
+			if err != nil {
 				if errors.Is(err, vault.ErrExists) {
 					return usageError{name + " already exists in " + layerName(dest) + "; pass --yes to overwrite"}
 				}
 				return mapErr(err, name)
 			}
+			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventMv, Names: []string{name}, Layer: auditLayer(dest), Detail: layerName(from) + "->" + layerName(dest)})
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), moveBody{OK: true, Name: name, From: layerName(from), To: layerName(dest), Project: projectOf(proj)})
+				return writeJSON(cmd.OutOrStdout(), moveBody{OK: true, Name: name, From: layerName(from), To: layerName(dest), Project: projectOf(proj), GrantsDropped: res.Changed})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "moved %s from %s to %s\n", name, layerText(from), layerText(dest))
 			return err
@@ -102,8 +107,7 @@ func newRelink(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
-			// TODO(slice 1.6): repoint the project grants of this layer too.
-			n, err := s.v.Relink(args[0], args[1])
+			n, res, err := s.v.RelinkWithGrants(args[0], args[1], newGrantsEditor())
 			switch {
 			case errors.Is(err, vault.ErrNotFound):
 				return usageError{"OLD_ROOT has no project layer"}
@@ -112,10 +116,11 @@ func newRelink(g *globals) *cobra.Command {
 			case err != nil:
 				return mapErr(err, "")
 			}
+			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			cwd, _ := os.Getwd()
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRelink, Cwd: cwd})
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), relinkBody{OK: true, From: args[0], To: args[1], Secrets: n})
+				return writeJSON(cmd.OutOrStdout(), relinkBody{OK: true, From: args[0], To: args[1], Secrets: n, GrantsRewritten: res.Changed})
 			}
 			noun := "secrets"
 			if n == 1 {

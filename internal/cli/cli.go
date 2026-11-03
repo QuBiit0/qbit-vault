@@ -217,6 +217,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newVersion(g))
 	root.AddCommand(newInit(g))
 	root.AddCommand(newSet(g), newRm(g), newDescribe(g), newEdit(g), newList(g), newMv(g), newRelink(g))
+	root.AddCommand(newGrant(g), newRevoke(g), newGrantsList(g))
 	root.AddCommand(newAudit(g))
 	return root
 }

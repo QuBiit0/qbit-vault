@@ -24,6 +24,7 @@ A JSON envelope with a cleartext header and one AEAD-encrypted body. The header 
 {
   "global": {
     "GITHUB_TOKEN": {
+      "id": "9f2c…",
       "value": "…",
       "description": "GitHub PAT, repo scope",
       "sensitive": false,
@@ -44,6 +45,8 @@ A JSON envelope with a cleartext header and one AEAD-encrypted body. The header 
   }
 }
 ```
+
+**Record id.** Every record carries a random `id` (16 bytes from `crypto/rand`, hex) inside the encrypted body. It is created when the record is created and **regenerated whenever its value is replaced**; metadata edits (`edit`), `mv` and `relink` keep it (they keep the value). Grants bind to it (see § Grants). The id is internal: no command prints it.
 
 ### Layers
 
@@ -106,28 +109,41 @@ Metadata only; losing it loses permissions, never secrets. Stored in the same AE
 ```json
 {
   "grants": [
-    { "id": "g_01J…", "name": "GITHUB_TOKEN", "layer": "global", "session": "pi:2f1c…", "scope": "session",
+    { "id": "g_01J…", "name": "GITHUB_TOKEN", "layer": "global", "record_id": "9f2c…", "session": "pi:2f1c…", "scope": "session",
       "created_at": "…", "expires_at": "…", "consumed": false,
       "prompt_token_hash": "sha256:…" },
-    { "id": "g_01K…", "name": "DATABASE_URL", "layer": "project:/home/me/shop-api", "session": null, "scope": "project",
-      "project_root": "/home/me/shop-api", "created_at": "…", "expires_at": null }
+    { "id": "g_01K…", "name": "DATABASE_URL", "layer": "project:/home/me/shop-api", "record_id": "41ab…", "session": "", "scope": "project",
+      "project_root": "/home/me/shop-api", "created_at": "…", "expires_at": null, "consumed": false }
+  ],
+  "tokens": [
+    { "hash": "sha256:…", "name": "GITHUB_TOKEN", "layer": "global", "scope": "session", "session": "pi:2f1c…", "expires_at": "…" }
   ]
 }
 ```
+
+`session` is empty and `expires_at` null for `project` scope. Timestamps are RFC 3339 UTC.
+
+**File.** `grants.enc` is managed by `internal/vault` under the same `vault.lock` as `vault.enc`; the vault never interprets the body (`internal/grants` does). The envelope is the one of `vault.enc` (`internal/envelope`) with `format: "gentle-vault-grants/1"` in the header and in the AAD, so a `vault.enc` can never be opened as grants or the reverse. It has its own write counter, `grants_writes`, in `state.json` (unknown keys of `state.json` are preserved). A grants write seals the next body with `writes` = counter + 1, replaces `grants.enc` atomically (temp file, `fsync`, rename, owner-only like the other files), then records the counter in `state.json`. There are **no snapshots** of `grants.enc`: losing it loses permissions, never secrets, and restoring an old copy would revive revoked grants.
+
+**Fail closed (L3).** A `grants.enc` that is missing is an empty store. One that cannot be trusted (malformed, altered, wrong key or wrong format) or whose `writes` is **behind** `grants_writes` (a rollback that would revive revoked grants) is also treated as an empty store, and the operation reports a `reset` to the CLI, which prints `warning: grants were reset (store unreadable or rolled back)` on stderr and appends an audit `warning` record with `detail: "grants reset"`. The next grants write replaces the bad file (`grants` and `describe` do it on first read). One that is **ahead** of the counter (a crash between the two writes, or a counter missing from `state.json`) is accepted and the counter repaired. The counter is not authenticated (THREAT_MODEL R8).
+
+**Tokens.** `tokens` holds the pending prompt tokens (see below): only the SHA-256 of a random 32-byte value, never the value. They expire after 2 minutes, are removed when redeemed (also when presented for the wrong request) and purged with expired grants.
 
 `layer` is `global` or `project:<root>` and records **which record** the user granted. Evaluation for `exec(name, session, cwd)`:
 
 1. Expired grants are purged on load.
 2. Resolve `name` for `cwd` (§ Layers) to a record and its layer. Unknown → `unknown_secret`.
-3. Only grants whose `name` **and** `layer` match the resolved record are considered. A grant on the global `DATABASE_URL` never injects the project `DATABASE_URL`, and the reverse.
+3. Only grants whose `name`, `layer` **and `record_id`** match the resolved record are considered. A grant on the global `DATABASE_URL` never injects the project `DATABASE_URL`, and the reverse.
 4. `once`: matching `session`, not consumed → allow and mark consumed.
 5. `session`: matching `session` → allow.
 6. `project`: `cwd` inside `project_root` → allow.
 7. Otherwise `grant_required`.
 
-`mv`, `rm` and `relink` rewrite or drop the grants of the affected record in the same atomic write sequence (vault first, then grants; a crash between the two leaves grants pointing at a missing record, which evaluation treats as `grant_required`).
+`mv`, `rm`, a value replacement (`set` over an existing record) and `relink` rewrite or drop the grants of the affected record inside the same locked operation (vault first, then grants). `rm`, `mv` and replace drop the grants of that `(name, layer)`; `mv` drops those of both layers (an overwritten target's grants belonged to a value that is gone); `relink` rewrites layer `project:<old>` to `project:<new>` and `project_root` with it. Metadata edits (`edit`) keep their grants. A crash or failure between the vault write and the grants write can leave grants for a record that is gone. They are inert: a grant stores the `record_id` of the record it was granted for, and a re-created or value-replaced secret with the same name and layer has a new id, so the stale grant never matches it (evaluation says `grant_required`). The drop is cleanup, not what keeps the stale grant from authorizing the new record. A grant with no `record_id`, or a check with an empty id, matches nothing.
 
-`prompt_token_hash` records which prompt created the grant (the broker issues a one-time random token to its own prompt backend, and `grant` must present it; the hash is stored for audit). This is the mechanism behind "grants are user-UI-only".
+**Scope rules** (`internal/grants`). `once` and `session` need a host session; `project` needs a project record, stores `project_root` and no session, and never expires. A `sensitive` record accepts `once` only. `session` lives 30 minutes by default (`--ttl` 1 minute to 24 hours); an unused `once` grant expires after 10 minutes and is consumed by the first matching check. Adding a grant replaces an identical `(name, layer, session, scope)` grant. A `project` grant also requires `cwd` to be inside `project_root`, on path boundaries (`/work/shop` does not cover `/work/shop-old`).
+
+`prompt_token_hash` records which prompt created the grant (the broker issues a one-time random token to its own prompt backend, and `grant` must present it; the hash is stored for audit). This is the mechanism behind "grants are user-UI-only". A token is 32 random bytes in base64url, bound to one `(name, layer, scope, session)`, valid for 2 minutes and for one use; an unknown, expired, reused or mismatched token is refused as `not_model_callable`. Until the prompt backend exists (slices 1.9 and 1.10) the CLI confirms a grant either with such a token (`--from-prompt-token`) or with a y/N answer when stdin and stdout are both terminals.
 
 ## Audit log: `audit.jsonl`
 
@@ -154,9 +170,9 @@ Events: `init`, `capture`, `grant`, `exec`, `manage`, `refusal`, `revoke`, `rm`,
 
 **Verify.** `gentle-vault audit --verify` walks every line and reports the first problem as `{line, seq, reason}`, with `reason` one of `bad_json`, `bad_hash` (the line is not exactly the canonical encoding of its fields, or its `hash` is wrong), `bad_prev`, `bad_seq`, `partial_line` (the last line lacks its newline), `truncated`, `head_mismatch`. A missing log and a missing anchor are valid with 0 records.
 
-**Who writes.** The CLI writes `init` (`detail` = keychain mode, only when a vault is created), `capture` (`set`: names, layer, `detail: "replaced"` when replacing a value), `rm`, `edit`, `mv` (layer = destination, `detail: "global->project"` or `"project->global"`), `relink` (`cwd`) and one `refusal` record (type, and the secret name when it is valid) for every typed refusal a command returns. `session` is `--session` or `cli`; `by` is `user`. A record never holds a value, a description, a binary list or command arguments. `grant`, `exec`, `manage` and `revoke` records arrive with their slices.
+**Who writes.** The CLI writes `init` (`detail` = keychain mode, only when a vault is created), `capture` (`set`: names, layer, `detail: "replaced"` when replacing a value), `rm`, `edit`, `mv` (layer = destination, `detail: "global->project"` or `"project->global"`), `relink` (`cwd`) and one `refusal` record (type, and the secret name when it is valid) for every typed refusal a command returns. `session` is `--session` or `cli`; `by` is `user`. A record never holds a value, a description, a binary list or command arguments. `grant` (names, layer, `scope`, `expires_at` when the grant expires, `detail` `terminal` or `prompt token`, `session` = the host session) and `revoke` (names when revoking by name, `layer` when a layer was named, `detail` `name|all|session revoked=N`) are written by `grant`, `set --grant` and `revoke`; a `warning` with `detail: "grants reset"` is written when `grants.enc` is reset. `exec` and `manage` records arrive with their slices.
 
-**Best effort (CLI).** The vault change is already committed when its record is written, so a failed append prints `warning: audit log write failed` to stderr and leaves the exit code and stdout alone. A home directory that does not exist has no audit log and is skipped silently. Grant and exec (slices 1.6 and 1.8) will decide separately whether a failed append is fail-closed.
+**Best effort (CLI).** The vault change is already committed when its record is written, so a failed append prints `warning: audit log write failed` to stderr and leaves the exit code and stdout alone. A home directory that does not exist has no audit log and is skipped silently. `revoke` is best effort too (it only narrows access). **`grant` is fail-closed (L4):** its `grant` record is appended before the grant is persisted, and if the append fails the grant is not created (refusal `internal`). Exec (slice 1.8) will decide separately.
 
 `gentle-vault audit --tail 50`, `--since 24h`, `--name X`, `--event E`, `--json` for the Gentle Shell widget; the log is read under `audit.lock`, so a reader never sees a half-written line, and it works without unlocking the vault.
 

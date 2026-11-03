@@ -7,10 +7,12 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/QuBiit0/gentle-vault/internal/audit"
+	"github.com/QuBiit0/gentle-vault/internal/grants"
 	"github.com/QuBiit0/gentle-vault/internal/refusal"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 	"github.com/QuBiit0/gentle-vault/internal/vault"
@@ -34,6 +36,10 @@ type setBody struct {
 	Layer    string      `json:"layer"`
 	Project  *projectRef `json:"project"`
 	Replaced bool        `json:"replaced"`
+	// GrantsDropped counts the grants a value replacement removed (L7); it is
+	// omitted when none went.
+	GrantsDropped int       `json:"grants_dropped,omitempty"`
+	Grant         *grantOut `json:"grant,omitempty"` // set --grant only
 }
 
 type removeBody struct {
@@ -41,6 +47,8 @@ type removeBody struct {
 	Name    string `json:"name"`
 	Layer   string `json:"layer"`
 	Removed bool   `json:"removed"`
+	// GrantsDropped counts the grants the removal dropped; omitted when none.
+	GrantsDropped int `json:"grants_dropped,omitempty"`
 }
 
 type editBody struct {
@@ -52,18 +60,18 @@ type editBody struct {
 }
 
 type describeBody struct {
-	OK              bool        `json:"ok"`
-	Name            string      `json:"name"`
-	Layer           string      `json:"layer"`
-	Project         *projectRef `json:"project"`
-	OverridesGlobal bool        `json:"overrides_global"`
-	Description     string      `json:"description"`
-	Sensitive       bool        `json:"sensitive"`
-	Binaries        []string    `json:"binaries"`
-	Hosts           []string    `json:"hosts"`
-	CreatedAt       string      `json:"created_at"`
-	UpdatedAt       string      `json:"updated_at"`
-	Grants          []string    `json:"grants"` // always empty until slice 1.6
+	OK              bool            `json:"ok"`
+	Name            string          `json:"name"`
+	Layer           string          `json:"layer"`
+	Project         *projectRef     `json:"project"`
+	OverridesGlobal bool            `json:"overrides_global"`
+	Description     string          `json:"description"`
+	Sensitive       bool            `json:"sensitive"`
+	Binaries        []string        `json:"binaries"`
+	Hosts           []string        `json:"hosts"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
+	Grants          []describeGrant `json:"grants"`
 }
 
 type listEntry struct {
@@ -277,12 +285,14 @@ func readValue(r io.Reader) ([]byte, error) {
 
 func newSet(g *globals) *cobra.Command {
 	var (
-		lf    layerFlags
-		meta  metaFlags
-		stdin bool
+		lf       layerFlags
+		meta     metaFlags
+		stdin    bool
+		grantStr string
+		token    string
 	)
 	cmd := &cobra.Command{
-		Use:   "set NAME (--global|--project) --stdin",
+		Use:   "set NAME (--global|--project) --stdin [--grant once|session|project --from-prompt-token T]",
 		Short: "Store or replace a secret value read from stdin",
 		Args:  nameArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -295,6 +305,26 @@ func newSet(g *globals) *cobra.Command {
 			}
 			if err := checkName(name); err != nil {
 				return err
+			}
+			// stdin carries the value, so the grant cannot be confirmed by
+			// asking a question: it needs a prompt token.
+			f := cmd.Flags()
+			tokenGiven := f.Changed("from-prompt-token")
+			var (
+				scope grants.Scope
+				ttl   time.Duration
+			)
+			switch {
+			case f.Changed("grant"):
+				if !tokenGiven {
+					return usageError{"--grant requires --from-prompt-token"}
+				}
+				var err error
+				if scope, ttl, err = (grantFlags{}).parse(cmd, grantStr, g.Session); err != nil {
+					return err
+				}
+			case tokenGiven:
+				return usageError{"--from-prompt-token requires --grant"}
 			}
 			cwd, err := getwd()
 			if err != nil {
@@ -345,24 +375,66 @@ func newSet(g *globals) *cobra.Command {
 			}
 			wipeEntries(all)
 			meta.apply(cmd, &rec)
-			if err := s.v.Put(layer, name, rec); err != nil {
+
+			// Settle the grant before anything is stored, so a refused
+			// grant leaves the vault as it was.
+			var (
+				req       grants.Request
+				tokenHash string
+			)
+			if scope != "" {
+				// The record id does not exist until the value is stored.
+				req = grants.Request{Name: name, Layer: layer.Key(), Scope: scope, TTL: ttl, Sensitive: rec.Sensitive}
+				if scope != grants.ScopeProject {
+					req.Session = g.Session
+				}
+				if err := grants.Validate(req); err != nil {
+					return grantErr(err, name)
+				}
+				if tokenHash, err = g.confirm(cmd, s, req, layer, token, true); err != nil {
+					return err
+				}
+			}
+
+			res, err := s.v.ReplaceWithGrants(layer, name, rec, newGrantsEditor())
+			if err != nil {
 				return mapErr(err, name)
 			}
+			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			recd := audit.Record{Event: audit.EventCapture, Names: []string{name}, Layer: auditLayer(layer)}
 			if replaced {
 				recd.Detail = "replaced"
 			}
 			g.record(cmd.ErrOrStderr(), recd)
-			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), setBody{OK: true, Name: name, Layer: layerName(layer), Project: projectOf(layer), Replaced: replaced})
+			body := setBody{OK: true, Name: name, Layer: layerName(layer), Project: projectOf(layer), Replaced: replaced, GrantsDropped: res.Changed}
+			var granted *grants.Grant
+			if scope != "" {
+				req.RecordID = res.RecordID
+				gr, err := g.create(cmd, s, req, tokenHash)
+				if err != nil {
+					return err
+				}
+				granted = &gr
+				out := toGrantOut(gr)
+				body.Grant = &out
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "stored %s (%s)\n", name, layerText(layer))
+			if g.JSON {
+				return writeJSON(cmd.OutOrStdout(), body)
+			}
+			if _, err = fmt.Fprintf(cmd.OutOrStdout(), "stored %s (%s)\n", name, layerText(layer)); err != nil {
+				return err
+			}
+			if granted != nil {
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), "granted %s (%s): %s\n", name, layerText(layer), grantText(*granted))
+			}
 			return err
 		},
 	}
 	lf.bind(cmd)
 	meta.bind(cmd)
 	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the value from stdin")
+	cmd.Flags().StringVar(&grantStr, "grant", "", "also grant the secret to --session: once, session or project (needs --from-prompt-token)")
+	cmd.Flags().StringVar(&token, "from-prompt-token", "", "prompt token that confirms --grant")
 	return cmd
 }
 
@@ -402,13 +474,14 @@ func newRm(g *globals) *cobra.Command {
 				return err
 			}
 			e.Record.Value.Wipe()
-			// TODO(slice 1.6): drop the grants of this record here.
-			if err := s.v.Remove(e.Layer, name); err != nil {
+			res, err := s.v.RemoveWithGrants(e.Layer, name, newGrantsEditor())
+			if err != nil {
 				return mapErr(err, name)
 			}
+			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRm, Names: []string{name}, Layer: auditLayer(e.Layer)})
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), removeBody{OK: true, Name: name, Layer: layerName(e.Layer), Removed: true})
+				return writeJSON(cmd.OutOrStdout(), removeBody{OK: true, Name: name, Layer: layerName(e.Layer), Removed: true, GrantsDropped: res.Changed})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "removed %s (%s)\n", name, layerText(e.Layer))
 			return err
@@ -448,12 +521,20 @@ func newDescribe(g *globals) *cobra.Command {
 			}
 			e.Record.Value.Wipe()
 			r := e.Record
+			active, err := g.recordGrants(cmd.ErrOrStderr(), s, name, e.Layer, e.Record.ID)
+			if err != nil {
+				return err
+			}
 			if g.JSON {
+				shown := []describeGrant{}
+				for _, gr := range active {
+					shown = append(shown, describeGrant{Scope: string(gr.Scope), Session: nullable(gr.Session), ExpiresAt: expiryText(gr.ExpiresAt)})
+				}
 				return writeJSON(cmd.OutOrStdout(), describeBody{
 					OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer),
 					OverridesGlobal: e.OverridesGlobal, Description: r.Description, Sensitive: r.Sensitive,
 					Binaries: nonNil(r.Binaries), Hosts: nonNil(r.Hosts), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-					Grants: []string{},
+					Grants: shown,
 				})
 			}
 			var b strings.Builder
@@ -467,7 +548,15 @@ func newDescribe(g *globals) *cobra.Command {
 			}
 			fmt.Fprintf(&b, "  created:     %s\n", r.CreatedAt)
 			fmt.Fprintf(&b, "  updated:     %s\n", r.UpdatedAt)
-			fmt.Fprintf(&b, "  grants:      none\n")
+			if len(active) == 0 {
+				fmt.Fprintf(&b, "  grants:      none\n")
+			} else {
+				texts := make([]string, len(active))
+				for i, gr := range active {
+					texts[i] = grantText(gr)
+				}
+				fmt.Fprintf(&b, "  grants:      %s\n", strings.Join(texts, "; "))
+			}
 			_, err = io.WriteString(cmd.OutOrStdout(), b.String())
 			return err
 		},

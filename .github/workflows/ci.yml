@@ -42,7 +42,7 @@ jobs:
           flags=""
           if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then flags="-race"; fi
           set -o pipefail
-          go test $flags ./... 2>&1 | tee ci-logs/go-test.log
+          go test -v -count=1 $flags ./... 2>&1 | tee ci-logs/go-test.log
       - name: leak grep
         if: always()
         run: go run ./tools/leakgrep ci-logs

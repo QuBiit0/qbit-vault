@@ -22,7 +22,8 @@
 │  internal/vault       envelope, layers (global/project), resolve, atomic write│
 │  internal/keychain    go-keyring backend + passphrase/Argon2id fallback       │
 │  internal/grants      grants.enc, TTL, scope + layer match                    │
-│  internal/exec        child runner, env build, dump-guard, timeout, pgroup    │
+│  internal/runner      child runner: env build/scrub, shell, tree kill, caps   │
+│  internal/dumpguard   dump-command guard (data file), wrapper/segment parser  │
 │  internal/redact      streaming multi-encoding replacer                       │
 │  internal/prompt      tty / osascript / powershell / zenity capture           │
 │  internal/audit       hash-chained JSONL                                      │

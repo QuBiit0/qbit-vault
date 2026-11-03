@@ -64,13 +64,20 @@ var order = []Type{
 // Types returns every refusal type in contract order.
 func Types() []Type { return append([]Type(nil), order...) }
 
+// Partial is the redacted output a timeout refusal carries (CONTRACT § exec).
+type Partial struct {
+	Stdout string `json:"stdout"`
+	Stderr string `json:"stderr"`
+}
+
 // Refusal is the payload of a typed refusal. Name is nil when the refusal is
 // not about one secret.
 type Refusal struct {
-	Type      Type    `json:"type"`
-	Name      *string `json:"name"`
-	Message   string  `json:"message"`
-	Retryable bool    `json:"retryable"`
+	Type      Type     `json:"type"`
+	Name      *string  `json:"name"`
+	Message   string   `json:"message"`
+	Retryable bool     `json:"retryable"`
+	Partial   *Partial `json:"partial,omitempty"`
 }
 
 // Envelope is the wire form: {"ok":false,"refusal":{…}}.
@@ -97,6 +104,13 @@ func New(t Type, name string) Refusal {
 
 // WithMessage returns r with a different fixed message.
 func (r Refusal) WithMessage(m string) Refusal { r.Message = m; return r }
+
+// WithPartial returns r carrying the (already redacted) output a timed-out
+// command produced before it was killed.
+func (r Refusal) WithPartial(stdout, stderr string) Refusal {
+	r.Partial = &Partial{Stdout: stdout, Stderr: stderr}
+	return r
+}
 
 // WithRetryable returns r with an explicit retryable flag.
 func (r Refusal) WithRetryable(b bool) Refusal { r.Retryable = b; return r }

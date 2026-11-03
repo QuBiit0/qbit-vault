@@ -96,3 +96,22 @@ func TestDefaultsAreFixedStrings(t *testing.T) {
 		t.Fatal("unknown type reported valid")
 	}
 }
+
+func TestPartialIsOptionalAndOnlyOnRequest(t *testing.T) {
+	b, err := json.Marshal(New(Timeout, "").Envelope())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "partial") {
+		t.Fatalf("no partial output was attached: %s", b)
+	}
+	r := New(Timeout, "").WithPartial("out text", "err text")
+	b, err = json.Marshal(r.Envelope())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"ok":false,"refusal":{"type":"timeout","name":null,"message":"the command timed out","retryable":true,"partial":{"stdout":"out text","stderr":"err text"}}}`
+	if string(b) != want {
+		t.Fatalf("got  %s\nwant %s", b, want)
+	}
+}

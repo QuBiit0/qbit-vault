@@ -86,7 +86,13 @@ gentle-vault exec --session S --secret NAME[=ENV] [--secret …] [--timeout 10m]
 
 - Each `--secret NAME` injects vault secret `NAME` as env var `NAME`; `--secret GH_TOKEN=GITHUB_TOKEN` injects `GITHUB_TOKEN`'s value as `GH_TOKEN`.
 - `--stream`: stdout/stderr forwarded as redacted chunks as they arrive (NDJSON `{"stream":"stdout","chunk":"…"}` with `--json`, raw otherwise), final record carries `exit_code`.
-- Exit code: the child's. Refusals exit 3 with the typed refusal on stdout (`--json`) or stderr.
+- **Command.** The words after `--` are joined with single spaces and handed to the shell as one command string; they are not re-quoted. At most 16 `--secret` flags; `--timeout` between 1s and 1h; the command is 1 to 16384 bytes.
+- **Shell.** `auto` is `/bin/sh -c` on POSIX; on Windows it is `bash -c` when `bash` is on PATH (Git Bash), else `cmd /d /s /c`. `sh`, `bash`, `cmd` and `pwsh` force one; an unavailable shell is a usage error.
+- **Order of checks.** (1) resolve every secret from the working directory (`--cwd`, default the current one); (2) grants, looking only; (3) dump-command guard (`dump_command`) over the injected variable names; (4) binary allowlist over every pipeline segment (`scope_binary`); (5) hosts advisory (the audit record notes `hosts warning`, the run goes on); (6) consume `once` grants and append the `started` audit record, fail-closed; (7) run. Any refusal runs nothing.
+- **Environment.** The child gets the parent environment minus every variable named like a vault secret (case-insensitive on Windows), plus the granted values. The parent is never modified. The child inherits stdin.
+- **Output.** Human mode streams the child's redacted stdout/stderr to ours. `--json` prints one object `{"ok":true,"exit_code":N,"stdout":"…","stderr":"…","duration_ms":N,"redactions":N,"truncated":bool}`; each stream is capped at 1 MiB keeping the tail. `--json --stream` prints NDJSON: `{"stream":"stdout|stderr","chunk":"…"}` lines as output arrives, then a final `{"exit_code":N,"duration_ms":N,"redactions":N}`.
+- **Timeout.** On expiry the whole process tree is killed (POSIX process group, Windows job object) and the refusal `timeout` (exit 3) is returned; with `--json` it carries `partial: {stdout, stderr}`, in human mode the partial stdout was already streamed. SIGINT/SIGTERM kill the tree and exit 130.
+- **Exit code:** the child's. Refusals exit 3 with the typed refusal on stdout (`--json`) or stderr.
 
 ## Audit
 

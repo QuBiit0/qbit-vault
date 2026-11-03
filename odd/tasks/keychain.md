@@ -17,8 +17,8 @@ header fields outside `aad` are not authenticated. Branch `feat/cli-skeleton` (s
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| T1 | S5 | worker | `internal/vault`: drop `kdf` from vault.enc, authenticate `cipher` in `aad`, `Init` takes a caller-supplied vault id | | pending |
-| T2 | S1-S4 | worker | `internal/keychain`: OS backend, passphrase backend with `key.enc`, memory-backed unlock cache, setup/unlock/lock | | pending |
+| T1 | S5 | worker | `internal/vault`: drop `kdf` from vault.enc, authenticate `cipher` in `aad`, `Init` takes a caller-supplied vault id | e2cddb6 | done |
+| T2 | S1-S4 | worker | `internal/keychain`: OS backend, passphrase backend with `key.enc`, memory-backed unlock cache, setup/unlock/lock | acd9f0b, fix in next commit | done |
 
 ## Log
 
@@ -26,3 +26,4 @@ header fields outside `aad` are not authenticated. Branch `feat/cli-skeleton` (s
 - L2. Decision: `vault.enc` no longer carries `kdf` (key.enc is the only place that describes key wrapping, and binds its own parameters as AAD). `cipher` moves into the authenticated `aad` object.
 - L3. Decision (spec change to STORAGE.md § Master key): the unlocked passphrase key is cached only in a memory-backed runtime directory (`$XDG_RUNTIME_DIR/gentle-vault/`, tmpfs on Linux). Where none exists (Windows, macOS, Linux without XDG_RUNTIME_DIR) there is no cache and the passphrase is asked on each unlock. Reason: AGENTS.md invariant 2; Windows and macOS always have an OS keychain, so passphrase mode there is rare.
 - L4. Decision: mode is implied by the files: `key.enc` present means passphrase mode, otherwise OS keychain. No extra state field.
+- L5. Independent verify: S1-S5 pass, no blockers. Fixed: relative `XDG_RUNTIME_DIR` was accepted as the cache dir (key would land on ordinary disk); OS probe now deletes its throwaway entry when Set errors. Follow-ups: Argon2 ceiling 1 GiB could be lowered; Setup writes the key before `vault.Init`, so the CLI slice (1.4) must remove an orphan key if Init fails.

@@ -46,6 +46,8 @@ func (*OSBackend) Available() bool {
 	}
 	acct := "probe:" + hex.EncodeToString(r[:])
 	if err := keyring.Set(service, acct, "probe"); err != nil {
+		// Best effort: the entry may exist even though Set reported an error.
+		_ = keyring.Delete(service, acct)
 		return false
 	}
 	got, err := keyring.Get(service, acct)

@@ -24,7 +24,8 @@ type cacheEntry struct {
 // variable is unset or does not name an existing directory.
 func cacheDir(opts Options) string {
 	run := opts.env("XDG_RUNTIME_DIR")
-	if run == "" {
+	// A relative value would resolve against cwd, which is ordinary disk.
+	if run == "" || !filepath.IsAbs(run) {
 		return ""
 	}
 	if fi, err := os.Stat(run); err != nil || !fi.IsDir() {

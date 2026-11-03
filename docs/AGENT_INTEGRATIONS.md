@@ -65,16 +65,20 @@ plus, when the OpenCode plugin API is present, a plugin file `~/.config/opencode
 
 ## Native capture dialog (non-Pi hosts)
 
-`gentle-vault prompt` picks a backend in order of availability, overridable with `GENTLE_VAULT_PROMPT`:
+`gentle-vault prompt`, `set`, `grant` and every other command that asks the user pick a backend in the same order. With `GENTLE_VAULT_PROMPT` unset: the platform's **native dialog when a desktop session is available**, otherwise the terminal. `GENTLE_VAULT_PROMPT=tty|powershell|osascript|zenity|kdialog` forces one; a named backend that is not installed fails with `prompt backend <name> is unavailable` and never falls back to another one.
 
-| OS | Backend | Mechanism |
-| --- | --- | --- |
-| macOS | `osascript` | `display dialog "<name>\n<reason>" default answer "" with hidden answer buttons {"Cancel","Once","Session","Project"}`; the chosen button is the scope |
-| Windows | `powershell` | A `-WindowStyle Normal` PowerShell window with `Read-Host -AsSecureString` and a scope selection; value returned to the parent over an anonymous pipe, never via stdout text |
-| Linux (desktop) | `zenity --password` / `kdialog --password` | followed by a scope dialog |
-| Any | `tty` | opens `/dev/tty` (`CONIN$` on Windows), disables echo, reads value, prints the scope choice menu |
+| OS | Backend | Mechanism | Used when |
+| --- | --- | --- | --- |
+| Windows | `powershell` | `powershell.exe -NoProfile -NonInteractive -STA -Command -` with a WinForms script on stdin: a TopMost dialog, masked `TextBox` (`UseSystemPasswordChar`), radio buttons for layer and scope, `Confirm` / `Decline` or `OK` / `Cancel` buttons | the process runs in an interactive session (not session 0) and `powershell.exe` is on `PATH` |
+| macOS | `osascript` | `display dialog ... with hidden answer` for the value, `choose from list` for layer and scope, `display dialog` with `Decline` / `Confirm` buttons; the script is sent on stdin | `osascript` is on `PATH`, and the shell is not an SSH session without a GUI (`SSH_CONNECTION` or `SSH_TTY` set and neither `__CFBundleIdentifier` nor `TERM_PROGRAM` set) |
+| Linux (desktop) | `zenity` or `kdialog` | zenity: `--entry --hide-text` for the value (`--password` has no text field, so it could not show the request), `--list --radiolist`, `--question`; kdialog: `--password`, `--radiolist`, `--yesno`. zenity is tried first | `DISPLAY` or `WAYLAND_DISPLAY` is set and one of the two is on `PATH` |
+| Any | `tty` | opens `/dev/tty` (`CONIN$` on Windows), disables echo, reads value, prints the scope choice menu | the fallback, or `GENTLE_VAULT_PROMPT=tty` |
 
-The dialog always shows: secret name, the reason verbatim, the host and session id, the project label (or `global`), and whether the value is **new** or **already stored (grant only)**. When the value is new and `cwd` is inside a repository, the dialog also asks for the layer (`Global` / `This project`). For `secret_manage` the same backends render a confirmation (`prompt --confirm`) with the action, the diff and `Confirm` / `Decline`. Values flow back to the broker over a pipe/fd, never through stdout.
+The dialog always shows: secret name, the reason verbatim (control and bidi characters shown as visible escapes, so a reason cannot add a line or paint over the dialog), the host and session id, the project label (or `global`), and whether the value is **new** or **already stored (it will be replaced)**. When the value is new and `cwd` is inside a repository, the dialog also asks for the layer (`Global` / `This project`). For `secret_manage` the same backends render a confirmation (`prompt --confirm`) with the action, the diff and `Confirm` / `Decline`; closing the dialog or pressing Esc is `Decline`, and on Windows and macOS so is Enter (the default button). A passphrase asked twice (`init`) is two dialogs.
+
+**How the value comes back.** The value never travels on gentle-vault's own stdout, which the host can read. It comes back on the **helper's** stdout: a private anonymous pipe between the dialog helper and gentle-vault that the agent does not hold. The helper's script or arguments carry the request text only (for PowerShell as base64 data, for AppleScript as escaped literals, for zenity and kdialog as single argv elements), never a value, and the helper's environment is gentle-vault's own with nothing added. gentle-vault reads the pipe as bytes into one buffer and wipes it after copying the value into a `Secret`; a failing or cancelled helper yields only a typed error (`cancelled`, `prompt timed out`, or `prompt backend unavailable`) with none of the helper's output. A dialog that cannot open when it was selected (no display, helper crashed) is the unavailable error, not a silent retry on the terminal.
+
+`prompt --value` hands the value to the host on file descriptor 3, which POSIX hosts can open. Windows does not pass numbered descriptors to child processes, so there `--value` is refused; a Windows host captures with its own prompt (the Pi extension's masked input) or lets `set` open the native dialog, and stores with `set --stdin`.
 
 ## Deny-list alignment with Gentle AI
 

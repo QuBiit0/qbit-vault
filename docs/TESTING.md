@@ -11,7 +11,7 @@ Three tiers, mirroring Gentle AI, plus a leak battery that runs on every tier.
 | `grants` | (name, layer) binding: a global grant never injects a project override and the reverse; `mv`/`replace`/`rm` drop grants; each scope; expiry purge; `once` consumed exactly once; project root resolution incl. worktrees; no inheritance across sessions |
 | `exec` | env scrubbing (same-named parent var removed); injection present in child, absent in parent after; dump-guard list (every entry, plus negative cases like `env | grep PATH` being *allowed* when no secret is injected); binary allowlist with wrappers (`sudo`, `npx`, `uv run`); timeout kills the process group; exit code passthrough |
 | `redact` | raw, base64 std/url ±padding, percent (query/path/strict/Python `quote`/JS `encodeURIComponent`, either hex case), JSON-escaped (incl. `\/`), quoted; multi-line values (LF/CRLF translation, each line ≥ 16 bytes alone, whole PEM, interleaved with other output); base64 inner-substring at all three byte alignments (Basic auth `base64(user:value)`, 0–8 byte prefixes, ±padding, std/url); chunk boundaries at every offset of a value and one-byte writes; short-value warning and still redacted; overlapping values (longest wins), shared prefixes, adjacent occurrences; fail-closed after `Wipe`; never printed via `fmt`. `BenchmarkRedact` / `BenchmarkRedactStream` track 1 MiB against 16 secrets (about 130 MB/s on a Ryzen 7 7435HS) |
-| `prompt` | each backend behind an interface with a fake; cancel/blank/whitespace paths; value never in argv or stdout |
+| `prompt` | each backend behind an interface with a fake; cancel/blank/whitespace paths; value never in argv or stdout; native backends: exact argv or script per helper and dialog kind, escaping tables (quotes, backslashes, `$`, backticks, `%`, newlines, NUL, ANSI, bidi, invalid UTF-8) proving request text cannot leave its literal, stdout parsing and cancel codes per tool, availability matrix and selection order through injected `GOOS`/env/`LookPath`, and (Windows) the real PowerShell parser over every script |
 | `audit` | hash chain; verify detects an edited middle line, a deleted line, a truncated file |
 | `broker` | every op; every refusal type reachable; `grant` or `manage` without prompt token → `not_model_callable`; every `manage` action applies only after confirmation and leaves the vault and grants byte-identical on decline; `manage` never creates a grant; `list` never shows another project; `policy` strings match `CONTRACT.md` verbatim; existence not disclosed in `request` responses |
 | `adapters` | golden files for each host config before/after; Gentle AI deny entries preserved; idempotency; uninstall restores byte-identical snapshot |
@@ -40,6 +40,15 @@ Spawns real hosts in sandboxed HOMEs with a mock LLM provider that replays scrip
 - OpenCode: `opencode run` with MCP + plugin.
 
 Costs real host sessions; run before merging anything touching exec/redact/prompt/mcp/hooks/extension.
+
+## Manual smoke: native dialogs (once per OS, before a release)
+
+The dialogs open on a real desktop and cannot run in CI; unit tests cover the command each backend builds. Use a throwaway `--home`, and type `TESTSECRET_manual` as the value.
+
+1. **Windows 11, PowerShell 5.1.** `GENTLE_VAULT_MANUAL_DIALOG=1 go test ./internal/prompt -run TestManualPowerShellDialog -v` opens a secret, a choice and a confirmation dialog. Check: the dialog is TopMost above other windows; the reason with quotes, `$` and a newline is shown as typed, with `\n` for the newline; the box is masked; Esc cancels (`cancelled`); `gentle-vault set NAME` opens the dialog and stores the value; `GENTLE_VAULT_PROMPT=tty gentle-vault set NAME` asks in the terminal; from a service session, or with `powershell.exe` off `PATH`, the command ends with an unavailable error, not a hang.
+2. **macOS.** `gentle-vault set NAME` shows the hidden-answer dialog with the request; Cancel ends `cancelled`; `gentle-vault grant NAME` shows the scope list; over `ssh` from a machine with no GUI app the terminal prompt is used.
+3. **Linux, GNOME (zenity) and KDE (kdialog).** With `DISPLAY` or `WAYLAND_DISPLAY` set, `set` opens the dialog; on a console login (no display) the terminal prompt is used; `GENTLE_VAULT_PROMPT=kdialog` on a machine without it fails with `prompt backend kdialog is unavailable`.
+4. **Every OS.** The value is stored (`exec` with a grant prints it redacted); nothing of the value is in the process list command lines while the dialog is open; a dialog left open ends with `prompt timed out` after `GENTLE_VAULT_PROMPT_TIMEOUT` and the helper process is gone.
 
 ## Leak battery (every tier)
 

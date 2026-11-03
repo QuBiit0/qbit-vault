@@ -13,6 +13,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +41,7 @@ var (
 	// ErrCancelled means the user gave up (Ctrl-C, end of input).
 	ErrCancelled = errors.New("cancelled")
 	// ErrUnavailable means the backend cannot ask: there is no controlling
-	// terminal, or the backend does not exist in this release.
+	// terminal, or the native helper is missing or failed.
 	ErrUnavailable = errors.New("prompt backend unavailable")
 	// ErrMismatch means the two passphrase entries differ.
 	ErrMismatch = errors.New("passphrases do not match")
@@ -102,23 +104,42 @@ type Terminal interface {
 	Close() error
 }
 
-// Select picks the backend named by GENTLE_VAULT_PROMPT: the terminal one
-// when it is unset or `tty`. The native dialogs arrive with slice 1.10. The
-// wait is bounded by GENTLE_VAULT_PROMPT_TIMEOUT.
+// Select picks the backend for this machine: GENTLE_VAULT_PROMPT when it is
+// set, else the platform's native dialog when a desktop session is available,
+// else the terminal (L2). The wait is bounded by GENTLE_VAULT_PROMPT_TIMEOUT.
 func Select(getenv func(string) string) (Backend, error) {
+	return SelectWith(Env{GOOS: runtime.GOOS, Getenv: getenv, LookPath: exec.LookPath, Interactive: interactiveSession})
+}
+
+// SelectWith is Select over an Env, for tests.
+func SelectWith(e Env) (Backend, error) {
 	timeout := DefaultTimeout
-	if v := getenv(EnvTimeout); v != "" {
+	if v := e.Getenv(EnvTimeout); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil || d < MinTimeout || d > MaxTimeout {
 			return nil, fmt.Errorf("%w: %s must be a duration between %s and %s", ErrBadTimeout, EnvTimeout, MinTimeout, MaxTimeout)
 		}
 		timeout = d
 	}
-	switch name := getenv(EnvBackend); name {
-	case "", "tty":
+	run := e.run
+	if run == nil {
+		run = execRunner
+	}
+	switch name := e.Getenv(EnvBackend); name {
+	case "":
+		if t, path := nativeFor(e); t != nil {
+			return newNative(t, path, run, timeout), nil
+		}
+		return New(openConsole, Timeout(timeout)), nil
+	case "tty":
 		return New(openConsole, Timeout(timeout)), nil
 	case "osascript", "powershell", "zenity", "kdialog":
-		return nil, unavailableError{"prompt backend " + name + " arrives in a later release"}
+		t := toolByName(name)
+		path, err := forced(e, t)
+		if err != nil {
+			return nil, err
+		}
+		return newNative(t, path, run, timeout), nil
 	default:
 		return nil, fmt.Errorf("%w: %s=%q", ErrUnknownBackend, EnvBackend, name)
 	}

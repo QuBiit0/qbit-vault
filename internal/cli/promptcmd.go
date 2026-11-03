@@ -27,12 +27,13 @@ const valueFD = 3
 
 var (
 	errNoFD3      = errors.New("--value needs file descriptor 3 to be open")
-	errFD3Windows = errors.New("--value is not supported on Windows until the native prompt arrives")
+	errFD3Windows = errors.New("--value is not supported on Windows (no file descriptor 3); capture with the host's own prompt and store with set --stdin")
 )
 
 // openValueFD opens the descriptor the value goes to. It is a seam for tests.
 // Windows does not hand a child a numbered descriptor the way POSIX does, so
-// there `--value` is refused until the native prompt of slice 1.10.
+// there `--value` is refused: a Windows host captures with its own prompt (the
+// Pi extension) or the native dialog of `set`, and stores with `set --stdin`.
 var openValueFD = func() (io.WriteCloser, error) {
 	if runtime.GOOS == "windows" {
 		return nil, errFD3Windows

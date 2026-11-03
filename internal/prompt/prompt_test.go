@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -411,27 +412,21 @@ func TestReadLine(t *testing.T) {
 }
 
 func TestSelect(t *testing.T) {
-	env := func(v string) func(string) string {
-		return func(k string) string {
+	env := func(v string) Env {
+		return Env{GOOS: "linux", LookPath: exec.LookPath, Getenv: func(k string) string {
 			if k == EnvBackend {
 				return v
 			}
 			return ""
-		}
+		}}
 	}
 	for _, v := range []string{"", "tty"} {
-		b, err := Select(env(v))
+		b, err := SelectWith(env(v))
 		if err != nil || b == nil || b.Name() != "tty" {
 			t.Errorf("%q: %v, %v", v, b, err)
 		}
 	}
-	for _, v := range []string{"osascript", "powershell", "zenity", "kdialog"} {
-		b, err := Select(env(v))
-		if b != nil || !errors.Is(err, ErrUnavailable) || err.Error() != "prompt backend "+v+" arrives in a later release" {
-			t.Errorf("%q: %v, %v", v, b, err)
-		}
-	}
-	b, err := Select(env("carrier-pigeon"))
+	b, err := SelectWith(env("carrier-pigeon"))
 	if b != nil || err == nil || errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), EnvBackend) || !strings.Contains(err.Error(), "carrier-pigeon") {
 		t.Errorf("unknown: %v, %v", b, err)
 	}
@@ -538,12 +533,12 @@ func TestSelectTimeoutEnv(t *testing.T) {
 		}
 	}
 	for _, v := range []string{"", "10s", "90s", "1h", "5m"} {
-		if _, err := Select(env(v)); err != nil {
+		if _, err := SelectWith(Env{GOOS: "freebsd", LookPath: exec.LookPath, Getenv: env(v)}); err != nil {
 			t.Errorf("%q: %v", v, err)
 		}
 	}
 	for _, v := range []string{"9s", "1h1s", "0", "-5m", "abc", "5"} {
-		b, err := Select(env(v))
+		b, err := SelectWith(Env{GOOS: "freebsd", LookPath: exec.LookPath, Getenv: env(v)})
 		if b != nil || !errors.Is(err, ErrBadTimeout) || !strings.Contains(err.Error(), EnvTimeout) {
 			t.Errorf("%q: %v, %v", v, b, err)
 		}

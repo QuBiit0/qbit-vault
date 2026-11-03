@@ -70,7 +70,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 ### 5.2 Capture (out-of-band input)
 
-- R-CAP-01. The value MUST be captured through a channel the model cannot observe: Pi/Gentle Shell `ctx.ui.custom` masked input; otherwise a native dialog (macOS `osascript` with hidden answer, Windows PowerShell `Read-Host -AsSecureString` in a separate window, Linux `zenity --password` / `kdialog --password`), with a final fallback of reading from `/dev/tty` (or `CONIN$`) with echo disabled.
+- R-CAP-01. The value MUST be captured through a channel the model cannot observe: Pi/Gentle Shell `ctx.ui.custom` masked input; otherwise a native dialog (macOS `osascript` with hidden answer, a Windows PowerShell WinForms dialog with a masked box in a separate window, Linux `zenity --entry --hide-text` / `kdialog --password`), with a final fallback of reading from `/dev/tty` (or `CONIN$`) with echo disabled.
 - R-CAP-02. The prompt MUST show the secret name and the agent-supplied reason, so the user can judge whether the request is legitimate.
 - R-CAP-03. The prompt MUST offer the grant scope choices (R-GRANT-02) in the same interaction so a first use costs exactly one prompt.
 - R-CAP-03a. The capture prompt MUST also offer the layer choice (`global` / `this project`) when `cwd` is inside a repository, defaulting to the agent's `suggested_layer` or `global`.

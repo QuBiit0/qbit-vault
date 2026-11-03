@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -189,11 +190,14 @@ func TestSetInteractiveNeedsTerminal(t *testing.T) {
 func TestSetInteractiveBadBackendEnv(t *testing.T) {
 	w := newWorld(t)
 	old := newPrompt
-	newPrompt = func(g *globals) (prompt.Backend, error) { return prompt.Select(g.getenv) }
+	newPrompt = func(g *globals) (prompt.Backend, error) {
+		// A machine with no helper installed, whatever this one has.
+		return prompt.SelectWith(prompt.Env{GOOS: "linux", Getenv: g.getenv, LookPath: func(string) (string, error) { return "", exec.ErrNotFound }})
+	}
 	t.Cleanup(func() { newPrompt = old })
 	var out, errb bytes.Buffer
 	code := execute([]string{"--home", w.home, "set", "A_KEY"}, &out, &errb, envFrom(map[string]string{prompt.EnvBackend: "zenity"}))
-	if code != exitcode.Usage || errb.String() != usageErr("prompt backend zenity arrives in a later release; use --stdin") {
+	if code != exitcode.Usage || errb.String() != usageErr("prompt backend zenity is unavailable: zenity not found on PATH; use --stdin") {
 		t.Fatalf("code=%d err=%q", code, errb.String())
 	}
 	errb.Reset()
@@ -599,7 +603,7 @@ func TestPromptValueNeedsFD3(t *testing.T) {
 	code, out, errs := w.run("", "--session", sessA, "prompt", "--name", "A_KEY", "--reason", "r", "--value")
 	want := "--value needs file descriptor 3 to be open"
 	if runtime.GOOS == "windows" {
-		want = "--value is not supported on Windows until the native prompt arrives"
+		want = "--value is not supported on Windows (no file descriptor 3); capture with the host's own prompt and store with set --stdin"
 	}
 	if code != exitcode.Usage || out != "" || errs != usageErr(want) || len(f.Calls) != 0 {
 		t.Fatalf("code=%d out=%q err=%q calls=%d", code, out, errs, len(f.Calls))
@@ -841,5 +845,26 @@ func TestInteractiveSetAuditsManualEntry(t *testing.T) {
 	recs := w.auditEvents("capture")
 	if len(recs) != 2 || recs[0].Reason != "manual entry" || recs[1].Reason != "" {
 		t.Fatalf("capture records = %+v", recs)
+	}
+}
+
+// TestEveryBackendComesFromSelect keeps a command from opening the terminal
+// backend by hand and so skipping the native dialog (L2).
+func TestEveryBackendComesFromSelect(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("glob: %v", err)
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(src), "prompt.New(") {
+			t.Errorf("%s builds a prompt backend without prompt.Select", f)
+		}
 	}
 }

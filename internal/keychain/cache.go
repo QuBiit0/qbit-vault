@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/QuBiit0/gentle-vault/internal/perm"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 )
 
@@ -20,9 +21,13 @@ type cacheEntry struct {
 	Key       string `json:"key"`
 }
 
-// cacheDir returns the cache directory, or "" when caching is off: the
-// variable is unset or does not name an existing directory.
+// cacheDir returns the cache directory, or "" when caching is off: not on
+// Linux, or the variable is unset, relative, or not an existing directory.
 func cacheDir(opts Options) string {
+	// Only Linux's XDG_RUNTIME_DIR is known to be memory-backed (tmpfs).
+	if opts.platform() != "linux" {
+		return ""
+	}
 	run := opts.env("XDG_RUNTIME_DIR")
 	// A relative value would resolve against cwd, which is ordinary disk.
 	if run == "" || !filepath.IsAbs(run) {
@@ -77,7 +82,9 @@ func cachePut(opts Options, vaultID string, key secret.Secret) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return
 	}
-	_ = os.Chmod(dir, 0o700)
+	if err := perm.EnsureDir(dir); err != nil {
+		return
+	}
 	raw := key.Reveal()
 	defer clear(raw)
 	enc := make([]byte, base64.StdEncoding.EncodedLen(len(raw)))

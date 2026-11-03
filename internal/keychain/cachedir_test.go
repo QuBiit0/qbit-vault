@@ -14,11 +14,27 @@ func TestCacheDirRejectsRelativeRuntimeDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(cwd)
-	if got := cacheDir(Options{getenv: env(map[string]string{"XDG_RUNTIME_DIR": "rel"})}); got != "" {
+	if got := cacheDir(Options{goos: "linux", getenv: env(map[string]string{"XDG_RUNTIME_DIR": "rel"})}); got != "" {
 		t.Fatalf("relative XDG_RUNTIME_DIR accepted as cache dir")
 	}
 	abs := filepath.Join(cwd, "rel")
-	if got := cacheDir(Options{getenv: env(map[string]string{"XDG_RUNTIME_DIR": abs})}); got != filepath.Join(abs, "gentle-vault") {
+	if got := cacheDir(Options{goos: "linux", getenv: env(map[string]string{"XDG_RUNTIME_DIR": abs})}); got != filepath.Join(abs, "gentle-vault") {
 		t.Fatalf("absolute XDG_RUNTIME_DIR rejected")
+	}
+}
+
+// The unlock cache exists only on Linux, whatever XDG_RUNTIME_DIR says:
+// elsewhere a runtime dir is not known to be memory-backed.
+func TestCacheDirOnlyOnLinux(t *testing.T) {
+	abs := t.TempDir()
+	for _, goos := range []string{"windows", "darwin", "freebsd"} {
+		opts := Options{goos: goos, getenv: env(map[string]string{"XDG_RUNTIME_DIR": abs})}
+		if got := cacheDir(opts); got != "" {
+			t.Fatalf("cache enabled on %s", goos)
+		}
+	}
+	opts := Options{goos: "linux", getenv: env(map[string]string{"XDG_RUNTIME_DIR": abs})}
+	if got := cacheDir(opts); got == "" {
+		t.Fatalf("cache disabled on linux")
 	}
 }

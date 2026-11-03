@@ -476,7 +476,7 @@ func TestProductionKDFParams(t *testing.T) {
 // ---- Unlock cache ----
 
 func cacheOpts(dir string) Options {
-	return Options{getenv: env(map[string]string{"XDG_RUNTIME_DIR": dir})}
+	return Options{goos: "linux", getenv: env(map[string]string{"XDG_RUNTIME_DIR": dir})}
 }
 
 func TestCacheHitAvoidsPrompt(t *testing.T) {

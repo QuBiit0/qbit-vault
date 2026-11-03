@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
 
+	"github.com/QuBiit0/gentle-vault/internal/perm"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 )
 
@@ -130,6 +131,9 @@ func writeKeyFile(home string, key, pass secret.Secret) error {
 	}
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return fmt.Errorf("keychain: create home: %w", bare(err))
+	}
+	if err := perm.EnsureDir(home); err != nil {
+		return fmt.Errorf("keychain: secure home: %w", bare(err))
 	}
 	return writeAtomic(home, keyFileName, out)
 }

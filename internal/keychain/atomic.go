@@ -1,6 +1,8 @@
 package keychain
 
 import (
+	"github.com/QuBiit0/gentle-vault/internal/perm"
+
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -27,6 +29,11 @@ func writeAtomic(dir, name string, data []byte) (err error) {
 			_ = os.Remove(tmp)
 		}
 	}()
+	// Owner-only before any key bytes are written (Windows DACL, POSIX 0600).
+	if err = perm.EnsureFile(tmp); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("keychain: secure temp file: %w", bare(err))
+	}
 	if _, err = f.Write(data); err == nil {
 		err = f.Sync()
 	}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"time"
 
 	"github.com/QuBiit0/gentle-vault/internal/secret"
@@ -74,6 +75,7 @@ type Options struct {
 	backend Backend // test seam: replaces the OS backend
 	getenv  func(string) string
 	now     func() time.Time
+	goos    string // test seam: replaces runtime.GOOS
 }
 
 func (o Options) env(k string) string {
@@ -81,6 +83,13 @@ func (o Options) env(k string) string {
 		return o.getenv(k)
 	}
 	return os.Getenv(k)
+}
+
+func (o Options) platform() string {
+	if o.goos != "" {
+		return o.goos
+	}
+	return runtime.GOOS
 }
 
 func (o Options) clock() time.Time {

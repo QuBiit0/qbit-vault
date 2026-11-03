@@ -18,6 +18,10 @@ import (
 // maxValueBytes bounds a value read from stdin (docs/CLI.md § set).
 const maxValueBytes = 64 * 1024
 
+// valueSlackBytes is how much surrounding whitespace readValue tolerates
+// beyond maxValueBytes.
+const valueSlackBytes = 4096
+
 type projectRef struct {
 	Root  string `json:"root"`
 	Label string `json:"label"`
@@ -251,15 +255,18 @@ func findEntry(s *session, name string, lf layerFlags, cwd string) (vault.Entry,
 // readValue reads the secret value from r: at most maxValueBytes, surrounding
 // whitespace trimmed, blank refused (R-CAP-04). The caller wipes the result.
 func readValue(r io.Reader) ([]byte, error) {
-	b, err := io.ReadAll(io.LimitReader(r, maxValueBytes+1))
+	// Read some slack past the limit so surrounding whitespace (a trailing
+	// newline from echo) does not count against it; the limit applies to the
+	// trimmed value.
+	b, err := io.ReadAll(io.LimitReader(r, maxValueBytes+valueSlackBytes+1))
 	if err != nil {
 		return nil, errors.New("cannot read the value from stdin")
 	}
-	if len(b) > maxValueBytes {
+	v := bytes.TrimSpace(b)
+	if len(v) > maxValueBytes || len(b) > maxValueBytes+valueSlackBytes {
 		clear(b)
 		return nil, usageError{"value too large"}
 	}
-	v := bytes.TrimSpace(b)
 	if len(v) == 0 {
 		clear(b)
 		return nil, usageError{"empty value"}

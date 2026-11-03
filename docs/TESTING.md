@@ -45,6 +45,8 @@ Costs real host sessions; run before merging anything touching exec/redact/promp
 
 After each test, every byte that could reach a model is captured: tool results, MCP responses, hook stdout, host session files (`~/.pi/agent/sessions/**`, `~/.claude/projects/**`, Codex/OpenCode logs), gentle-vault's own stdout/stderr, the audit log, `backups/`, core dumps if any. The battery greps all of it for `TESTSECRET_` and for the base64/percent/JSON encodings of every fixture. **Any hit fails the run.** CI blocks merges on it; a PR touching the listed packages without adding a leak case is rejected by a path-based check.
 
+In CI, `tools/leakgrep` (`go run ./tools/leakgrep PATH...`) runs over `ci-logs/`, which holds the stdout and stderr of every `go test` run on each OS. It scans recursively for `TESTSECRET_` raw, percent-encoded and JSON-escaped, and for base64 (standard and URL-safe) at all three byte alignments. It reports `path:offset: encoding` and never the surrounding bytes; any hit fails the job.
+
 ## Contract conformance (`e2e/contract-conformance`)
 
 A host adapter is conformant when, against the JSON schema in `contracts/secrets-broker/v1/`:

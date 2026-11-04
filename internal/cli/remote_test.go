@@ -905,9 +905,9 @@ func TestRemoteSyncRound(t *testing.T) {
 	if code, _, _, _ := joinPairing(t, b, a, ss); code != 0 {
 		t.Fatal("join failed")
 	}
-	asBackend(t, keepBackend{answers()}) // sync never prompts
+	asBackend(t, keepBackend{answers()}) // sync never prompts; set pushes by itself (S.8)
 	a.mustRun(fxVal+"_x", "set", "X_KEY", "--global", "--stdin")
-	if code, out, errs := a.run("", "remote", "sync"); code != 0 || errs != "" || !strings.HasPrefix(out, "synced (version ") {
+	if code, out, errs := a.run("", "remote", "sync"); code != 0 || errs != "" || !strings.HasPrefix(out, "up to date (version ") {
 		t.Fatalf("push: code=%d out=%q err=%q", code, out, errs)
 	}
 	code, out, errs := b.run("", "--json", "remote", "sync")

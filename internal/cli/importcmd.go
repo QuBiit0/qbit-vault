@@ -33,6 +33,8 @@ type importBody struct {
 	Skipped       int           `json:"skipped"`
 	GrantsDropped int           `json:"grants_dropped"`
 	SourceRemoved bool          `json:"source_removed"`
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 // importSource is what an import read: names in order and their values.
@@ -180,7 +182,8 @@ func newImport(g *globals) *cobra.Command {
 			if envGiven {
 				fmt.Fprintf(stderr, "hint: unset %s in your shell; gentle-vault cannot change the environment of the shell that started it\n", strings.Join(src.order, " "))
 			}
-			return writeImported(g, cmd.OutOrStdout(), layer, src, replaced, res.Changed, removed)
+			remoteState := g.pushAfterCmd(cmd, s)
+			return writeImported(g, cmd.OutOrStdout(), layer, src, replaced, res.Changed, removed, remoteState)
 		},
 	}
 	lf.bind(cmd)
@@ -303,13 +306,13 @@ func (g *globals) importLayer(lf layerFlags, cwd string, backend func() (prompt.
 	return vault.Global(), nil
 }
 
-func writeImported(g *globals, out io.Writer, layer vault.Layer, src *importSource, replaced []string, dropped int, removed bool) error {
+func writeImported(g *globals, out io.Writer, layer vault.Layer, src *importSource, replaced []string, dropped int, removed bool, remoteState string) error {
 	isReplaced := map[string]bool{}
 	for _, n := range replaced {
 		isReplaced[n] = true
 	}
 	if g.JSON {
-		body := importBody{OK: true, Layer: layerName(layer), Project: projectOf(layer), Skipped: src.skipped, GrantsDropped: dropped, SourceRemoved: removed}
+		body := importBody{OK: true, Layer: layerName(layer), Project: projectOf(layer), Skipped: src.skipped, GrantsDropped: dropped, SourceRemoved: removed, Remote: remoteState}
 		for _, n := range src.order {
 			body.Imported = append(body.Imported, importedOut{Name: n, Replaced: isReplaced[n]})
 		}

@@ -158,6 +158,7 @@ func newPromptCmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
+			g.pullBeforeCmd(cmd, s)
 
 			layerChoice := avail[0]
 			// From here the user is asked, so the outcome is audited, best effort.

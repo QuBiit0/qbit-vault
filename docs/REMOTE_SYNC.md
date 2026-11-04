@@ -155,7 +155,7 @@ The server verifies only what it can: token validity, CAS on `version`, sizes an
 
 ### 7.1 When it runs (no daemon)
 
-- **Push after every mutation.** `set`, `rm`, `mv`, `edit`, `relink`, `link`, `import`, `restore`, `rekey` and an applied `manage` run one sync round after releasing the vault lock, with a 5 s budget (`config.remote.timeout`). If the server is unreachable the change stays committed locally, `state.json.remote.pending_push` is set and stderr says `warning: not synced (server unreachable); will retry`. `--json` output gains `"remote":"synced"|"pending"` when sync is enabled.
+- **Push after every mutation.** `set`, `rm`, `mv`, `edit`, `relink`, `link`, `import`, `restore`, `rekey` and an applied `manage` run one sync round after releasing the vault lock, with a 5 s budget (`config.remote.timeout`). If the server is unreachable the change stays committed locally, `state.json.remote.pending_push` is set and stderr says `warning: not synced (server unreachable); will retry`. `--json` output gains `"remote":"synced"|"pending"` when sync is enabled (not on the broker's `manage`, whose response is pinned by the contract). A round that fails for a reason other than reachability (`remote_rollback`, a refused verification or device) keeps the change local and the push pending and prints `warning: not synced (<code>); the change is kept on this device; run 'gentle-vault remote status'`; it is never reported as unreachable. Until a `config.yaml` loader exists the budgets and the pull interval are constants (`pushBudget`, `pullBudget`, `pullInterval` in `internal/cli/remoteauto.go`). `GENTLE_VAULT_NO_REMOTE=1` makes no call and marks pushes pending, without a warning.
 - **Pull before reading for a person or the agent.** `list`, `describe`, the broker's `request` and `list`, `prompt`, `set` and `remote sync` pull first when the last pull is older than `config.remote.pull_interval` (default 60 s), with a 2 s budget; a failure is silent there and shown by `remote status` and `doctor`. A pending push is retried at the same moments.
 - **Never on the hot path.** `exec`, `grant`, `revoke`, `grants` and `audit` (except `audit --verify`, § 8) never touch the network, so running a command with a secret works offline and keeps its latency (R-NFR-02).
 
@@ -236,5 +236,6 @@ The local audit log is hash-chained and anchored by `audit.head`, but a local at
 | `pairing_failed` | 1 | fingerprint or confirmation code mismatch, pairing expired |
 | `device_revoked` | 1 | this device was revoked; sync is now off |
 | `server_incompatible` | 1 | the server speaks another API major |
+| `remote_rekey_unavailable` | 1 | `rekey` on a vault that syncs, until the remote rekey of § 4.5 is implemented (a local rekey would leave the account on the old key) |
 
 None of these messages contains a value, a key, a code or a token.

@@ -32,6 +32,9 @@ func newRekey(g *globals) *cobra.Command {
 		Short: "Rotate the master key",
 		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := g.refuseRekeyWhileSyncing(); err != nil {
+				return err
+			}
 			s, err := g.openSession()
 			if err != nil {
 				return err

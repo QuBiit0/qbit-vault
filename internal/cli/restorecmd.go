@@ -28,6 +28,8 @@ type backupsBody struct {
 type restoreBody struct {
 	OK       bool   `json:"ok"`
 	Restored string `json:"restored"`
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 const msgBackupKey = "backup cannot be opened with the current or a retired key"
@@ -102,8 +104,9 @@ func newRestore(g *globals) *cobra.Command {
 				return mapErr(err, "")
 			}
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRestore, Detail: from})
+			remoteState := g.pushAfterOpen(cmd)
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), restoreBody{OK: true, Restored: from})
+				return writeJSON(cmd.OutOrStdout(), restoreBody{OK: true, Restored: from, Remote: remoteState})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "restored the vault from %s (the previous state was backed up first)\n", from)
 			return err

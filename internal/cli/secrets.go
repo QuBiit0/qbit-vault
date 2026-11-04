@@ -42,6 +42,8 @@ type setBody struct {
 	// omitted when none went.
 	GrantsDropped int       `json:"grants_dropped,omitempty"`
 	Grant         *grantOut `json:"grant,omitempty"` // set --grant only
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 type removeBody struct {
@@ -51,6 +53,8 @@ type removeBody struct {
 	Removed bool   `json:"removed"`
 	// GrantsDropped counts the grants the removal dropped; omitted when none.
 	GrantsDropped int `json:"grants_dropped,omitempty"`
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 type editBody struct {
@@ -62,6 +66,8 @@ type editBody struct {
 	// GrantsDropped counts the grants an edit to sensitive dropped; omitted
 	// when none.
 	GrantsDropped int `json:"grants_dropped,omitempty"`
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 type describeBody struct {
@@ -384,6 +390,7 @@ func newSet(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
+			g.pullBeforeCmd(cmd, s)
 
 			var rec vault.Record
 			replaced := false
@@ -455,6 +462,7 @@ func newSet(g *globals) *cobra.Command {
 			}
 			g.record(cmd.ErrOrStderr(), recd)
 			body := setBody{OK: true, Name: name, Layer: layerName(layer), Project: projectOf(layer), Replaced: replaced, GrantsDropped: res.Changed}
+			body.Remote = g.pushAfterCmd(cmd, s)
 			var granted *grants.Grant
 			if scope != "" {
 				req.RecordID = res.RecordID
@@ -537,8 +545,9 @@ func newRm(g *globals) *cobra.Command {
 			}
 			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRm, Names: []string{name}, Layer: auditLayer(e.Layer)})
+			remoteState := g.pushAfterCmd(cmd, s)
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), removeBody{OK: true, Name: name, Layer: layerName(e.Layer), Removed: true, GrantsDropped: res.Changed})
+				return writeJSON(cmd.OutOrStdout(), removeBody{OK: true, Name: name, Layer: layerName(e.Layer), Removed: true, GrantsDropped: res.Changed, Remote: remoteState})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "removed %s (%s)\n", name, layerText(e.Layer))
 			return err
@@ -572,6 +581,7 @@ func newDescribe(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
+			g.pullBeforeCmd(cmd, s)
 			e, err := findEntry(s, name, lf, cwd)
 			if err != nil {
 				return err
@@ -665,8 +675,9 @@ func newEdit(g *globals) *cobra.Command {
 			}
 			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventEdit, Names: []string{name}, Layer: auditLayer(e.Layer)})
+			remoteState := g.pushAfterCmd(cmd, s)
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), editBody{OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer), Updated: true, GrantsDropped: res.Changed})
+				return writeJSON(cmd.OutOrStdout(), editBody{OK: true, Name: name, Layer: layerName(e.Layer), Project: projectOf(e.Layer), Updated: true, GrantsDropped: res.Changed, Remote: remoteState})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "updated %s (%s)\n", name, layerText(e.Layer))
 			return err
@@ -705,6 +716,7 @@ func newList(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
+			g.pullBeforeCmd(cmd, s)
 
 			var entries []vault.Entry
 			if layer == "here" {

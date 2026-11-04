@@ -76,7 +76,16 @@ func responseExit(out []byte) int {
 // resolved from the envelope's cwd, never the process one.
 type cliBackend struct{ g *globals }
 
+// bound is hot plus a pull first: it is what the operations that read for
+// the agent (list, request) start with, so the answer reflects the other
+// devices (REMOTE_SYNC § 7.1). exec, grant, revoke and manage use hot.
 func (b *cliBackend) bound(e broker.Envelope) *globals {
+	c := b.hot(e)
+	c.pullFirst(context.Background())
+	return c
+}
+
+func (b *cliBackend) hot(e broker.Envelope) *globals {
 	c := *b.g
 	c.Session, c.JSON = e.Session, true
 	c.execStdin = bytes.NewReader(nil)
@@ -193,7 +202,7 @@ func applicableGrant(gs []grants.Grant, session string) *broker.GrantInfo {
 }
 
 func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecRequest) (broker.ExecResponse, error) {
-	g := b.bound(e)
+	g := b.hot(e)
 	p := execPlan{command: r.Command, timeout: time.Duration(r.TimeoutMS) * time.Millisecond, shell: runner.Shell(r.Shell)}
 	seen := map[string]bool{}
 	for _, sc := range r.Secrets {
@@ -235,7 +244,7 @@ func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecR
 }
 
 func (b *cliBackend) Grant(_ context.Context, e broker.Envelope, r broker.GrantRequest) (broker.GrantResponse, error) {
-	g := b.bound(e)
+	g := b.hot(e)
 	s, err := g.openSession()
 	if err != nil {
 		return broker.GrantResponse{}, asRefusal(err)
@@ -269,7 +278,7 @@ func (b *cliBackend) Grant(_ context.Context, e broker.Envelope, r broker.GrantR
 }
 
 func (b *cliBackend) Revoke(_ context.Context, e broker.Envelope, r broker.RevokeRequest) (broker.RevokeResponse, error) {
-	g := b.bound(e)
+	g := b.hot(e)
 	s, err := g.openSession()
 	if err != nil {
 		return broker.RevokeResponse{}, asRefusal(err)

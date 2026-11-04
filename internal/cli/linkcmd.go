@@ -17,6 +17,8 @@ type linkBody struct {
 	Label   string `json:"label"`
 	Root    string `json:"root"`
 	Secrets int    `json:"secrets"`
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 // newLink binds a project layer synced from another device to a checkout on
@@ -83,8 +85,9 @@ func newLink(g *globals) *cobra.Command {
 				return mapErr(err, "")
 			}
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventLink, Layer: "project:" + root, Detail: fmt.Sprintf("secrets=%d", n)})
+			remoteState := g.pushAfterCmd(cmd, s)
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), linkBody{OK: true, Label: label, Root: root, Secrets: n})
+				return writeJSON(cmd.OutOrStdout(), linkBody{OK: true, Label: label, Root: root, Secrets: n, Remote: remoteState})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "linked %s to %s (%d %s)\n", oneLine(label), root, n, plural(n, "secret", "secrets"))
 			return err

@@ -40,7 +40,7 @@ func (g *globals) coolDown(s *session, name string) {
 // the user confirms out of band, and only then the change is applied. It
 // never creates a grant. A decline starts the same cooldown as request.
 func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.ManageRequest) (broker.ManageResponse, error) {
-	g := b.bound(e)
+	g := b.hot(e)
 	s, err := g.openSession()
 	if err != nil {
 		return broker.ManageResponse{}, asRefusal(err)
@@ -133,6 +133,7 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		return broker.ManageResponse{}, asRefusal(mapErr(err, r.Name))
 	}
 	audited("applied")
+	g.pushAfter(context.Background(), stderrOf(g), s)
 	return broker.ManageResponse{OK: true, Applied: true, Action: r.Action, Name: r.Name, Layer: after}, nil
 }
 

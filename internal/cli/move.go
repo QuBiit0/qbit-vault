@@ -19,6 +19,8 @@ type moveBody struct {
 	Project *projectRef `json:"project"`
 	// GrantsDropped counts the grants the move dropped; omitted when none.
 	GrantsDropped int `json:"grants_dropped,omitempty"`
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 type relinkBody struct {
@@ -28,6 +30,8 @@ type relinkBody struct {
 	Secrets int    `json:"secrets"`
 	// GrantsDropped counts the project grants relink dropped; omitted when none.
 	GrantsDropped int `json:"grants_dropped,omitempty"`
+	// Remote is "synced" or "pending" when the vault syncs.
+	Remote string `json:"remote,omitempty"`
 }
 
 func newMv(g *globals) *cobra.Command {
@@ -89,8 +93,9 @@ func newMv(g *globals) *cobra.Command {
 			}
 			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventMv, Names: []string{name}, Layer: auditLayer(dest), Detail: layerName(from) + "->" + layerName(dest)})
+			remoteState := g.pushAfterCmd(cmd, s)
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), moveBody{OK: true, Name: name, From: layerName(from), To: layerName(dest), Project: projectOf(proj), GrantsDropped: res.Changed})
+				return writeJSON(cmd.OutOrStdout(), moveBody{OK: true, Name: name, From: layerName(from), To: layerName(dest), Project: projectOf(proj), GrantsDropped: res.Changed, Remote: remoteState})
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "moved %s from %s to %s\n", name, layerText(from), layerText(dest))
 			return err
@@ -129,8 +134,9 @@ func newRelink(g *globals) *cobra.Command {
 			g.noteGrantsReset(cmd.ErrOrStderr(), res.Reset)
 			cwd, _ := os.Getwd()
 			g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRelink, Cwd: cwd})
+			remoteState := g.pushAfterCmd(cmd, s)
 			if g.JSON {
-				return writeJSON(cmd.OutOrStdout(), relinkBody{OK: true, From: args[0], To: args[1], Secrets: n, GrantsDropped: res.Changed})
+				return writeJSON(cmd.OutOrStdout(), relinkBody{OK: true, From: args[0], To: args[1], Secrets: n, GrantsDropped: res.Changed, Remote: remoteState})
 			}
 			noun := "secrets"
 			if n == 1 {

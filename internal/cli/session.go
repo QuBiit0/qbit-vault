@@ -65,21 +65,30 @@ func (g *globals) openSession() (*session, error) {
 	if err != nil {
 		return nil, mapErr(err, "")
 	}
+	v, key, err := g.openRecovering(home, id, key)
+	if err != nil {
+		key.Wipe()
+		return nil, mapErr(err, "")
+	}
+	return &session{v: v, key: key, mode: mode, home: home}, nil
+}
+
+// openRecovering opens the vault with key. A vault the key cannot open (not a
+// rolled-back one) may have been re-sealed by a rekey that died before it
+// promoted the new key: that rekey is finished and the vault opened with the
+// new key. It always returns the key to use from now on (the caller owns and
+// wipes it), also with an error, so restore can repair a corrupt vault with
+// the right key.
+func (g *globals) openRecovering(home, id string, key secret.Secret) (*vault.Vault, secret.Secret, error) {
 	v, err := vault.Open(home, key)
 	if err != nil && errors.Is(err, vault.ErrCorrupt) && !errors.Is(err, vault.ErrRollback) {
-		// A vault the main key cannot open may be one a rekey re-sealed
-		// before it could promote the new key: finish that rekey.
 		if next, ok := g.finishRekey(home, id, key); ok {
 			key.Wipe()
 			key = next
 			v, err = vault.Open(home, key)
 		}
 	}
-	if err != nil {
-		key.Wipe()
-		return nil, mapErr(err, "")
-	}
-	return &session{v: v, key: key, mode: mode, home: home}, nil
+	return v, key, err
 }
 
 // finishRekey completes a rekey interrupted after its new key was staged

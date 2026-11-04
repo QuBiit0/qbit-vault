@@ -160,3 +160,33 @@ func TestPromotePassphraseModeRefreshesCache(t *testing.T) {
 		t.Fatalf("cache after Promote: %v", err)
 	}
 }
+
+// W1: a promotion that fails after the cache was filled with the old key must
+// not leave that stale key behind (Unlock would return it unchecked).
+func TestPromoteDropsStaleCacheEvenWhenItFails(t *testing.T) {
+	cheapKDF(t)
+	noOS(t)
+	home, run := t.TempDir(), t.TempDir()
+	opts := cacheOpts(run)
+	opts.Passphrase = pass(fixturePass)
+	cur, _, err := Setup(home, testID, opts) // fills the cache with cur
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Stage(home, testID, cur, fixedKey(5), opts); err != nil {
+		t.Fatal(err)
+	}
+	// Make the rename fail: key.enc becomes a non-empty directory.
+	if err := os.Remove(filepath.Join(home, "key.enc")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, "key.enc", "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := Promote(home, testID, fixedKey(5), opts); err == nil {
+		t.Fatal("Promote succeeded over a directory")
+	}
+	if _, err := os.Stat(filepath.Join(run, "gentle-vault", testID+".key")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the old key is still cached after a failed promotion")
+	}
+}

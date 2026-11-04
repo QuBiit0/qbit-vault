@@ -79,8 +79,9 @@ func newUnlock(g *globals) *cobra.Command {
 			if err != nil {
 				return promptFail(err, "")
 			}
+			_, key, err = g.openRecovering(home, id, key)
 			defer key.Wipe()
-			if _, err := vault.Open(home, key); err != nil {
+			if err != nil {
 				return mapErr(err, "")
 			}
 			body := unlockBody{OK: true, Unlocked: true, Keychain: string(mode), Cached: cached}

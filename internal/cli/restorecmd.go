@@ -88,6 +88,10 @@ func newRestore(g *globals) *cobra.Command {
 			if err != nil {
 				return mapErr(err, "")
 			}
+			// Finish an interrupted rekey first, so the restored body and the
+			// snapshot of the current state are sealed under the right key.
+			// Any other open failure is what restore is here to repair.
+			_, key, _ = g.openRecovering(home, id, key)
 			defer key.Wipe()
 			switch err := vault.Restore(home, from, key); {
 			case errors.Is(err, vault.ErrNotFound):

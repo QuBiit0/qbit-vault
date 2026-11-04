@@ -2,12 +2,18 @@ package vault
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/QuBiit0/gentle-vault/internal/envelope"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 )
+
+// ErrRekeyNotStarted marks a Rekey refused before anything was re-sealed (the
+// vault could not be opened with either key, or was rolled back). It wraps
+// the cause, so errors.Is still matches ErrCorrupt or ErrRollback.
+var ErrRekeyNotStarted = errors.New("vault: rekey refused before anything was re-sealed")
 
 // Rekey re-seals the vault files from oldKey to newKey and adds oldKey to
 // keys/retired.enc (docs/STORAGE.md § Master key). It is idempotent and
@@ -40,21 +46,22 @@ func Rekey(home string, oldKey, newKey secret.Secret) error {
 }
 
 func rekeyVault(home string, oldKey, newKey secret.Secret) error {
+	notStarted := func(err error) error { return fmt.Errorf("%w: %w", ErrRekeyNotStarted, err) }
 	if pt, _, err := (&store{home: home, key: newKey}).load(); err == nil {
 		clear(pt)
 		return nil // already re-sealed
 	} else if errors.Is(err, ErrRollback) || !errors.Is(err, ErrCorrupt) {
-		return err
+		return notStarted(err)
 	}
 	old := &store{home: home, key: oldKey}
 	pt, hdr, err := old.load()
 	if err != nil {
-		return err
+		return notStarted(err)
 	}
 	defer clear(pt)
 	st, err := loadState(home)
 	if err != nil {
-		return err
+		return notStarted(err)
 	}
 	return (&store{home: home, key: newKey}).sealNext(st, hdr.CreatedAt, hdr.Writes, pt)
 }
@@ -86,9 +93,15 @@ func rekeyGrants(home string, oldKey, newKey secret.Secret) error {
 func rekeyRetired(home string, oldKey, newKey secret.Secret) error {
 	b, prev, _, err := loadRetired(home, newKey)
 	if err != nil {
+		if !errors.Is(err, ErrCorrupt) {
+			return err // a read error: never overwrite a list we could not read
+		}
 		// Still sealed with the old key (a crash before this step), or
-		// unreadable: start from what the old key opens, else from nothing.
+		// undecryptable: start from what the old key opens, else from nothing.
 		if b, prev, _, err = loadRetired(home, oldKey); err != nil {
+			if !errors.Is(err, ErrCorrupt) {
+				return err
+			}
 			b, prev = retiredBody{}, AAD{}
 		}
 		defer b.wipe()

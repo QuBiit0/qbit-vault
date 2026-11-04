@@ -124,6 +124,11 @@ func Promote(home, vaultID string, next secret.Secret, opts Options) error {
 		return err
 	}
 	if exists {
+		// Drop the cached old key first: Unlock trusts the cache, so a crash
+		// or a failed write after the rename must never leave it behind.
+		if err := cacheDelete(opts, vaultID); err != nil {
+			return err
+		}
 		if err := os.Rename(stagedPath(home), keyFilePath(home)); err != nil {
 			return fmt.Errorf("keychain: promote staged key: %w", bare(err))
 		}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -50,9 +51,9 @@ func newRekey(g *globals) *cobra.Command {
 				return promptFail(err, "")
 			}
 			if err := vault.Rekey(s.home, s.key, next); err != nil {
-				// Nothing re-sealed yet (the vault step comes first): drop the
-				// staged key so it can never be mistaken for a pending rekey.
-				if _, oerr := vault.Open(s.home, s.key); oerr == nil {
+				// Nothing re-sealed yet: drop the staged key so it can never be
+				// mistaken for a pending rekey.
+				if errors.Is(err, vault.ErrRekeyNotStarted) {
 					_ = keychain.Unstage(s.home, id, opts)
 				}
 				return mapErr(err, "")

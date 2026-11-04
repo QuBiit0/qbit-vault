@@ -161,3 +161,52 @@ func TestRekeyRefusedOnRolledBackVault(t *testing.T) {
 		t.Fatalf("args: code=%d err=%q", code, errs)
 	}
 }
+
+// interruptRekey leaves w as a crash after re-sealing, before promotion.
+func (w *world) interruptRekey() {
+	w.t.Helper()
+	id, _ := vault.ReadID(w.home)
+	cur, _, err := keychain.Unlock(w.home, id, keychain.Options{})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	next, _ := keychain.NewKey()
+	if err := keychain.Stage(w.home, id, cur, next, keychain.Options{}); err != nil {
+		w.t.Fatal(err)
+	}
+	if err := vault.Rekey(w.home, cur, next); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+// W2: restore and unlock finish an interrupted rekey first, instead of
+// sealing under the old key or reporting a corrupt vault.
+func TestRestoreAndUnlockFinishInterruptedRekey(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_a\n", "set", "A", "--stdin")
+	w.mustRun("TESTSECRET_b\n", "set", "B", "--stdin")
+	w.interruptRekey()
+	code, out, errs := w.run("", "unlock")
+	if code != exitcode.OK || errs != "warning: an interrupted rekey was finished\n" || !strings.HasPrefix(out, "unlocked:") {
+		t.Fatalf("unlock: code=%d out=%q err=%q", code, out, errs)
+	}
+
+	w2 := newWorld(t)
+	w2.mustRun("TESTSECRET_a\n", "set", "A", "--stdin")
+	w2.mustRun("TESTSECRET_b\n", "set", "B", "--stdin")
+	id := w2.backupIDs()[0]
+	w2.interruptRekey()
+	code, _, errs = w2.run("", "restore", "--from", id, "--yes")
+	if code != exitcode.OK || errs != "warning: an interrupted rekey was finished\n" {
+		t.Fatalf("restore: code=%d err=%q", code, errs)
+	}
+	if w2.names() != "A" {
+		t.Fatal("restore did not apply")
+	}
+	// Every snapshot, including the one restore just made, still opens.
+	for _, b := range w2.backupIDs() {
+		if code, _, errs := w2.run("", "restore", "--from", b, "--yes"); code != exitcode.OK {
+			t.Fatalf("backup %s unreadable after recovery: %q", b, errs)
+		}
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuBiit0/gentle-vault/internal/remote"
 )
@@ -135,8 +136,13 @@ func TestRekeyRevokesAtomically(t *testing.T) {
 	if code, m := c2.do("GET", "/v1/vault", nil); code != 401 {
 		t.Fatalf("a revoked device kept its token: %d %v", code, m)
 	}
-	if code, _ := c2.do("POST", "/v1/auth/challenge", map[string]any{"device_id": "d2"}); code != 401 {
-		t.Fatalf("a revoked device can log in: %d", code)
+	// A revoked device learns it was revoked, so it can turn sync off
+	// (REMOTE_SYNC § 4.5), instead of an ambiguous "unknown device".
+	if code, m := c2.do("POST", "/v1/auth/challenge", map[string]any{"device_id": "d2"}); code != 403 || errCode(m) != "device_revoked" {
+		t.Fatalf("a revoked device: %d %v", code, m)
+	}
+	if code, m := c2.do("POST", "/v1/auth/challenge", map[string]any{"device_id": "d9"}); code != 401 || errCode(m) != "unauthorized" {
+		t.Fatalf("a never-known device: %d %v", code, m)
 	}
 	if code, m := c.do("GET", "/v1/keys/self", nil); code != 200 || m["envelope"] != "e1-gen2" || m["generation"] != float64(2) {
 		t.Fatalf("keys/self after rekey: %d %v", code, m)
@@ -172,5 +178,82 @@ func TestAnchors(t *testing.T) {
 	}
 	if code, _ := c.do("PUT", "/v1/anchors", map[string]any{"blob": strings.Repeat("a", 5000)}); code != 413 {
 		t.Fatalf("oversized anchor: %d", code)
+	}
+}
+
+// recovery-key --rotate replaces only the recovery key (REMOTE_SYNC § 4.6).
+func TestRecoveryRotation(t *testing.T) {
+	s, c := newServer(t)
+	d1 := newDev("d1")
+	register(t, s, c, d1)
+	login(t, c, d1)
+	anon := &client{t: t, base: c.base}
+	put := func(gen int, lookup, auth string) (int, map[string]any) {
+		return c.do("PUT", "/v1/recovery", map[string]any{"generation": gen, "lookup_id": lookup, "auth": auth, "envelope": `{"r":"new"}`})
+	}
+	if code, m := put(2, "bb", b64([]byte("new-auth"))); code != 409 {
+		t.Fatalf("other generation: %d %v", code, m)
+	}
+	if code, m := put(1, "", ""); code != 400 {
+		t.Fatalf("empty: %d %v", code, m)
+	}
+	if code, _ := anon.do("PUT", "/v1/recovery", map[string]any{"generation": 1, "lookup_id": "cc", "auth": "x", "envelope": "{}"}); code != 401 {
+		t.Fatalf("without a device token: %d", code)
+	}
+	if code, m := put(1, "bb", b64([]byte("new-auth"))); code != 200 {
+		t.Fatalf("rotate: %d %v", code, m)
+	}
+	if code, _ := anon.do("POST", "/v1/recovery/token", map[string]any{"lookup_id": "aa", "auth": b64([]byte("TESTSECRET_auth_secret_32_bytes!"))}); code != 401 {
+		t.Fatalf("the old recovery key still works: %d", code)
+	}
+	code, m := anon.do("POST", "/v1/recovery/token", map[string]any{"lookup_id": "bb", "auth": b64([]byte("new-auth"))})
+	if code != 200 {
+		t.Fatalf("the new recovery key: %d", code)
+	}
+	rc := &client{t: t, base: c.base, tok: m["token"].(string)}
+	if code, m := rc.do("GET", "/v1/recovery/envelope", nil); code != 200 || m["envelope"] != `{"r":"new"}` || m["generation"] != float64(1) {
+		t.Fatalf("envelope: %d %v", code, m)
+	}
+	if code, m := c.do("GET", "/v1/vault", nil); code != 200 || m["version"] != float64(1) {
+		t.Fatalf("the vault changed: %d %v", code, m)
+	}
+}
+
+// A recovery lookup id that already belongs to another account cannot be
+// taken over: that would cut the other account off its recovery.
+func TestRecoveryLookupIDCannotBeTakenFromAnotherAccount(t *testing.T) {
+	s, c := newServer(t)
+	d1 := newDev("d1")
+	register(t, s, c, d1) // lookup id "aa"
+	inv, _ := s.Invite(time.Hour)
+	other := "fedcba9876543210fedcba9876543210"
+	d2 := newDev("d2")
+	c2 := &client{t: t, base: c.base}
+	if code, m := c2.do("POST", "/v1/accounts", map[string]any{"invite": inv, "account_id": other,
+		"device":       map[string]any{"id": d2.id, "sign_pub": b64(d2.pub), "box_pub": b64(make([]byte, 32))},
+		"recovery":     map[string]any{"lookup_id": "cc", "auth": b64([]byte("other-auth")), "envelope": "{}"},
+		"key_envelope": "{}", "vault": object(other, 1, 1)}); code != 200 {
+		t.Fatalf("second account: %d %v", code, m)
+	}
+	login(t, c2, d2)
+	if code, m := c2.do("PUT", "/v1/recovery", map[string]any{"generation": 1, "lookup_id": "aa", "auth": b64([]byte("x")), "envelope": "{}"}); code != 409 {
+		t.Fatalf("took another account's lookup id: %d %v", code, m)
+	}
+	if code, m := c2.do("POST", "/v1/rekey", map[string]any{"base_version": 1, "generation": 2, "blob": object(other, 2, 2),
+		"envelopes": map[string]string{"d2": "e"}, "revoke": []string{},
+		"recovery": map[string]any{"lookup_id": "aa", "auth": b64([]byte("x")), "envelope": "{}"}}); code != 409 {
+		t.Fatalf("rekey took another account's lookup id: %d %v", code, m)
+	}
+	inv2, _ := s.Invite(time.Hour)
+	third, d3 := "00112233445566778899aabbccddeeff", newDev("d3")
+	if code, m := c2.do("POST", "/v1/accounts", map[string]any{"invite": inv2, "account_id": third,
+		"device":       map[string]any{"id": d3.id, "sign_pub": b64(d3.pub), "box_pub": b64(make([]byte, 32))},
+		"recovery":     map[string]any{"lookup_id": "aa", "auth": b64([]byte("x")), "envelope": "{}"},
+		"key_envelope": "{}", "vault": object(third, 1, 1)}); code != 409 {
+		t.Fatalf("a new account took another account's lookup id: %d %v", code, m)
+	}
+	anon := &client{t: t, base: c.base}
+	if code, m := anon.do("POST", "/v1/recovery/token", map[string]any{"lookup_id": "aa", "auth": b64([]byte("TESTSECRET_auth_secret_32_bytes!"))}); code != 200 || m["account_id"] != acct {
+		t.Fatalf("the first account lost its recovery: %d %v", code, m)
 	}
 }

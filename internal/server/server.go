@@ -326,6 +326,10 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "conflict", "device exists")
 		return
 	}
+	if s.lookupTaken(in.Recovery.LookupID, in.AccountID) {
+		fail(w, 409, "conflict", "recovery key not usable")
+		return
+	}
 	now := s.cfg.Now().UTC().Format(time.RFC3339)
 	a := &account{ID: in.AccountID, CreatedAt: now, Version: 1, Generation: 1,
 		Recovery: recoveryRec{LookupID: in.Recovery.LookupID, AuthHash: hash(in.Recovery.Auth), Envelope: in.Recovery.Envelope},
@@ -354,7 +358,15 @@ func (s *Server) challenge(w http.ResponseWriter, r *http.Request) {
 		fail(w, 429, "rate_limited", "too many attempts")
 		return
 	}
-	if _, err := s.st.accountOfDevice(in.DeviceID); err != nil || !deviceRE.MatchString(in.DeviceID) {
+	if !deviceRE.MatchString(in.DeviceID) {
+		fail(w, 401, "unauthorized", "unknown device")
+		return
+	}
+	if _, err := s.st.accountOfDevice(in.DeviceID); err != nil {
+		if s.st.isRevoked(in.DeviceID) {
+			fail(w, 403, "device_revoked", "this device was revoked")
+			return
+		}
 		fail(w, 401, "unauthorized", "unknown device")
 		return
 	}

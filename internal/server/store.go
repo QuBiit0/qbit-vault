@@ -130,6 +130,17 @@ func (s *store) unindexDevice(device string) {
 	_ = os.Remove(s.path("devices", device))
 }
 
+// markRevoked remembers that a device was revoked, by the hash of its id,
+// so its next login is told so (device_revoked) instead of "unknown".
+func (s *store) markRevoked(device string) error {
+	return writeFile(s.path("revoked", hash(device)), []byte("1"))
+}
+
+func (s *store) isRevoked(device string) bool {
+	_, err := os.Stat(s.path("revoked", hash(device)))
+	return err == nil
+}
+
 func (s *store) putVersion(id string, version int64, blob string) error {
 	if err := writeFile(s.path("accounts", id, "vault", fmt.Sprintf("%020d.json", version)), []byte(blob)); err != nil {
 		return err

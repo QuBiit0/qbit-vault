@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/QuBiit0/gentle-vault/internal/remote"
@@ -27,6 +28,7 @@ func (s *Server) routesS5(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/devices", s.recoveryAuthed(s.recoveryDevice))
 	mux.HandleFunc("GET /v1/keys/self", s.authed(s.keysSelf))
 	mux.HandleFunc("POST /v1/rekey", s.authed(s.rekey))
+	mux.HandleFunc("PUT /v1/recovery", s.authed(s.rotateRecovery))
 	mux.HandleFunc("PUT /v1/anchors", s.authed(s.putAnchor))
 	mux.HandleFunc("GET /v1/anchors", s.authed(s.getAnchors))
 }
@@ -352,6 +354,10 @@ func (s *Server) rekey(w http.ResponseWriter, r *http.Request, c caller) {
 		d.KeyEnvelope, d.Generation = env, in.Generation
 		a.Devices[id] = d
 	}
+	if s.lookupTaken(in.Recovery.LookupID, a.ID) {
+		fail(w, 409, "conflict", "recovery key not usable")
+		return
+	}
 	oldLookup := a.Recovery.LookupID
 	a.Recovery = recoveryRec{LookupID: in.Recovery.LookupID, AuthHash: hash(in.Recovery.Auth), Envelope: in.Recovery.Envelope}
 	a.Version, a.Generation = ver, in.Generation
@@ -364,9 +370,58 @@ func (s *Server) rekey(w http.ResponseWriter, r *http.Request, c caller) {
 	}
 	for id := range revoked {
 		s.st.unindexDevice(id)
+		_ = s.st.markRevoked(id)
 		s.dropTokens(id)
 	}
 	reply(w, 200, map[string]any{"version": ver, "generation": in.Generation})
+}
+
+// rotateRecovery replaces the recovery key at the current generation
+// (REMOTE_SYNC.md § 4.6): the old lookup id stops working, the master key
+// and the vault stay as they are.
+func (s *Server) rotateRecovery(w http.ResponseWriter, r *http.Request, c caller) {
+	var in struct {
+		Generation int `json:"generation"`
+		recoveryIn
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	if in.LookupID == "" || in.Auth == "" || in.Envelope == "" {
+		fail(w, 400, "invalid", "a recovery key is required")
+		return
+	}
+	defer s.lock(c.account)()
+	a, err := s.st.loadAccount(c.account)
+	if err != nil {
+		fail(w, 404, "not_found", "no account")
+		return
+	}
+	if in.Generation != a.Generation {
+		fail(w, 409, "conflict", "the account key changed")
+		return
+	}
+	if s.lookupTaken(in.LookupID, a.ID) {
+		fail(w, 409, "conflict", "recovery key not usable")
+		return
+	}
+	oldLookup := a.Recovery.LookupID
+	a.Recovery = recoveryRec{LookupID: in.LookupID, AuthHash: hash(in.Auth), Envelope: in.Envelope}
+	if writeFile(s.st.path("recovery", hash(in.LookupID)), []byte(a.ID)) != nil || s.st.saveAccount(a) != nil {
+		fail(w, 500, "internal", "store failed")
+		return
+	}
+	if oldLookup != in.LookupID {
+		_ = os.Remove(s.st.path("recovery", hash(oldLookup)))
+	}
+	reply(w, 200, map[string]any{"generation": a.Generation})
+}
+
+// lookupTaken reports whether a recovery lookup id already indexes another
+// account: taking it over would cut that account off its recovery.
+func (s *Server) lookupTaken(lookup, account string) bool {
+	b, err := os.ReadFile(s.st.path("recovery", hash(lookup)))
+	return err == nil && strings.TrimSpace(string(b)) != account
 }
 
 // ---- anchors (§ 8) ----

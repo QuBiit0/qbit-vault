@@ -18,8 +18,8 @@ Not in scope, by decision: the broker's second session for a syncing vault (perf
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| H1 | S2-S6 | worker | all of S2-S6 in internal/cli (+ vault for S5 if needed), tests first | (H commit) | done |
-| H2 | S2-S6 | inline | parent review, full suite, e2e battery, commit | (H commit) | done |
+| H1 | S2-S6 | worker | all of S2-S6 in internal/cli (+ vault for S5 if needed), tests first | b7c2092 | done |
+| H2 | S2-S6 | inline | parent review, full suite, e2e battery, commit | b7c2092 | done |
 
 ## Log
 

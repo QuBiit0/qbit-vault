@@ -19,6 +19,17 @@ func TestMain(m *testing.M) {
 		childMain(mode)
 	}
 	keyring.MockInit()
+	// No test may see the real user home: host adapters edit files such as
+	// ~/.claude.json there. Every test of this binary gets a throwaway one.
+	home, err := os.MkdirTemp("", "qbv-test-home")
+	if err != nil {
+		panic("cannot create a throwaway user home")
+	}
+	for _, k := range []string{"USERPROFILE", "HOME"} {
+		if err := os.Setenv(k, home); err != nil {
+			panic("cannot isolate the user home")
+		}
+	}
 	// No test may reach a real terminal: by default there is none. Tests that
 	// need one install a fake with withBackend or asTerminal.
 	newPrompt = func(*globals) (prompt.Backend, error) { return nil, prompt.ErrNoTerminal }
@@ -26,5 +37,7 @@ func TestMain(m *testing.M) {
 	if tmp, err := filepath.EvalSymlinks(os.TempDir()); err == nil {
 		vault.SetWalkStopForTesting(tmp)
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	_ = os.RemoveAll(home)
+	os.Exit(code)
 }

@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/QuBiit0/qbit-vault/internal/audit"
 	"github.com/QuBiit0/qbit-vault/internal/hosts"
 	"github.com/QuBiit0/qbit-vault/internal/perm"
 	"github.com/QuBiit0/qbit-vault/internal/vault"
@@ -55,15 +56,21 @@ func (r Report) Problems() int {
 // without a prompt. It is a normal state, not a problem.
 var ErrLocked = errors.New("vault locked")
 
+// Opened is what opening the vault without a prompt told doctor.
+type Opened struct {
+	Keychain    string // the key holder's name
+	GrantsReset bool   // grants.enc was unreadable or rolled back
+}
+
 // Inputs are the facts doctor cannot get on its own.
 type Inputs struct {
 	Home     string
 	Env      hosts.Env
 	Registry *hosts.Registry
-	// Open opens the vault without prompting and without repairing, returns
-	// the key holder's name and closes it. nil error: unlocked; ErrLocked:
-	// locked; any other error is reported with its (fixed) message.
-	Open func() (keychain string, err error)
+	// Open opens the vault without prompting and without repairing, reads
+	// the grants store and closes it. nil error: unlocked; ErrLocked: locked;
+	// any other error is reported with its (fixed) message.
+	Open func() (Opened, error)
 }
 
 // Run builds the report. It never writes.
@@ -85,9 +92,10 @@ func Run(in Inputs) Report {
 		return finish()
 	}
 
-	switch kc, err := in.Open(); {
+	opened, err := in.Open()
+	switch {
 	case err == nil:
-		add("vault", OK, "unlocked (keychain: "+kc+")")
+		add("vault", OK, "unlocked (keychain: "+opened.Keychain+")")
 	case errors.Is(err, ErrLocked):
 		add("vault", OK, "locked (the key needs a prompt; run 'qbit-vault unlock')")
 	default:
@@ -100,6 +108,10 @@ func Run(in Inputs) Report {
 		add("permissions", OK, "owner-only")
 	}
 
+	if err == nil && opened.GrantsReset {
+		add("grants", Warn, "grants.enc is unreadable or was rolled back; its grants are treated as none")
+	}
+	cs = append(cs, auditChecks(in.Home)...)
 	cs = append(cs, hostChecks(in)...)
 	cs = append(cs, syncChecks(in.Home)...)
 	return finish()
@@ -145,15 +157,34 @@ func hostChecks(in Inputs) []Check {
 			case c.Err == nil:
 				out = append(out, Check{name, OK, "registered"})
 			case errors.Is(c.Err, hosts.ErrDrift):
-				out = append(out, Check{name, Warn, "config changed since registration; run 'qbit-vault init'"})
+				out = append(out, Check{name, Warn, "config changed since registration; run 'qbit-vault sync'"})
 			case errors.Is(c.Err, hosts.ErrNotRegistered):
-				out = append(out, Check{name, Warn, "not registered; run 'qbit-vault init'"})
+				out = append(out, Check{name, Warn, "not registered; run 'qbit-vault sync'"})
 			default:
 				out = append(out, Check{name, Warn, "cannot read the host config"})
 			}
 		}
 	}
 	return out
+}
+
+// auditChecks verifies the audit hash chain. Like grants, it says nothing
+// while the log is fine, so a healthy report stays short; a vault with no log
+// has nothing to verify.
+func auditChecks(home string) []Check {
+	for _, name := range []string{"audit.jsonl", "audit.head"} {
+		if fi, err := os.Stat(filepath.Join(home, name)); err == nil && fi.Mode().IsRegular() {
+			res, err := audit.Verify(home)
+			switch {
+			case err != nil:
+				return []Check{{"audit", Fail, "the audit log cannot be read; run 'qbit-vault audit --verify'"}}
+			case res.Problem != nil:
+				return []Check{{"audit", Fail, fmt.Sprintf("audit chain broken at line %d (%s); run 'qbit-vault audit --verify'", res.Problem.Line, res.Problem.Reason)}}
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 // syncChecks reports the sync state recorded in state.json; it never contacts

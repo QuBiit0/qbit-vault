@@ -218,7 +218,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	f.BoolVar(&g.NoColor, "no-color", false, "disable colored output (also honors "+envNoColor+")")
 
 	root.AddCommand(newVersion(g))
-	root.AddCommand(newInit(g), newDoctor(g))
+	root.AddCommand(newInit(g), newSync(g), newDoctor(g))
 	root.AddCommand(newSet(g), newRm(g), newDescribe(g), newEdit(g), newList(g), newMv(g), newRelink(g))
 	root.AddCommand(newGrant(g), newRevoke(g), newGrantsList(g))
 	root.AddCommand(newAudit(g))

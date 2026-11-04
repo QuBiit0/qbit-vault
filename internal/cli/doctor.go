@@ -32,17 +32,21 @@ func (g *globals) runDoctor() doctor.Report {
 		Home:     g.Home(),
 		Env:      g.hostEnv(),
 		Registry: hostRegistry(g),
-		Open: func() (string, error) {
+		Open: func() (doctor.Opened, error) {
 			s, err := g.openSessionQuiet()
 			switch {
 			case err == nil:
-				mode := string(s.mode)
-				s.close()
-				return mode, nil
+				defer s.close()
+				reset, gerr := s.v.ReadGrants(func([]byte) error { return nil })
+				if gerr != nil {
+					// An unreadable store is reported, not a reason to hide the rest.
+					reset = true
+				}
+				return doctor.Opened{Keychain: string(s.mode), GrantsReset: reset}, nil
 			case errors.Is(err, errSessionLocked):
-				return "", doctor.ErrLocked
+				return doctor.Opened{}, doctor.ErrLocked
 			default:
-				return "", err
+				return doctor.Opened{}, err
 			}
 		},
 	})

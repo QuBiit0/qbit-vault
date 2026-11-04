@@ -231,6 +231,38 @@ func TestRevertRestoresTheHostAndForgetsIt(t *testing.T) {
 	}
 }
 
+func TestRevertHostReportsWhatEachStepDid(t *testing.T) {
+	r := newRig(t)
+	if err := os.WriteFile(filepath.Join(r.dir, "config.json"), []byte(`{"theme": "dark"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hosts.Apply(r.env, []hosts.Adapter{r.host})
+	done, err := hosts.RevertHost(r.env, r.host)
+	want := []hosts.StepRevert{{Step: "hooks", Outcome: filemerge.Deleted}, {Step: "mcp", Outcome: filemerge.Restored}}
+	if err != nil || !reflect.DeepEqual(done, want) {
+		t.Fatalf("done=%+v err=%v want=%+v", done, err, want)
+	}
+	if done, err := hosts.RevertHost(r.env, r.host); err != nil || len(done) != 0 {
+		t.Fatalf("an unrecorded host: %+v %v", done, err)
+	}
+}
+
+func TestRevertHostFailureNamesTheStepAndKeepsTheRecord(t *testing.T) {
+	r := newRig(t)
+	hosts.Apply(r.env, []hosts.Adapter{r.host})
+	if err := os.WriteFile(filepath.Join(r.dir, "hooks.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done, err := hosts.RevertHost(r.env, r.host)
+	var re *hosts.RevertError
+	if !errors.As(err, &re) || re.Host != "fake" || re.Step != "hooks" || len(done) != 0 {
+		t.Fatalf("done=%+v err=%v", done, err)
+	}
+	if hs, _ := vault.ReadHosts(r.env.VaultHome); len(hs) != 1 {
+		t.Fatalf("host forgotten after a failed revert: %+v", hs)
+	}
+}
+
 func TestRegistrySelect(t *testing.T) {
 	a, b := fake.New("alpha", t.TempDir()), fake.New("beta", filepath.Join(t.TempDir(), "missing"))
 	reg := hosts.NewRegistry(a, b)

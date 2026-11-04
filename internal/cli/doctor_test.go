@@ -92,7 +92,7 @@ func TestDoctorChecksRegisteredHostsAndReportsDrift(t *testing.T) {
 	}
 	code, out, errs := w.run("", "doctor")
 	if code != exitcode.Failure || errs != "" ||
-		!strings.Contains(out, "warn  host.fake.mcp    config changed since registration; run 'qbit-vault init'\n") ||
+		!strings.Contains(out, "warn  host.fake.mcp    config changed since registration; run 'qbit-vault sync'\n") ||
 		!strings.Contains(out, "ok    host.fake.hooks  registered\n") || !strings.HasSuffix(out, "1 problem\n") {
 		t.Fatalf("drift: code=%d out=%q err=%q", code, out, errs)
 	}

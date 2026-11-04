@@ -197,18 +197,47 @@ func Verify(env Env, a Adapter, h vault.HostState) []StepCheck {
 	return out
 }
 
+// StepRevert is what reverting one step did to its config file.
+type StepRevert struct {
+	Step    string
+	Outcome filemerge.Outcome
+}
+
+// RevertError is a failed revert: the step that failed and why. The host
+// stays in state.json.
+type RevertError struct {
+	Host, Step string
+	Err        error
+}
+
+func (e *RevertError) Error() string {
+	return fmt.Sprintf("hosts: revert %s %s: %v", e.Host, e.Step, e.Err)
+}
+
+func (e *RevertError) Unwrap() error { return e.Err }
+
 // Revert undoes the registered steps of a host in reverse order and, when all
 // succeeded, forgets the host in state.json. On a failure the record stays,
 // so the revert can be retried.
 func Revert(env Env, a Adapter) error {
+	_, err := RevertHost(env, a)
+	return err
+}
+
+// RevertHost is Revert that also reports, in the order undone, what each step
+// did (filemerge's revert rule: restored, stripped, deleted, absent or
+// unchanged). On a failure it returns the steps undone before it, and the
+// error is a *RevertError.
+func RevertHost(env Env, a Adapter) ([]StepRevert, error) {
 	all, err := vault.ReadHosts(env.VaultHome)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	h, ok := all[a.Name()]
 	if !ok {
-		return nil
+		return nil, nil
 	}
+	var done []StepRevert
 	steps := a.Steps(env)
 	for i := len(steps) - 1; i >= 0; i-- {
 		s := steps[i]
@@ -216,11 +245,13 @@ func Revert(env Env, a Adapter) error {
 		if !ok || s.Revert == nil {
 			continue
 		}
-		if _, err := s.Revert(env, r); err != nil {
-			return fmt.Errorf("hosts: revert %s %s: %w", a.Name(), s.Name, err)
+		out, err := s.Revert(env, r)
+		if err != nil {
+			return done, &RevertError{Host: a.Name(), Step: s.Name, Err: err}
 		}
+		done = append(done, StepRevert{Step: s.Name, Outcome: out})
 	}
-	return vault.WriteHost(env.VaultHome, a.Name(), nil)
+	return done, vault.WriteHost(env.VaultHome, a.Name(), nil)
 }
 
 // Registry is the set of adapters this build knows, in display order.

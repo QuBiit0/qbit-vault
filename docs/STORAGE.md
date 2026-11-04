@@ -107,6 +107,8 @@ The repair of `state.json` on load (vault file ahead of the counter after a cras
 
 A save of `vault.enc` also rewrites `state.json`; step 1 then copies **both** current files into the **same** `backups/<timestamp>/` directory before either is written, so every snapshot is a consistent (`vault.enc`, `state.json`) pair. The first save of a fresh vault has nothing to copy and creates no snapshot. Writes of a single file outside a vault save get their own snapshot directory.
 
+**Agent config snapshots.** `internal/filemerge` (`ARCHITECTURE.md` § Config file editing) snapshots every host config file it is about to change (and the file as it is before a revert) into its own `backups/<timestamp>/<encoded absolute path>/` tree: `C:\Users\Ana\.claude\settings.json` is stored as `backups/<ts>/C/Users/Ana/.claude/settings.json`, a POSIX path without its leading slash, a UNC share under `UNC/`. Files are owner-only like the rest of `backups/`. A merge that changes nothing takes no snapshot. These directories share the vault's pruning: a receipt whose snapshot was pruned still reverts, by removing only our entries instead of restoring the copy.
+
 Backups are pruned to the last 20 snapshots by default (`config.backups_keep`), which for vault saves means the last 20 saves. `qbit-vault restore --from <ts>` swaps a backup back in (with its own backup of the current state first): it opens the snapshot's `vault.enc` with the current key or a retired one and saves that body as the **next** write under the current key, so the rollback counter moves forward instead of tripping `vault_corrupt`. It works over a corrupt or rolled-back live vault and takes the snapshot's `state.json` when the live one is unreadable. `grants.enc` is not part of a snapshot and is left alone.
 
 ## File permissions
@@ -229,13 +231,13 @@ In keychain mode the key never sits in the directory; it lives in the OS keychai
   "vault_id": "uuid", "writes": 42, "keychain": "secret-service",
   "version": "0.1.0",
   "hosts": {
-    "claude-code": { "registered_at": "…", "receipts": ["~/.claude/settings.json#hooks", "~/.claude/settings.json#mcpServers.qbit-vault", "~/.claude/settings.json#permissions.deny"], "snapshot": "backups/20261016T081500Z/" },
+    "claude-code": { "registered_at": "…", "receipts": [ { "path": "/home/ana/.claude/settings.json", "snapshot": { "path": "/home/ana/.claude/settings.json", "existed": true, "backup": "/home/ana/.qbit-vault/backups/20261016T081500.000000000Z/home/ana/.claude/settings.json" }, "sha256": "…", "created": false, "exact": true } ] },
     "gentle-shell": { "extension": "qbit-vault-pi@0.1.0", "home": "~/.gentle-shell/agent" }
   }
 }
 ```
 
-Receipts are what `sync` re-applies and `uninstall` reverts. With remote sync, `state.json` also holds `device_id` and `remote` (`REMOTE_SYNC.md` § 11); `remote` is absent when the vault does not sync.
+Receipts are what `sync` re-applies and `uninstall` reverts. A receipt is the `internal/filemerge` `Receipt` of one edited file: absolute paths only (no `~`, Windows-portable), the snapshot handle taken before the change, the SHA-256 of the bytes written, `created` (the file did not exist before) and `exact` (the snapshot is the state immediately before our only change); `ARCHITECTURE.md` § Config file editing gives the revert rule. With remote sync, `state.json` also holds `device_id` and `remote` (`REMOTE_SYNC.md` § 11); `remote` is absent when the vault does not sync.
 
 ## Remote files
 

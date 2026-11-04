@@ -159,7 +159,7 @@ func Merge(base, local, remote *Body, device string, now time.Time) *Body {
 		place(out, k, win)
 	}
 
-	conflicts = append(conflicts, existing(local, remote)...)
+	conflicts = append(conflicts, existing(base, local, remote)...)
 	out.Conflicts = prune(conflicts, now)
 	out.Tombstones = liveTombstones(out, now)
 	out.Devices = mergeRoster(local, remote)
@@ -253,11 +253,30 @@ func mergeProjects(base, local, remote *Body, device string) map[string]*Project
 	return out
 }
 
-func existing(bs ...*Body) []Conflict {
-	var out []Conflict
-	for _, b := range bs {
+// existing merges the kept conflicts three ways: a conflict the base held
+// and one side no longer has was resolved there and stays resolved; any
+// other conflict of either side is kept.
+func existing(base, local, remote *Body) []Conflict {
+	ids := func(b *Body) map[string]bool {
+		m := map[string]bool{}
 		if b != nil {
-			out = append(out, b.Conflicts...)
+			for _, c := range b.Conflicts {
+				m[c.ID] = true
+			}
+		}
+		return m
+	}
+	inBase, inLocal, inRemote := ids(base), ids(local), ids(remote)
+	var out []Conflict
+	for _, b := range []*Body{local, remote} {
+		if b == nil {
+			continue
+		}
+		for _, c := range b.Conflicts {
+			if inBase[c.ID] && (!inLocal[c.ID] || !inRemote[c.ID]) {
+				continue
+			}
+			out = append(out, c)
 		}
 	}
 	return out

@@ -232,3 +232,28 @@ func FuzzMerge(f *testing.F) {
 		}
 	})
 }
+
+// Kept conflicts merge three ways like records: one resolved (removed) on
+// one side since the base stays resolved; one new on either side is kept.
+func TestResolvedConflictsStayResolved(t *testing.T) {
+	at := now.Format(time.RFC3339)
+	old := Conflict{ID: "c-old", Key: "global/A", LostAt: at}
+	gone := Conflict{ID: "c-gone", Key: "global/B", LostAt: at}
+	fresh := Conflict{ID: "c-new", Key: "global/C", LostAt: at}
+	base, l, r := body(), body(), body()
+	base.Conflicts = []Conflict{old, gone}
+	l.Conflicts = []Conflict{old}              // gone was resolved here
+	r.Conflicts = []Conflict{old, gone, fresh} // fresh appeared there
+	m := Merge(base, l, r, "d1", now)
+	ids := map[string]bool{}
+	for _, c := range m.Conflicts {
+		ids[c.ID] = true
+	}
+	if !ids["c-old"] || ids["c-gone"] || !ids["c-new"] || len(ids) != 2 {
+		t.Fatalf("conflicts=%v", ids)
+	}
+	// With no base (first sync) both sides are kept.
+	if m := Merge(nil, l, r, "d1", now); len(m.Conflicts) != 3 {
+		t.Fatalf("no base: %d", len(m.Conflicts))
+	}
+}

@@ -114,12 +114,15 @@ func quiet() *cobra.Command {
 	return c
 }
 
+var contractBackends = map[string]bool{"pi-ui": true, "osascript": true, "powershell": true, "zenity": true, "kdialog": true, "tty": true}
+
 func (b *cliBackend) Info() broker.Info {
 	info := broker.Info{Streaming: true, PromptBackends: []string{}}
 	if mode, err := keychain.ModeOf(b.g.Home(), keychain.Options{}); err == nil {
 		info.Keychain = string(mode)
 	}
-	if p, err := b.g.backend(); err == nil {
+	// Only names the contract knows (capabilities.prompt_backends enum).
+	if p, err := b.g.backend(); err == nil && contractBackends[p.Name()] {
 		info.PromptBackends = []string{p.Name()}
 	}
 	return info

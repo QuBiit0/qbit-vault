@@ -64,7 +64,7 @@ After each test, every byte that could reach a model is captured: tool results, 
 
 In CI, `tools/leakgrep` (`go run ./tools/leakgrep PATH...`) runs over `ci-logs/`, which holds the verbose (`-v`) stdout and stderr of every `go test` run on each OS, so output printed by passing tests is scanned too. It scans recursively for `TESTSECRET_` raw, percent-encoded and JSON-escaped, and for base64 (standard and URL-safe) at all three byte alignments. It reports `path:offset: encoding` and never the surrounding bytes; any hit fails the job.
 
-## Contract conformance (`e2e/contract-conformance`)
+## Contract conformance (`internal/conformance`)
 
 A host adapter is conformant when, against the JSON schema in `contracts/secrets-broker/v1/`:
 - every request it emits validates;
@@ -72,7 +72,7 @@ A host adapter is conformant when, against the JSON schema in `contracts/secrets
 - it handles every refusal type (table in CONTRACT.md) with the documented behavior;
 - a `grant` sent over its model-facing transport is refused.
 
-Run with `go test ./e2e/contract-conformance -host <name>`.
+`internal/conformance` loads the schema and validates a message as the `$def` of its op (`<op>Req`, `<op>Res`) or as `refusal`, using `github.com/google/jsonschema-go`. `TestContractConformance` (`internal/cli`) drives every op through `broker --op` against a real vault: success and refusal paths, its own requests validated too, and the schema's refusal `type` enum compared with the code's. Host adapters (phase 3) reuse the package against their own traffic.
 
 ## Property and fuzz targets
 

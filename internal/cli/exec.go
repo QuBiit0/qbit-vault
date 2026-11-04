@@ -379,6 +379,11 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 	if stdinOverride != nil {
 		spec.Stdin = stdinOverride
 	}
+	if g.execStdin != nil {
+		// The broker's own stdin is the request (or the MCP stream): the
+		// child never inherits it.
+		spec.Stdin = g.execStdin
+	}
 	captured := g.JSON && !stream
 	switch {
 	case !g.JSON:

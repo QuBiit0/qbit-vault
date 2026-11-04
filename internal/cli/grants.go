@@ -445,31 +445,10 @@ func newRevoke(g *globals) *cobra.Command {
 			}
 			defer s.close()
 
-			var (
-				n    int
-				mode string
-			)
-			err = g.mutateGrants(cmd.ErrOrStderr(), s, func(st *grants.Store) (bool, error) {
-				hadTokens := len(st.Tokens) > 0
-				switch {
-				case all:
-					mode, n = "all", grants.RevokeAll(st)
-					return n > 0 || hadTokens, nil
-				case sessionOnly:
-					mode, n = "session", grants.RevokeSession(st, g.Session)
-				default:
-					mode, n = "name", grants.RevokeName(st, name, layerKey)
-				}
-				return n > 0, nil
-			})
+			n, err := g.revokeGrants(cmd.ErrOrStderr(), s, name, layerKey, all, sessionOnly)
 			if err != nil {
 				return err
 			}
-			rec := audit.Record{Event: audit.EventRevoke, Layer: layerKey, Detail: fmt.Sprintf("%s revoked=%d", mode, n)}
-			if name != "" {
-				rec.Names = []string{name}
-			}
-			g.record(cmd.ErrOrStderr(), rec)
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), revokeBody{OK: true, Revoked: n})
 			}
@@ -485,6 +464,37 @@ func newRevoke(g *globals) *cobra.Command {
 	cmd.Flags().BoolVar(&all, "all", false, "revoke every grant")
 	cmd.Flags().BoolVar(&sessionOnly, "session-only", false, "revoke the grants of --session only")
 	return cmd
+}
+
+// revokeGrants drops grants by name (in layerKey, or every layer when it is
+// empty), all of them, or those of g.Session, and audits it best effort.
+func (g *globals) revokeGrants(stderr io.Writer, s *session, name, layerKey string, all, sessionOnly bool) (int, error) {
+	var (
+		n    int
+		mode string
+	)
+	err := g.mutateGrants(stderr, s, func(st *grants.Store) (bool, error) {
+		hadTokens := len(st.Tokens) > 0
+		switch {
+		case all:
+			mode, n = "all", grants.RevokeAll(st)
+			return n > 0 || hadTokens, nil
+		case sessionOnly:
+			mode, n = "session", grants.RevokeSession(st, g.Session)
+		default:
+			mode, n = "name", grants.RevokeName(st, name, layerKey)
+		}
+		return n > 0, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	rec := audit.Record{Event: audit.EventRevoke, Layer: layerKey, Detail: fmt.Sprintf("%s revoked=%d", mode, n)}
+	if name != "" {
+		rec.Names = []string{name}
+	}
+	g.record(stderr, rec)
+	return n, nil
 }
 
 type grantRow struct {

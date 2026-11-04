@@ -34,13 +34,15 @@ var sessionRE = regexp.MustCompile(`^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$`)
 
 // globals holds the persistent flags shared by every command.
 type globals struct {
-	getenv  func(string) string
-	stderr  io.Writer // for test prompt backends that play the terminal
-	home    string
-	JSON    bool
-	Session string
-	Quiet   bool
-	NoColor bool
+	getenv func(string) string
+	stderr io.Writer // for test prompt backends that play the terminal
+	// execStdin, when set, is the stdin of an exec child instead of ours.
+	execStdin io.Reader
+	home      string
+	JSON      bool
+	Session   string
+	Quiet     bool
+	NoColor   bool
 }
 
 // Home returns the vault directory: --home, else $GENTLE_VAULT_HOME, else
@@ -223,6 +225,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newExec(g))
 	root.AddCommand(newPromptCmd(g))
 	root.AddCommand(newLock(g), newUnlock(g), newRestore(g), newRekey(g), newImport(g))
+	root.AddCommand(newBrokerCmd(g))
 	return root
 }
 

@@ -25,7 +25,7 @@ Branch `feat/cli-skeleton`. Spec authority: docs/ROADMAP.md § Phase 3, docs/PRD
 | P4 | S2, S3, S7 | worker | 3.2 Claude Code adapter (MCP, hooks, deny-list, Gentle AI preservation) | 720fb0c | done |
 | P5 | S2, S4 | worker | 3.3 Codex adapter (TOML, sandbox -> tty) | d00da6e | done |
 | P6 | S2, S8 | - | 3.4 OpenCode adapter (MCP; plugin when available) | | dropped |
-| P7 | S2, S5 | worker | 3.5 Pi adapter (MCP entry, printed install command) | | pending |
+| P7 | S2, S5 | worker | 3.5 Pi adapter (MCP entry, printed install command) | 9ca10d6 | done |
 | P8 | S2, S3 | worker | 3.6b `sync`, `uninstall` (+ `--purge`), full `doctor` (incl. sync conflicts) | | pending |
 | P9 | S2, S8 | - | 3.7 npm launcher, platform packages, goreleaser, Minisign: moved to Phase 5 (install with `go install` meanwhile) | | dropped |
 

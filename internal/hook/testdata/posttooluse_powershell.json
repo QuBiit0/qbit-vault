@@ -1,0 +1,18 @@
+{
+  "session_id": "abc123",
+  "cwd": "C:\\Users\\user\\my-project",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "PowerShell",
+  "tool_input": {
+    "command": "Get-Content .env"
+  },
+  "tool_response": {
+    "stdout": "__OUT__",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false
+  },
+  "tool_use_id": "toolu_01DEF456",
+  "duration_ms": 900
+}

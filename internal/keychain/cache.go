@@ -75,6 +75,11 @@ func cacheGet(opts Options, vaultID string) (secret.Secret, bool) {
 // cachePut stores key best-effort; failures are silent because the cache is
 // only a convenience.
 func cachePut(opts Options, vaultID string, key secret.Secret) {
+	cachePutUntil(opts, vaultID, key, opts.clock().Add(opts.ttl()))
+}
+
+// cachePutUntil is cachePut with an explicit expiry.
+func cachePutUntil(opts Options, vaultID string, key secret.Secret, exp time.Time) {
 	dir := cacheDir(opts)
 	if dir == "" {
 		return
@@ -91,7 +96,7 @@ func cachePut(opts Options, vaultID string, key secret.Secret) {
 	defer clear(enc)
 	base64.StdEncoding.Encode(enc, raw)
 	body, err := json.Marshal(cacheEntry{
-		ExpiresAt: opts.clock().Add(opts.ttl()).UTC().Format(time.RFC3339),
+		ExpiresAt: exp.UTC().Format(time.RFC3339),
 		Key:       string(enc),
 	})
 	if err != nil {

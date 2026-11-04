@@ -33,7 +33,7 @@ Values are **never** accepted as arguments. `set` and `import` read from the mas
 | `relink OLD_ROOT NEW_ROOT` | Repoint a project layer after moving or re-cloning a repository. `OLD_ROOT` must be an existing project layer (it need not exist on disk); `NEW_ROOT` must be a repository root (contains `.git`, else `no_project`) without a layer of its own. **Grants do not follow the layer:** every grant of the old project layer is dropped (relink can only narrow access) and the user grants again for the new root; the output reports `grants_dropped`. |
 | `import --from-env NAME[,NAME…]` / `import --from-file PATH [--names A,B]` | Explicit, user-run import from the current environment or a dotenv file. Never run by `init`. Prints what it imported by name and offers to unset/remove the source. |
 | `rekey` | Rotate the master key. |
-| `lock` / `unlock` | Passphrase mode: drop / refresh the cached master key. |
+| `lock` / `unlock` | Passphrase mode: drop / refresh the cached master key. `lock` reads no key and asks nothing: in passphrase mode it deletes the unlock cache (`vault locked: the cached master key was removed`); in keychain mode there is nothing to drop (`nothing to lock: the master key is in the OS keychain (<mode>)`). `unlock` always asks the passphrase (it does not trust a cached key), checks that the key opens the vault and caches it where a memory-backed cache exists (`vault unlocked until <time>`); without one it says `passphrase ok; this platform has no unlock cache, so the passphrase is asked on each use`. In keychain mode it only checks the key (`unlocked: the master key is in the OS keychain (<mode>)`). A wrong passphrase is `vault_locked` (exit 4) and leaves the cache as it was; no prompt backend is the usage error `no controlling terminal available`. Neither writes an audit record. |
 | `restore [--list] [--from TS]` | Restore the vault from an encrypted backup. Backups made under an earlier master key are opened with `keys/retired.enc`. |
 
 **Several values in one call (hosts).** `set --stdin --fields A,B,C [--kinds secret,text,text] --grant S --from-prompt-token T` reads one JSON object `{"A":"…","B":"…","C":"…"}` from stdin and stores every field in one locked operation, all-or-nothing (a missing, extra or blank field stores nothing), then creates one grant per record with a token issued for exactly those names. It is how a host stores the values of a multi-field capture (CONTRACT `request` with `fields`). `--kinds` defaults every field to `secret`.
@@ -86,6 +86,8 @@ Every success is exactly one object with `"ok":true`. `project` is `{"root":…,
 | `relink` | `{"ok":true,"from":…,"to":…,"secrets":N}` plus `"grants_dropped":N` when N > 0 |
 | `grant` | `{"ok":true,"grant":{"name":…,"layer":…,"scope":…,"session":…|null,"expires_at":…|null}}` (`expires_at` is `null` for `project`) |
 | `revoke` | `{"ok":true,"revoked":N}` |
+| `lock` | `{"ok":true,"locked":bool,"keychain":"<mode>"}` (`locked` is false in keychain mode) |
+| `unlock` | `{"ok":true,"unlocked":true,"keychain":"<mode>","cached":bool,"expires_at":…\|null}` |
 | `grants` | `{"ok":true,"grants":[{"name":…,"layer":…,"project":…,"scope":…,"session":…|null,"expires_at":…|null,"remaining":…|null}]}` (`remaining` is a duration such as `29m30s`) |
 | `audit` | `{"ok":true,"records":[…]}` |
 | `audit --verify` | `{"ok":true,"valid":bool,"records":N}` plus `"problem":{"line":L,"seq":S,"reason":…}` when not valid |

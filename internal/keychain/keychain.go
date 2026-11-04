@@ -272,6 +272,61 @@ func Unlock(home, vaultID string, opts Options) (secret.Secret, Mode, error) {
 	return key, ModePassphrase, nil
 }
 
+// ModeOf reports how the master key of home is held, from the files alone:
+// key.enc present means passphrase mode, otherwise the OS keychain. It reads
+// no key.
+func ModeOf(home string, opts Options) (Mode, error) {
+	exists, err := fileExists(keyFilePath(home))
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return ModePassphrase, nil
+	}
+	return Mode(opts.os().Name()), nil
+}
+
+// Refresh is Unlock for `gentle-vault unlock`: in passphrase mode it always
+// asks the passphrase (it never trusts the cache), verifies it against
+// key.enc and caches the key where a cache exists. cached reports whether the
+// key is now cached, until exp. A wrong passphrase leaves the cache as it
+// was. In keychain mode it reads the OS keychain and caches nothing. The
+// caller owns the key and must wipe it.
+func Refresh(home, vaultID string, opts Options) (key secret.Secret, mode Mode, cached bool, exp time.Time, err error) {
+	if err := checkID(vaultID); err != nil {
+		return secret.Secret{}, "", false, time.Time{}, err
+	}
+	if mode, err = ModeOf(home, opts); err != nil {
+		return secret.Secret{}, "", false, time.Time{}, err
+	}
+	if mode != ModePassphrase {
+		b := opts.os()
+		key, err := b.Get(vaultID)
+		return key, Mode(b.Name()), false, time.Time{}, err
+	}
+	if opts.Passphrase == nil {
+		return secret.Secret{}, "", false, time.Time{}, ErrUnavailable
+	}
+	pass, err := askPassphrase(opts.Passphrase, false)
+	if err != nil {
+		return secret.Secret{}, "", false, time.Time{}, err
+	}
+	defer pass.Wipe()
+	if key, err = readKeyFile(home, pass); err != nil {
+		return secret.Secret{}, "", false, time.Time{}, err
+	}
+	if cacheDir(opts) == "" {
+		return key, ModePassphrase, false, time.Time{}, nil
+	}
+	exp = opts.clock().Add(opts.ttl())
+	cachePutUntil(opts, vaultID, key, exp)
+	if k, ok := cacheGet(opts, vaultID); ok {
+		k.Wipe()
+		return key, ModePassphrase, true, exp, nil
+	}
+	return key, ModePassphrase, false, time.Time{}, nil
+}
+
 // Lock deletes the unlock cache for the vault. It is a no-op when there is
 // no cache.
 func Lock(vaultID string, opts Options) error {

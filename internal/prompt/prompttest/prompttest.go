@@ -29,7 +29,8 @@ type Call struct {
 	Q        string
 	Options  []string
 	Default  int
-	Confirm  bool // Passphrase: asked twice
+	Confirm  bool   // Passphrase: asked twice
+	Text     string // Show: the text shown
 }
 
 // ErrScriptExhausted is returned when the Fake is asked more than scripted.
@@ -81,6 +82,12 @@ func (f *Fake) Choose(q string, options []string, def int) (int, error) {
 func (f *Fake) Confirm(q string) (bool, error) {
 	a, err := f.pop(Call{Kind: "confirm", Q: q})
 	return a.Yes, err
+}
+
+// Show implements prompt.Shower; the scripted answer's Err fails it.
+func (f *Fake) Show(title, text string) error {
+	_, err := f.pop(Call{Kind: "show", Q: title, Text: text})
+	return err
 }
 
 // Passphrase implements prompt.Backend.

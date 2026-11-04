@@ -132,6 +132,9 @@ func (osascriptTool) build(path string, d dialog) command {
 			strings.Join(items, ", "), asString(d.text), asString(d.title), items[d.def])
 		s.WriteString("if r is false then error number -128\n")
 		s.WriteString("return item 1 of r\n")
+	case dialogShow:
+		fmt.Fprintf(&s, `display dialog %s with title %s buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel"`+"\n", asString(d.text), asString(d.title))
+		s.WriteString("return button returned of result\n")
 	case dialogConfirm:
 		fmt.Fprintf(&s, `display dialog %s with title %s buttons {"Decline", "Confirm"} default button "Decline" cancel button "Decline" with icon caution`+"\n", asString(d.text), asString(d.title))
 		s.WriteString("return button returned of result\n")

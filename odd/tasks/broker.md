@@ -21,10 +21,10 @@ Branch `feat/cli-skeleton`.
 | --- | --- | --- | --- | --- | --- |
 | T1 | S1-S4, S7 | inline | `internal/broker`: envelope decode and validation, dispatch, capabilities, normative policy; `broker --op`; CLI backend for `list`, `exec`, `grant`, `revoke` | 60ee2ac | done |
 | T2 | S5, S7 | inline | `request` (single name): reason heuristic, cooldown, non-disclosure, in-process prompt, store and grant | 8de9a67 | done |
-| T3 | S5 | inline | multi-field `request` (2.2b) and backend rendering (2.2c) | | pending |
+| T3 | S5 | inline | multi-field `request` (2.2b) and backend rendering (2.2c) | 9de39b0 (T3a), 40c2c9b (T3b) | done |
 | T4 | S5 | inline | `manage` (2.2a) | 2785344 | done |
 | T5 | S6 | inline | `mcp` stdio server (2.3) | 634802f | done |
-| T6 | S6 | inline | conformance harness (2.4) | | pending |
+| T6 | S6 | inline | conformance harness (2.4) | 00c562b | done |
 
 ## Log
 
@@ -41,3 +41,4 @@ Branch `feat/cli-skeleton`.
 - L11. T3b: `prompt.Former` (optional) is implemented by the native backend for PowerShell (one WinForms form, base64 line per value) and zenity (`--forms`, control-character separator, count must match); kdialog, osascript and the terminal answer `ErrNoForm` and `request` falls back to one box per field. The real PowerShell parser accepts the form script for all 22 hostile texts; the dialog itself was not opened (no click automation): manual smoke step added to TESTING.md.
 - L12. T6: `internal/conformance` validates per `$def` (the root `oneOf` is replaced by a `$ref`, so a message cannot fail by matching two branches). It found two real gaps, fixed: the schema had no `capabilitiesReq` (added), and `capabilities.prompt_backends` could report a backend name outside the contract enum (the broker now reports only contract names). The harness lives in `internal/` instead of `e2e/contract-conformance` because it needs the in-process fakes (keychain mock, prompt fake); TESTING.md updated.
 - L13. Independent verify (gentle-ai-verify) on 60ee2ac..00c562b: S1-S4, S6, S7 PASS; S5 FAIL on B1 plus W1-W5, all fixed with a RED test each: B1 a blank allowlist entry is `invalid request: changes`, and the edit diff and `(widening)` label use the list as stored; W1 `suggested_layer: project` outside a repository is `no_project` before any name is resolved (no existence oracle); W2 the zenity form gets `--no-markup`; W3 field descriptions are shown (escaped) in the box header and the form label, and `list` neutralizes C1 and format characters; W4 stored fields are named in the box header and marked `already stored` in the scope question; W5 a blank last PowerShell form field is a blank value, not a failed dialog. Also reason and description limits now count characters, not bytes. Notes left as is: terminal Enter takes the suggested scope (a user action on a hint); `broker`/`mcp` subcommands trust their envelope cwd, so host hooks (phase 3) must refuse them in the agent's shell; refusals are not audited by the broker yet.
+- L14. Native review: assess on 42c54b0..eca2ef1 is high risk (process boundary) with review due; START with lenses risk and reliability stopped at preflight with `lens_context_budget_exceeded` (4025 changed lines; no authority created). A committed-only review compares HEAD with a base, so a middle commit cannot be reviewed alone without splitting the history into chained slices: that is a user decision. The independent verify (L13) covered S1-S7.

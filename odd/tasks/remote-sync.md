@@ -20,7 +20,7 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 | T2 | S2-S4 | inline | S.1b: `link`, unlinked layers in `list --layer all`, origin hint, broker `unlinked_match` | 0cab11d | done |
 | T3 | S5 | inline | S.2 merge engine | db370d8 | done |
 | T4 | S5 | inline | S.3 remote crypto | ea50f5f | done |
-| T5 | S5 | inline | S.4 server core (S.5 pairing, recovery, rekey, anchors next) | (S.4 commit) | in progress |
+| T5 | S5 | inline | S.4 server core, S.5 pairing, recovery, rekey, anchors | fdca3e7 (S.4), (S.5 commit) | done |
 | T6 | S5 | inline | S.6 packaging | | pending |
 | T7 | S5 | inline | S.7-S.9 client | | pending |
 | T8 | S5 | inline | S.10 e2e | | pending |
@@ -35,3 +35,4 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 - L6. T3 notes: RED observed (build). `internal/merge` is pure over schema-2 bodies; records are opaque except `hlc`. Every case of REMOTE_SYNC § 7.3 has a test; FuzzMerge (1.47M executions, 30 s) checks that no change that differs from the base on either side is lost and that the result is deterministic. Conflict ids are a hash of key and losing clock, so the same conflict seen on two devices dedupes.
 - L7. T4 notes: RED observed (build). Standard library only (crypto/hkdf, ed25519, ecdh X25519) plus x/crypto XChaCha20-Poly1305. The fixed vector was checked against an independent HKDF (Python, RFC 5869). The anchor AAD drops `generation`: the anchor key is derived from the master key, so a new generation already changes it. FuzzOpen: mutated objects never open, never panic.
 - L8. T5 S.4 notes: RED observed (build). Standard library net/http with Go 1.22 method patterns; the log line uses `r.Pattern` so it never holds a path value. Tokens and challenges live in memory (a restart ends sessions). The server cannot open a vault version but checks its cleartext AAD (`account_id`, `generation`, `version = base + 1`) so a client bug cannot store a mislabelled version.
+- L9. T5 S.5 notes: RED observed. The server checks that a pairing code fingerprints the keys it carries (`remote.PairingCode`), so a pairing can only carry the keys its code names; a poll answers `approved` once. A recovery token reads only the recovery envelope and registers one device. `rekey` is one transaction: new version under generation+1, one envelope per remaining device (exactly), new recovery envelope (the old lookup stops working), revoked devices unindexed and their tokens dropped; a device cannot revoke itself.

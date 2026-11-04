@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 )
 
 const brokerSession = "pi:broker1234"
@@ -180,7 +180,7 @@ func TestBrokerWithoutVault(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()
 	code, out, _ := h.run(envelope("list", dir, ""), "broker", "--op", "list")
-	if code != exitcode.Refusal || !strings.Contains(out, `"message":"no vault here; run 'gentle-vault init'"`) {
+	if code != exitcode.Refusal || !strings.Contains(out, `"message":"no vault here; run 'qbit-vault init'"`) {
 		t.Fatalf("code=%d out=%q", code, out)
 	}
 	_ = os.Remove(dir)

@@ -5,15 +5,15 @@ package vault
 import (
 	"fmt"
 
-	"github.com/QuBiit0/gentle-vault/internal/envelope"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/envelope"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 const (
 	// FormatVault is the envelope format identifier, also part of the AAD.
-	FormatVault = "gentle-vault/1"
+	FormatVault = "qbit-vault/1"
 	// FormatGrants identifies grants.enc.
-	FormatGrants = "gentle-vault-grants/1"
+	FormatGrants = "qbit-vault-grants/1"
 	// CipherName is the only supported AEAD.
 	CipherName = envelope.CipherName
 )

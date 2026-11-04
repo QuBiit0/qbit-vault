@@ -13,12 +13,12 @@ import (
 	"time"
 )
 
-// The test binary doubles as the child process: when GV_RUNNER_HELPER is set,
+// The test binary doubles as the child process: when QBV_RUNNER_HELPER is set,
 // TestMain runs that mode instead of the tests. This keeps the tests portable
 // (no sh, cat or sleep needed).
 const (
-	envHelper = "GV_RUNNER_HELPER"
-	envArg    = "GV_RUNNER_ARG"
+	envHelper = "QBV_RUNNER_HELPER"
+	envArg    = "QBV_RUNNER_ARG"
 )
 
 func helperMain(mode string) {

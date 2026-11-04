@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Master-key rotation and device revocation (docs/REMOTE_SYNC.md § 4.5, § 4.6)
@@ -49,12 +49,12 @@ var (
 	errRevoked        = codedError{"device_revoked", "this device was revoked; sync is now off here and the local vault is intact", exitcode.Failure}
 	errRotateConflict = codedError{"internal", "the server changed while rotating the key; try again", exitcode.Failure}
 	errKeyUnverified  = codedError{"remote_auth", "the new account key could not be verified; this device keeps its current key", exitcode.Failure}
-	errRotateHalf     = codedError{"internal", "the account key was rotated on the server but this device could not finish; run 'gentle-vault remote sync'", exitcode.Failure}
-	errNotInRoster    = codedError{"internal", "a device on the server is missing from the roster; run 'gentle-vault remote sync' and try again", exitcode.Failure}
+	errRotateHalf     = codedError{"internal", "the account key was rotated on the server but this device could not finish; run 'qbit-vault remote sync'", exitcode.Failure}
+	errNotInRoster    = codedError{"internal", "a device on the server is missing from the roster; run 'qbit-vault remote sync' and try again", exitcode.Failure}
 )
 
 var (
-	errRevokeSelf    = usageError{"this device cannot revoke itself; use 'gentle-vault remote logout'"}
+	errRevokeSelf    = usageError{"this device cannot revoke itself; use 'qbit-vault remote logout'"}
 	errRevokeUnknown = usageError{"no such device in this vault's roster"}
 	errRevokeAlready = usageError{"that device is already revoked"}
 )

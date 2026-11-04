@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
 )
 
 var openProbe = []func(*globals) *cobra.Command{probe}
@@ -83,7 +83,7 @@ func TestInitRemovesOrphanKeyWhenVaultInitFails(t *testing.T) {
 	if code != exitcode.Corrupt || out != want || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if _, err := keyring.Get("gentle-vault", "master:"+id); err == nil {
+	if _, err := keyring.Get("qbit-vault", "master:"+id); err == nil {
 		t.Fatal("orphan key left in the keychain")
 	}
 	if b, _ := os.ReadFile(filepath.Join(h.home, "vault.enc")); string(b) != "x" {

@@ -13,12 +13,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/merge"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Slice S.9a: master-key rotation and device revocation (REMOTE_SYNC § 4.5,
@@ -286,7 +286,7 @@ func TestRevokeDeviceRefusals(t *testing.T) {
 	cid := c.devID()
 	key, state := a.masterKey(), *readState(t, a)
 	for _, tc := range []struct{ name, id, want string }{
-		{"this device", a.devID(), "this device cannot revoke itself; use 'gentle-vault remote logout'"},
+		{"this device", a.devID(), "this device cannot revoke itself; use 'qbit-vault remote logout'"},
 		{"unknown", strings.Repeat("e", 32), "no such device in this vault's roster"},
 		{"bad shape", "../../etc", "no such device in this vault's roster"},
 	} {
@@ -687,7 +687,7 @@ func TestRecoveryKeyRotateOnAStaleGeneration(t *testing.T) {
 	f := answers(yes())
 	asBackend(t, keepBackend{f})
 	code, out, errs := a.run("", "remote", "recovery-key", "--rotate")
-	if code != exitcode.Failure || out != "" || errs != "error: the account key changed since the last sync; run 'gentle-vault remote sync', then try again\n" {
+	if code != exitcode.Failure || out != "" || errs != "error: the account key changed since the last sync; run 'qbit-vault remote sync', then try again\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if *readState(t, a) != before || recoveryKeyIn(f) != "" {

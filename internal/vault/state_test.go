@@ -36,7 +36,7 @@ func TestSaveIncrementsWritesAndRoundTrips(t *testing.T) {
 			t.Fatal(err)
 		}
 		st := readState(t, s.home)
-		if st["writes"] != float64(i) || st["format"] != "gentle-vault-state/1" {
+		if st["writes"] != float64(i) || st["format"] != "qbit-vault-state/1" {
 			t.Fatalf("state after save %d: %v", i, st)
 		}
 		pt, snap, err := s.load()

@@ -11,25 +11,25 @@ import (
 	"time"
 )
 
-// Main is the gentle-vault-server command line (REMOTE_SYNC.md § 10):
+// Main is the qbit-vault-server command line (REMOTE_SYNC.md § 10):
 //
-//	serve              run the API (GV_SERVER_DATA, GV_SERVER_LISTEN,
-//	                   GV_SERVER_PUBLIC_URL, GV_SERVER_TLS_CERT/KEY,
-//	                   GV_SERVER_TRUST_PROXY)
+//	serve              run the API (QBV_SERVER_DATA, QBV_SERVER_LISTEN,
+//	                   QBV_SERVER_PUBLIC_URL, QBV_SERVER_TLS_CERT/KEY,
+//	                   QBV_SERVER_TRUST_PROXY)
 //	invite [--ttl D]   print one single-use account invite (default 24h)
 //	health             exit 0 when /healthz answers on the listen address
 //
 // It returns the process exit code: 0 ok, 1 failure, 2 usage.
 func Main(ctx context.Context, args []string, getenv func(string) string, stdout, stderr io.Writer) int {
 	usage := func(msg string) int {
-		fmt.Fprintf(stderr, "error: %s\nusage: gentle-vault-server serve | invite [--ttl 24h] | health\n", msg)
+		fmt.Fprintf(stderr, "error: %s\nusage: qbit-vault-server serve | invite [--ttl 24h] | health\n", msg)
 		return 2
 	}
 	if len(args) == 0 {
 		return usage("no command given")
 	}
-	data := or(getenv("GV_SERVER_DATA"), "/data")
-	listen := or(getenv("GV_SERVER_LISTEN"), ":8080")
+	data := or(getenv("QBV_SERVER_DATA"), "/data")
+	listen := or(getenv("QBV_SERVER_LISTEN"), ":8080")
 	switch args[0] {
 	case "invite":
 		ttl := 24 * time.Hour
@@ -76,17 +76,17 @@ func Main(ctx context.Context, args []string, getenv func(string) string, stdout
 		if len(args) != 1 {
 			return usage("serve takes no arguments")
 		}
-		public := getenv("GV_SERVER_PUBLIC_URL")
+		public := getenv("QBV_SERVER_PUBLIC_URL")
 		if public == "" {
-			fmt.Fprintln(stderr, "error: GV_SERVER_PUBLIC_URL is required (the https:// origin clients use)")
+			fmt.Fprintln(stderr, "error: QBV_SERVER_PUBLIC_URL is required (the https:// origin clients use)")
 			return 2
 		}
-		s, err := New(Config{Data: data, PublicURL: strings.TrimRight(public, "/"), Log: stderr, TrustProxy: getenv("GV_SERVER_TRUST_PROXY") == "1", Version: getenv("GV_SERVER_VERSION")})
+		s, err := New(Config{Data: data, PublicURL: strings.TrimRight(public, "/"), Log: stderr, TrustProxy: getenv("QBV_SERVER_TRUST_PROXY") == "1", Version: getenv("QBV_SERVER_VERSION")})
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 2
 		}
-		return serve(ctx, s, listen, getenv("GV_SERVER_TLS_CERT"), getenv("GV_SERVER_TLS_KEY"), stderr)
+		return serve(ctx, s, listen, getenv("QBV_SERVER_TLS_CERT"), getenv("QBV_SERVER_TLS_KEY"), stderr)
 	}
 	return usage("unknown command")
 }
@@ -96,7 +96,7 @@ func serve(ctx context.Context, s *Server, listen, cert, key string, stderr io.W
 		ReadTimeout: time.Minute, WriteTimeout: time.Minute, IdleTimeout: 2 * time.Minute}
 	ln, err := net.Listen("tcp", listen)
 	if err != nil {
-		fmt.Fprintln(stderr, "error: cannot listen on GV_SERVER_LISTEN")
+		fmt.Fprintln(stderr, "error: cannot listen on QBV_SERVER_LISTEN")
 		return 1
 	}
 	errc := make(chan error, 1)

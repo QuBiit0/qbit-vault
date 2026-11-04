@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/envelope"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/envelope"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 const (
 	// FormatRetired identifies keys/retired.enc (docs/STORAGE.md § Retired keys).
-	FormatRetired = "gentle-vault-retired/1"
+	FormatRetired = "qbit-vault-retired/1"
 	keysDir       = "keys"
 	retiredFile   = "retired.enc"
 	// maxRetired bounds the list; the oldest key is dropped first. Backups are

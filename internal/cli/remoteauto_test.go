@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Slice S.8: the sync round inside the ordinary commands (REMOTE_SYNC § 7.1).
@@ -19,7 +19,7 @@ import (
 
 const (
 	wantUnreachable = "warning: not synced (server unreachable); will retry\n"
-	wantRollback    = "warning: not synced (remote_rollback); the change is kept on this device; run 'gentle-vault remote status'\n"
+	wantRollback    = "warning: not synced (remote_rollback); the change is kept on this device; run 'qbit-vault remote status'\n"
 )
 
 type tap struct {

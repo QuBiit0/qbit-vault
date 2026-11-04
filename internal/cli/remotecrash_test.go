@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 )
 
 // These tests need the crash points of remotecrash_on.go, so they run in a

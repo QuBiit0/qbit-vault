@@ -1,6 +1,6 @@
 # Feature: roadmap slice 1.8, exec
 
-`gentle-vault exec`: run one command with granted secrets injected into that child only, after
+`qbit-vault exec`: run one command with granted secrets injected into that child only, after
 the grant check, the dump-command guard and the binary allowlist; stream its output through the
 redactor; enforce a timeout on the whole process tree; audit it. Branch `feat/cli-skeleton`.
 
@@ -27,7 +27,7 @@ redactor; enforce a timeout on the whole process tree; audit it. Branch `feat/cl
 - L1. User: "continua" (proceed with slice 1.8; the agent's recommendation of fail-closed audit for exec was stated before and not objected to).
 - L2. Decision: audit is fail-closed for exec in two phases: an `exec` record with `outcome: "started"` (names, layer, session, redacted command, cwd) is appended before the child starts; if it fails, exec is refused (`internal`) and nothing runs. After the child ends, a second `exec` record with `outcome: "finished"` carries exit code, duration and redactions (best-effort, stderr warning on failure). PRD R-EXEC-06 is reworded accordingly.
 - L3. Decision: the binary allowlist applies to every pipeline/sequence segment of the command, not only the first token, because the injected environment reaches every process the shell starts.
-- L4. Decision: the YAML data files are parsed by a small purpose-built reader for their fixed shape (`format:` plus a `patterns:` list of quoted strings with optional trailing comments); no YAML dependency. The default `dumpguard.yaml` is embedded; `$GENTLE_VAULT_HOME/dumpguard.yaml`, when present, adds patterns and can never remove a default one.
+- L4. Decision: the YAML data files are parsed by a small purpose-built reader for their fixed shape (`format:` plus a `patterns:` list of quoted strings with optional trailing comments); no YAML dependency. The default `dumpguard.yaml` is embedded; `$QBIT_VAULT_HOME/dumpguard.yaml`, when present, adds patterns and can never remove a default one.
 - L5. Decision: `--shell auto` is `/bin/sh -c` on POSIX; on Windows it is `bash -c` when `bash` is on PATH (Git Bash, which agents use), else `cmd /d /s /c`.
 - L6. Decision: the child inherits stdin; values reach the child only through its environment (Go's os/exec needs strings, so those copies cannot be wiped; accepted and documented, like the GC note in STORAGE.md).
 - L7. Decision: `once` grants are consumed before the child starts, so a failed run still uses up the grant.

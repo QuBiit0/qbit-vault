@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
 )
 
 func TestFakeScriptAndCalls(t *testing.T) {

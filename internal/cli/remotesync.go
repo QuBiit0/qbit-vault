@@ -13,11 +13,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/merge"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // One sync round (docs/REMOTE_SYNC.md § 7.2) and the commands that only read
@@ -470,7 +470,7 @@ func newRemoteStatus(g *globals) *cobra.Command {
 }
 
 // lockedText stands for what `remote status` cannot read without the key.
-const lockedText = "locked (run 'gentle-vault unlock')"
+const lockedText = "locked (run 'qbit-vault unlock')"
 
 // anchorText is the anchor state `remote status` shows: when the last audit
 // anchor was uploaded, or none.
@@ -484,7 +484,7 @@ func anchorText(home string) string {
 // warningText is the stderr line of a status warning.
 func warningText(w string) string {
 	if w == "pending push" {
-		return "not synced (changes are waiting for the server); run 'gentle-vault remote sync'"
+		return "not synced (changes are waiting for the server); run 'qbit-vault remote sync'"
 	}
 	return w
 }

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // The native backends ask in a dialog of the desktop session instead of the
@@ -155,7 +155,7 @@ func nativeFor(e Env) (tool, string) {
 	return nil, ""
 }
 
-// forced resolves a backend named by GENTLE_VAULT_PROMPT. A named backend
+// forced resolves a backend named by QBIT_VAULT_PROMPT. A named backend
 // that cannot run is an error, never a quiet fall back to the terminal.
 func forced(e Env, t tool) (string, error) {
 	if t.name() == "powershell" && e.Interactive != nil && !e.Interactive() {

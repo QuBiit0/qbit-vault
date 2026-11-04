@@ -12,12 +12,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/broker"
-	"github.com/QuBiit0/gentle-vault/internal/grants"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
-	"github.com/QuBiit0/gentle-vault/internal/runner"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/broker"
+	"github.com/QuBiit0/qbit-vault/internal/grants"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/runner"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // newBrokerCmd is the raw contract call of docs/CLI.md § Host plumbing: one

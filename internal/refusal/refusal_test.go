@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 )
 
 // The enum must be exactly the types listed in CONTRACT.md § Refusals.

@@ -3,14 +3,14 @@ package cli
 import (
 	"errors"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // newPrompt returns the prompt backend of one command, chosen by
-// GENTLE_VAULT_PROMPT. It is a seam: tests replace it with a fake, so no test
+// QBIT_VAULT_PROMPT. It is a seam: tests replace it with a fake, so no test
 // needs a terminal. The real backend reads the controlling terminal, never
 // the process stdin (L3).
 var newPrompt = func(g *globals) (prompt.Backend, error) { return prompt.Select(g.getenv) }

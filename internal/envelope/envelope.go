@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/crypto/chacha20poly1305"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // CipherName is the only supported AEAD.

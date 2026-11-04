@@ -165,15 +165,15 @@ func TestPowerShellParses(t *testing.T) {
 			want[file] = d.title + "|" + d.text
 		}
 	}
-	drv := `foreach ($fi in Get-ChildItem -LiteralPath $env:GV_DIR -Filter *.ps1) {
+	drv := `foreach ($fi in Get-ChildItem -LiteralPath $env:QBV_DIR -Filter *.ps1) {
   $s = [IO.File]::ReadAllText($fi.FullName)
   $e = $null
   [void][System.Management.Automation.Language.Parser]::ParseInput($s, [ref]$null, [ref]$e)
-  $pre = $s.Substring(0, $s.IndexOf($env:GV_MARK))
+  $pre = $s.Substring(0, $s.IndexOf($env:QBV_MARK))
   & { Invoke-Expression $pre; $o = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($title + '|' + $text)); Write-Output ($fi.Name + ' ' + $e.Count + ' ' + $o) }
 }`
 	cmd := exec.Command(ps, "-NoProfile", "-NonInteractive", "-Command", drv)
-	cmd.Env = append(os.Environ(), "GV_DIR="+dir, "GV_MARK="+psBodyMarker)
+	cmd.Env = append(os.Environ(), "QBV_DIR="+dir, "QBV_MARK="+psBodyMarker)
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("driver: %v", err)
@@ -682,7 +682,7 @@ func TestNativeTimeoutIsPassedToTheRunner(t *testing.T) {
 // ---- default runner ----
 
 func TestMain(m *testing.M) {
-	if os.Getenv("GV_HELPER") != "" {
+	if os.Getenv("QBV_HELPER") != "" {
 		helperMain()
 		return
 	}
@@ -692,7 +692,7 @@ func TestMain(m *testing.M) {
 // helperMain is a stand-in for zenity: it echoes stdin to stdout, writes to
 // stderr, sleeps or exits as told.
 func helperMain() {
-	switch os.Getenv("GV_HELPER") {
+	switch os.Getenv("QBV_HELPER") {
 	case "echo":
 		b, _ := io.ReadAll(os.Stdin)
 		os.Stdout.Write(b)
@@ -708,7 +708,7 @@ func helperMain() {
 
 func helper(mode string, stdin string) command {
 	self, _ := os.Executable()
-	return command{Path: self, Args: []string{"-test.run=XXX"}, Stdin: []byte(stdin), Env: append(os.Environ(), "GV_HELPER="+mode)}
+	return command{Path: self, Args: []string{"-test.run=XXX"}, Stdin: []byte(stdin), Env: append(os.Environ(), "QBV_HELPER="+mode)}
 }
 
 func TestExecRunner(t *testing.T) {
@@ -720,10 +720,10 @@ func TestExecRunner(t *testing.T) {
 }
 
 func TestExecRunnerMissingBinary(t *testing.T) {
-	if _, err := execRunner(context.Background(), command{Path: "gentle-vault-no-such-helper"}); err == nil {
+	if _, err := execRunner(context.Background(), command{Path: "qbit-vault-no-such-helper"}); err == nil {
 		t.Fatal("no error")
 	}
-	b := newNative(zenityTool{}, "gentle-vault-no-such-helper", execRunner, time.Minute)
+	b := newNative(zenityTool{}, "qbit-vault-no-such-helper", execRunner, time.Minute)
 	if _, err := b.Secret(req); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("got %v", err)
 	}
@@ -921,12 +921,12 @@ func TestSelectOverride(t *testing.T) {
 
 // TestManualPowerShellDialog opens the real dialog; run it by hand:
 //
-//	GENTLE_VAULT_MANUAL_DIALOG=1 go test ./internal/prompt -run TestManualPowerShellDialog -v
+//	QBIT_VAULT_MANUAL_DIALOG=1 go test ./internal/prompt -run TestManualPowerShellDialog -v
 //
 // It reports the length of what you type, never the value.
 func TestManualPowerShellDialog(t *testing.T) {
-	if os.Getenv("GENTLE_VAULT_MANUAL_DIALOG") != "1" {
-		t.Skip("set GENTLE_VAULT_MANUAL_DIALOG=1 to open the dialog")
+	if os.Getenv("QBIT_VAULT_MANUAL_DIALOG") != "1" {
+		t.Skip("set QBIT_VAULT_MANUAL_DIALOG=1 to open the dialog")
 	}
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell dialog test is for Windows")

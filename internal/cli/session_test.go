@@ -13,10 +13,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 const (
@@ -90,7 +90,7 @@ func jsonOf(t *testing.T, v any) string {
 
 func TestSessionNotInitialized(t *testing.T) {
 	h := newHarness(t)
-	const msg = "no vault here; run 'gentle-vault init'"
+	const msg = "no vault here; run 'qbit-vault init'"
 	code, out, errs := h.runExtra("", []func(*globals) *cobra.Command{probe}, "probe")
 	if code != exitcode.Failure || out != "" || errs != "error: "+msg+"\n" {
 		t.Fatalf("human: code=%d out=%q err=%q", code, out, errs)
@@ -122,7 +122,7 @@ func TestSessionRefusals(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := keyring.Delete("gentle-vault", "master:"+id); err != nil {
+		if err := keyring.Delete("qbit-vault", "master:"+id); err != nil {
 			t.Fatal(err)
 		}
 		code, out, errs := h.runExtra("", []func(*globals) *cobra.Command{probe}, "--json", "probe")
@@ -154,7 +154,7 @@ func TestSessionRefusals(t *testing.T) {
 			t.Fatal(err)
 		}
 		code, _, errs := h.runExtra("", []func(*globals) *cobra.Command{probe}, "probe")
-		if code != exitcode.Corrupt || errs != "error: vault is corrupt; run 'gentle-vault restore'\n" {
+		if code != exitcode.Corrupt || errs != "error: vault is corrupt; run 'qbit-vault restore'\n" {
 			t.Fatalf("code=%d err=%q", code, errs)
 		}
 	})

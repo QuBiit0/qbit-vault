@@ -36,7 +36,7 @@ func TestRefreshAsksEvenWithWarmCacheAndRecaches(t *testing.T) {
 	if revealStr(got) != revealStr(key) {
 		t.Fatal("refresh returned another key")
 	}
-	if _, err := os.Stat(filepath.Join(run, "gentle-vault", testID+".key")); err != nil {
+	if _, err := os.Stat(filepath.Join(run, "qbit-vault", testID+".key")); err != nil {
 		t.Fatal("cache missing after refresh")
 	}
 }
@@ -50,7 +50,7 @@ func TestRefreshWrongPassphraseKeepsCache(t *testing.T) {
 	if _, _, err := Setup(home, testID, opts); err != nil {
 		t.Fatal(err)
 	}
-	cache := filepath.Join(run, "gentle-vault", testID+".key")
+	cache := filepath.Join(run, "qbit-vault", testID+".key")
 	before, err := os.ReadFile(cache)
 	if err != nil {
 		t.Fatal(err)

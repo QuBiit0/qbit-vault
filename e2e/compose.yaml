@@ -1,16 +1,16 @@
 # Sync battery topology (docs/TESTING.md § Tier 2 item 7): one
-# gentle-vault-server behind a recording TLS proxy, three client containers
+# qbit-vault-server behind a recording TLS proxy, three client containers
 # and an auditor that scans the server's /data and the recorded HTTP bodies.
-# Run it with e2e/docker-test.sh (project name gv-e2e-sync); nothing is
+# Run it with e2e/docker-test.sh (project name qbv-e2e-sync); nothing is
 # published to the host.
-name: gv-e2e-sync
+name: qbv-e2e-sync
 
 x-client: &client
   build:
     context: ..
     dockerfile: e2e/Dockerfile
     target: client
-  image: gentle-vault-e2e-client:local
+  image: qbit-vault-e2e-client:local
   depends_on:
     proxy:
       condition: service_healthy
@@ -23,11 +23,11 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: gentle-vault-server:e2e
+    image: qbit-vault-server:e2e
     environment:
       # The origin the clients use: the proxy.
-      GV_SERVER_PUBLIC_URL: https://proxy:8443
-      GV_SERVER_TRUST_PROXY: "1"
+      QBV_SERVER_PUBLIC_URL: https://proxy:8443
+      QBV_SERVER_TRUST_PROXY: "1"
     volumes:
       - vault-data:/data
     read_only: true
@@ -36,7 +36,7 @@ services:
     security_opt: ["no-new-privileges:true"]
     expose: ["8080"]
     healthcheck:
-      test: ["CMD", "/gentle-vault-server", "health"]
+      test: ["CMD", "/qbit-vault-server", "health"]
       interval: 2s
       timeout: 5s
       retries: 20
@@ -47,7 +47,7 @@ services:
       context: ..
       dockerfile: e2e/Dockerfile
       target: tools
-    image: gentle-vault-e2e-tools:local
+    image: qbit-vault-e2e-tools:local
     environment:
       E2E_UPSTREAM: http://server:8080
       E2E_HOSTS: proxy
@@ -79,7 +79,7 @@ services:
 
   # Reads the server volume and the recorded bodies; changes neither.
   auditor:
-    image: gentle-vault-e2e-tools:local
+    image: qbit-vault-e2e-tools:local
     entrypoint: ["sleep", "infinity"]
     user: root
     volumes:

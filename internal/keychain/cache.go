@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/perm"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // The unlock cache lives only in a memory-backed runtime directory
@@ -36,7 +36,7 @@ func cacheDir(opts Options) string {
 	if fi, err := os.Stat(run); err != nil || !fi.IsDir() {
 		return ""
 	}
-	return filepath.Join(run, "gentle-vault")
+	return filepath.Join(run, "qbit-vault")
 }
 
 // cacheGet returns the cached key. An expired or unreadable entry is deleted

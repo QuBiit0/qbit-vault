@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // ErrNoForm means the backend has no multi-field form; ask the fields one
@@ -54,7 +54,7 @@ func formDialog(reqs []SecretRequest) dialog {
 	_, body, _ := strings.Cut(Header(head), "\n")
 	return dialog{
 		kind:   dialogForm,
-		title:  "gentle-vault: secret capture",
+		title:  "qbit-vault: secret capture",
 		text:   strings.TrimRight(body, "\n") + "\n\nFill every field (secret ones are hidden):",
 		fields: fields,
 	}

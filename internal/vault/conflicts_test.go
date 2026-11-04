@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
 )
 
 // Kept versions and restore (docs/REMOTE_SYNC.md § 7.4, § 7.6), below the CLI.

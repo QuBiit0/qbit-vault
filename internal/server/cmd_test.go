@@ -18,7 +18,7 @@ func env(m map[string]string) func(string) string { return func(k string) string
 func TestMainInvite(t *testing.T) {
 	dir := t.TempDir()
 	var out, errb bytes.Buffer
-	code := Main(context.Background(), []string{"invite", "--ttl", "2h"}, env(map[string]string{"GV_SERVER_DATA": dir}), &out, &errb)
+	code := Main(context.Background(), []string{"invite", "--ttl", "2h"}, env(map[string]string{"QBV_SERVER_DATA": dir}), &out, &errb)
 	if code != 0 || !regexp.MustCompile(`^[0-9a-f]{32}\n$`).MatchString(out.String()) || errb.String() != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out.String(), errb.String())
 	}
@@ -31,7 +31,7 @@ func TestMainInvite(t *testing.T) {
 	}
 	for _, args := range [][]string{{"invite", "--ttl", "nope"}, {"invite", "--ttl", "0s"}, {"frobnicate"}, {}} {
 		var o, e bytes.Buffer
-		if code := Main(context.Background(), args, env(map[string]string{"GV_SERVER_DATA": dir}), &o, &e); code != 2 || o.Len() != 0 || e.Len() == 0 {
+		if code := Main(context.Background(), args, env(map[string]string{"QBV_SERVER_DATA": dir}), &o, &e); code != 2 || o.Len() != 0 || e.Len() == 0 {
 			t.Errorf("%v: code=%d out=%q err=%q", args, code, o.String(), e.String())
 		}
 	}
@@ -39,8 +39,8 @@ func TestMainInvite(t *testing.T) {
 
 func TestMainServeNeedsPublicURL(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := Main(context.Background(), []string{"serve"}, env(map[string]string{"GV_SERVER_DATA": t.TempDir()}), &out, &errb)
-	if code != 2 || errb.String() != "error: GV_SERVER_PUBLIC_URL is required (the https:// origin clients use)\n" {
+	code := Main(context.Background(), []string{"serve"}, env(map[string]string{"QBV_SERVER_DATA": t.TempDir()}), &out, &errb)
+	if code != 2 || errb.String() != "error: QBV_SERVER_PUBLIC_URL is required (the https:// origin clients use)\n" {
 		t.Fatalf("code=%d err=%q", code, errb.String())
 	}
 }
@@ -57,7 +57,7 @@ func freePort(t *testing.T) string {
 
 func TestMainServeAndHealth(t *testing.T) {
 	addr := freePort(t)
-	e := env(map[string]string{"GV_SERVER_DATA": t.TempDir(), "GV_SERVER_LISTEN": addr, "GV_SERVER_PUBLIC_URL": "https://vault.example.test"})
+	e := env(map[string]string{"QBV_SERVER_DATA": t.TempDir(), "QBV_SERVER_LISTEN": addr, "QBV_SERVER_PUBLIC_URL": "https://vault.example.test"})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
 	var logs bytes.Buffer

@@ -16,8 +16,8 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 const (
@@ -109,7 +109,7 @@ func TestOSBackendRoundTrip(t *testing.T) {
 	if err != nil || revealStr(got) != revealStr(key) {
 		t.Fatalf("Get: %v", err)
 	}
-	stored, err := keyring.Get("gentle-vault", "master:"+testID)
+	stored, err := keyring.Get("qbit-vault", "master:"+testID)
 	if err != nil || stored != base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)) {
 		t.Fatalf("stored under service/account unexpectedly: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestOSBackendRejectsMalformedStoredKey(t *testing.T) {
 		"not base64": "!!!notbase64",
 		"short key":  base64.StdEncoding.EncodeToString([]byte("short")),
 	} {
-		if err := keyring.Set("gentle-vault", "master:"+testID, stored); err != nil {
+		if err := keyring.Set("qbit-vault", "master:"+testID, stored); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := NewOS().Get(testID); !errors.Is(err, ErrCorrupt) {
@@ -157,7 +157,7 @@ func TestOSBackendProbe(t *testing.T) {
 		t.Fatal("expected available")
 	}
 	// The probe must not leave its throwaway account behind.
-	if _, err := keyring.Get("gentle-vault", "master:"+testID); !errors.Is(err, keyring.ErrNotFound) {
+	if _, err := keyring.Get("qbit-vault", "master:"+testID); !errors.Is(err, keyring.ErrNotFound) {
 		t.Fatalf("unexpected entry: %v", err)
 	}
 }
@@ -238,7 +238,7 @@ func TestSetupForcePassphraseSkipsKeychain(t *testing.T) {
 	if err != nil || mode != ModePassphrase {
 		t.Fatalf("mode=%s err=%v", mode, err)
 	}
-	if _, err := keyring.Get("gentle-vault", "master:"+testID); err == nil {
+	if _, err := keyring.Get("qbit-vault", "master:"+testID); err == nil {
 		t.Fatal("key leaked into the OS keychain in forced passphrase mode")
 	}
 	if _, _, err := Setup(home, testID, opts); !errors.Is(err, ErrKeyExists) {
@@ -284,7 +284,7 @@ func TestPassphraseRoundTripAndFileShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"gentle-vault-key/1"`, `"argon2id"`, `"salt"`, `"t"`, `"m_kib"`, `"p"`, `"nonce"`, `"ct"`} {
+	for _, want := range []string{`"qbit-vault-key/1"`, `"argon2id"`, `"salt"`, `"t"`, `"m_kib"`, `"p"`, `"nonce"`, `"ct"`} {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("key.enc missing %s", want)
 		}
@@ -397,7 +397,7 @@ func TestTamperedKeyFile(t *testing.T) {
 		{"p too high", func(m map[string]any) { kdf(m)["p"] = 17 }, ErrCorrupt},
 		{"p zero", func(m map[string]any) { kdf(m)["p"] = 0 }, ErrCorrupt},
 		{"alg", func(m map[string]any) { kdf(m)["alg"] = "scrypt" }, ErrCorrupt},
-		{"format", func(m map[string]any) { m["format"] = "gentle-vault-key/2" }, ErrCorrupt},
+		{"format", func(m map[string]any) { m["format"] = "qbit-vault-key/2" }, ErrCorrupt},
 		{"short salt", func(m map[string]any) { kdf(m)["salt"] = base64.StdEncoding.EncodeToString([]byte("short")) }, ErrCorrupt},
 		{"short nonce", func(m map[string]any) { m["nonce"] = base64.StdEncoding.EncodeToString([]byte("short")) }, ErrCorrupt},
 		{"bad b64 ct", func(m map[string]any) { m["ct"] = "!!!" }, ErrCorrupt},
@@ -432,7 +432,7 @@ func TestTamperedKeyFile(t *testing.T) {
 func TestOutOfBoundsParamsRejectedBeforeArgon2(t *testing.T) {
 	// Production floor, and a 4 TiB memory request: must fail fast and cheap.
 	home := t.TempDir()
-	body := `{"format":"gentle-vault-key/1","kdf":{"alg":"argon2id","salt":"` +
+	body := `{"format":"qbit-vault-key/1","kdf":{"alg":"argon2id","salt":"` +
 		base64.StdEncoding.EncodeToString(make([]byte, 16)) + `","t":3,"m_kib":4000000000,"p":4},"nonce":"` +
 		base64.StdEncoding.EncodeToString(make([]byte, 24)) + `","ct":"AAAA"}`
 	if err := os.WriteFile(filepath.Join(home, "key.enc"), []byte(body), 0o600); err != nil {
@@ -500,7 +500,7 @@ func TestCacheHitAvoidsPrompt(t *testing.T) {
 	if asked != 0 {
 		t.Fatalf("passphrase asked %d times despite a warm cache", asked)
 	}
-	fi, err := os.Stat(filepath.Join(run, "gentle-vault", testID+".key"))
+	fi, err := os.Stat(filepath.Join(run, "qbit-vault", testID+".key"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,7 +544,7 @@ func TestExpiredCacheIgnoredAndDeleted(t *testing.T) {
 	if _, _, err := Setup(home, testID, opts); err != nil {
 		t.Fatal(err)
 	}
-	cache := filepath.Join(run, "gentle-vault", testID+".key")
+	cache := filepath.Join(run, "qbit-vault", testID+".key")
 	if _, err := os.Stat(cache); err != nil {
 		t.Fatal(err)
 	}
@@ -579,7 +579,7 @@ func TestCorruptCacheIgnoredAndDeleted(t *testing.T) {
 	if _, _, err := Setup(home, testID, Options{Passphrase: pass(fixturePass), getenv: env(nil)}); err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(run, "gentle-vault")
+	dir := filepath.Join(run, "qbit-vault")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -627,7 +627,7 @@ func TestNoRuntimeDirMeansNoCache(t *testing.T) {
 	}
 	for _, root := range []string{home, tmp} {
 		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err == nil && (strings.HasSuffix(p, ".key") || strings.Contains(p, "gentle-vault")) {
+			if err == nil && (strings.HasSuffix(p, ".key") || strings.Contains(p, "qbit-vault")) {
 				t.Errorf("unexpected cache artifact %s", filepath.Base(p))
 			}
 			return nil
@@ -644,7 +644,7 @@ func TestLockDeletesCache(t *testing.T) {
 	if _, _, err := Setup(home, testID, opts); err != nil {
 		t.Fatal(err)
 	}
-	cache := filepath.Join(run, "gentle-vault", testID+".key")
+	cache := filepath.Join(run, "qbit-vault", testID+".key")
 	if _, err := os.Stat(cache); err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/lockfile"
+	"github.com/QuBiit0/qbit-vault/internal/lockfile"
 )
 
 const lockFile = "vault.lock"

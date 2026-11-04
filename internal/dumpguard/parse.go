@@ -1,7 +1,7 @@
 // Package dumpguard refuses commands that would print the environment while
 // secrets are injected (PRD R-EXEC-03, docs/CLI.md § Exec). The patterns are
 // data, not code: the default file is embedded and
-// $GENTLE_VAULT_HOME/dumpguard.yaml can add to it, never remove from it.
+// $QBIT_VAULT_HOME/dumpguard.yaml can add to it, never remove from it.
 //
 // This is a guard, not a shell parser. It splits a command into segments
 // (pipelines, lists, subshells, `sh -c` scripts) and matches RE2 patterns
@@ -27,7 +27,7 @@ import (
 var defaultYAML []byte
 
 const (
-	formatID = "gentle-vault-dumpguard/1"
+	formatID = "qbit-vault-dumpguard/1"
 	fileName = "dumpguard.yaml"
 	// nameToken is the placeholder that expands to the injected names.
 	nameToken = "{NAME}"
@@ -112,7 +112,7 @@ func (g *Guard) Patterns() []string {
 
 // parse reads the fixed shape of the data files (L4):
 //
-//	format: gentle-vault-dumpguard/1
+//	format: qbit-vault-dumpguard/1
 //	patterns:
 //	  - 'single quoted'   # comment
 //	  - "double quoted"

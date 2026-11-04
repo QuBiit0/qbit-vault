@@ -3,7 +3,7 @@
 // Messages are built only from the secret name and fixed strings.
 package refusal
 
-import "github.com/QuBiit0/gentle-vault/internal/exitcode"
+import "github.com/QuBiit0/qbit-vault/internal/exitcode"
 
 // Type is a refusal type from the contract.
 type Type string
@@ -48,7 +48,7 @@ var specs = map[Type]spec{
 	DumpCommand:      {false, "the command is refused while secrets are injected", ""},
 	NotModelCallable: {false, "this operation is not available to the model", ""},
 	VaultLocked:      {true, "vault is locked", ""},
-	VaultCorrupt:     {false, "vault is corrupt; run 'gentle-vault restore'", ""},
+	VaultCorrupt:     {false, "vault is corrupt; run 'qbit-vault restore'", ""},
 	Timeout:          {true, "the command timed out", ""},
 	ContractMismatch: {false, "unsupported contract version", ""},
 	Internal:         {false, "internal error", ""},

@@ -1,7 +1,7 @@
 # Commands refused while any secret is injected (refusal type: dump_command).
 # Patterns are RE2, matched against each pipeline segment after shell-word normalization.
 # `{NAME}` expands to every injected name. User-extendable; never shortened by `sync`.
-format: gentle-vault-dumpguard/1
+format: qbit-vault-dumpguard/1
 patterns:
   - '^env$'
   - '^env\s+-\S*0'                # env -0

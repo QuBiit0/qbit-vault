@@ -75,7 +75,7 @@ func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 // object is a remote vault object as the client seals it: only the
 // cleartext AAD matters to the server.
 func object(acct string, gen int, version int64) string {
-	b, _ := json.Marshal(map[string]any{"format": "gentle-vault-remote/1", "aad": map[string]any{"account_id": acct, "generation": gen, "version": version, "writer": "d1", "created_at": "x"}, "nonce": "AA==", "ct": "Y2lwaGVydGV4dA=="})
+	b, _ := json.Marshal(map[string]any{"format": "qbit-vault-remote/1", "aad": map[string]any{"account_id": acct, "generation": gen, "version": version, "writer": "d1", "created_at": "x"}, "nonce": "AA==", "ct": "Y2lwaGVydGV4dA=="})
 	return string(b)
 }
 

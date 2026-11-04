@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/redact"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/redact"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 func TestMain(m *testing.M) {
@@ -66,25 +66,25 @@ func spec(t *testing.T, vals map[string]secret.Secret) Spec {
 }
 
 func TestRunInjectsAndScrubs(t *testing.T) {
-	t.Setenv("GV_TEST_API_TOKEN", "TESTSECRET_parent_api")
-	t.Setenv("GV_TEST_OTHER", "TESTSECRET_parent_other")
-	t.Setenv("GV_TEST_KEEP", "kept")
-	helper(t, "env", "GV_TEST_API_TOKEN,GV_TEST_OTHER,GV_TEST_KEEP,GV_TEST_GH")
+	t.Setenv("QBV_TEST_API_TOKEN", "TESTSECRET_parent_api")
+	t.Setenv("QBV_TEST_OTHER", "TESTSECRET_parent_other")
+	t.Setenv("QBV_TEST_KEEP", "kept")
+	helper(t, "env", "QBV_TEST_API_TOKEN,QBV_TEST_OTHER,QBV_TEST_KEEP,QBV_TEST_GH")
 	before := os.Environ()
 
-	s := spec(t, map[string]secret.Secret{"GV_TEST_GH": secret.New("GITHUB_TOKEN", []byte("TESTSECRET_injected_value"))})
-	s.ScrubNames = []string{"GV_TEST_API_TOKEN", "GV_TEST_OTHER"}
+	s := spec(t, map[string]secret.Secret{"QBV_TEST_GH": secret.New("GITHUB_TOKEN", []byte("TESTSECRET_injected_value"))})
+	s.ScrubNames = []string{"QBV_TEST_API_TOKEN", "QBV_TEST_OTHER"}
 	res, err := Run(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	out := res.Stdout
-	for _, want := range []string{"GV_TEST_API_TOKEN=<unset>", "GV_TEST_OTHER=<unset>", "GV_TEST_KEEP=kept"} {
+	for _, want := range []string{"QBV_TEST_API_TOKEN=<unset>", "QBV_TEST_OTHER=<unset>", "QBV_TEST_KEEP=kept"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("child output misses %q", want)
 		}
 	}
-	if !strings.Contains(out, "GV_TEST_GH=[REDACTED:GITHUB_TOKEN]") {
+	if !strings.Contains(out, "QBV_TEST_GH=[REDACTED:GITHUB_TOKEN]") {
 		t.Error("the injected variable must be visible in the child (and redacted on the way out)")
 	}
 	if strings.Contains(out, "TESTSECRET_") {
@@ -93,34 +93,34 @@ func TestRunInjectsAndScrubs(t *testing.T) {
 	if !slices.Equal(before, os.Environ()) {
 		t.Error("the parent environment changed")
 	}
-	if os.Getenv("GV_TEST_GH") != "" {
+	if os.Getenv("QBV_TEST_GH") != "" {
 		t.Error("the value leaked into the parent")
 	}
 }
 
 func TestRunInjectedReplacesSameNamedParentVariable(t *testing.T) {
-	t.Setenv("GV_TEST_GH", "TESTSECRET_parent_gh")
-	helper(t, "env", "GV_TEST_GH")
-	s := spec(t, map[string]secret.Secret{"GV_TEST_GH": secret.New("GITHUB_TOKEN", []byte("TESTSECRET_injected_value"))})
+	t.Setenv("QBV_TEST_GH", "TESTSECRET_parent_gh")
+	helper(t, "env", "QBV_TEST_GH")
+	s := spec(t, map[string]secret.Secret{"QBV_TEST_GH": secret.New("GITHUB_TOKEN", []byte("TESTSECRET_injected_value"))})
 	res, err := Run(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.ReplaceAll(res.Stdout, "\r\n", "\n") != "GV_TEST_GH=[REDACTED:GITHUB_TOKEN]\n" {
+	if strings.ReplaceAll(res.Stdout, "\r\n", "\n") != "QBV_TEST_GH=[REDACTED:GITHUB_TOKEN]\n" {
 		t.Fatalf("unexpected output %q", res.Stdout)
 	}
 }
 
 func TestRunScrubIsCaseInsensitiveOnWindowsOnly(t *testing.T) {
-	t.Setenv("GV_TEST_CASE", "TESTSECRET_parent_case")
-	helper(t, "env", "GV_TEST_CASE")
+	t.Setenv("QBV_TEST_CASE", "TESTSECRET_parent_case")
+	helper(t, "env", "QBV_TEST_CASE")
 	s := spec(t, nil)
-	s.ScrubNames = []string{"gv_test_case"}
+	s.ScrubNames = []string{"qbv_test_case"}
 	res, err := Run(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	gone := strings.Contains(res.Stdout, "GV_TEST_CASE=<unset>")
+	gone := strings.Contains(res.Stdout, "QBV_TEST_CASE=<unset>")
 	if runtime.GOOS == "windows" && !gone {
 		t.Error("Windows variable names are case-insensitive: the scrub must remove it")
 	}
@@ -132,7 +132,7 @@ func TestRunScrubIsCaseInsensitiveOnWindowsOnly(t *testing.T) {
 func TestValuesNeverInArgv(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "argv")
 	helper(t, "argv", file)
-	s := spec(t, map[string]secret.Secret{"GV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
+	s := spec(t, map[string]secret.Secret{"QBV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
 	if _, err := Run(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
@@ -170,8 +170,8 @@ func leaks(out string) []string {
 }
 
 func TestRunRedactsEveryEncodingCapture(t *testing.T) {
-	helper(t, "encodings", "GV_TEST_GH")
-	s := spec(t, map[string]secret.Secret{"GV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
+	helper(t, "encodings", "QBV_TEST_GH")
+	s := spec(t, map[string]secret.Secret{"QBV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
 	res, err := Run(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
@@ -208,8 +208,8 @@ func (s *syncBuf) String() string {
 }
 
 func TestRunRedactsEveryEncodingStreaming(t *testing.T) {
-	helper(t, "encodings", "GV_TEST_GH")
-	s := spec(t, map[string]secret.Secret{"GV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
+	helper(t, "encodings", "QBV_TEST_GH")
+	s := spec(t, map[string]secret.Secret{"QBV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
 	var out, errw syncBuf
 	s.Stdout, s.Stderr = &out, &errw
 	res, err := Run(context.Background(), s)
@@ -231,8 +231,8 @@ func TestRunRedactsEveryEncodingStreaming(t *testing.T) {
 }
 
 func TestRunRedactsValueSplitAcrossWrites(t *testing.T) {
-	helper(t, "split", "GV_TEST_GH")
-	s := spec(t, map[string]secret.Secret{"GV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
+	helper(t, "split", "QBV_TEST_GH")
+	s := spec(t, map[string]secret.Secret{"QBV_TEST_GH": secret.New("GITHUB_TOKEN", []byte(fixture))})
 	res, err := Run(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
@@ -404,7 +404,7 @@ func TestRunRefusesBadSpecs(t *testing.T) {
 		"empty command": func(s *Spec) { s.Command = "" },
 		"unknown shell": func(s *Spec) { s.Shell = "zsh" },
 		"bad env name":  func(s *Spec) { s.Env = map[string]secret.Secret{"A=B": secret.New("X", []byte("v"))} },
-		"nul in value":  func(s *Spec) { s.Env = map[string]secret.Secret{"GV_X": secret.New("X", []byte("a\x00b"))} },
+		"nul in value":  func(s *Spec) { s.Env = map[string]secret.Secret{"QBV_X": secret.New("X", []byte("a\x00b"))} },
 	}
 	for name, mut := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/merge"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 func TestRosterRoundTrip(t *testing.T) {

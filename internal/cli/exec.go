@@ -16,14 +16,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/dumpguard"
-	"github.com/QuBiit0/gentle-vault/internal/grants"
-	"github.com/QuBiit0/gentle-vault/internal/redact"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
-	"github.com/QuBiit0/gentle-vault/internal/runner"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/dumpguard"
+	"github.com/QuBiit0/qbit-vault/internal/grants"
+	"github.com/QuBiit0/qbit-vault/internal/redact"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/runner"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 const (

@@ -1,6 +1,6 @@
 // Command proxy is the recording TLS reverse proxy of the sync e2e battery
 // (docs/TESTING.md § Tier 2 item 7). It sits between the client containers
-// and gentle-vault-server, writes every exchange to a volume the driver
+// and qbit-vault-server, writes every exchange to a volume the driver
 // scans for leaks, and can replay an older recorded vault response to play a
 // server that rolls back.
 //
@@ -204,7 +204,7 @@ func makeCerts(dir string, hosts []string) (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	caTpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "gentle-vault e2e CA"},
+	caTpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "qbit-vault e2e CA"},
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour), IsCA: true, BasicConstraintsValid: true,
 		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature}
 	caDER, err := x509.CreateCertificate(rand.Reader, caTpl, caTpl, &caKey.PublicKey, caKey)

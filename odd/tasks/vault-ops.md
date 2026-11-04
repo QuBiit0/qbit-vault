@@ -8,10 +8,10 @@ backups (also those made under an earlier key). Branch `feat/cli-skeleton`.
 
 - S1. ROADMAP 1.11: "`import --from-env/--from-file`, `rekey`, `lock/unlock`, `restore`" (R-VAULT-08).
 - S2. CLI.md: "`import --from-env NAME[,NAME…]` / `import --from-file PATH [--names A,B]` | Explicit, user-run import from the current environment or a dotenv file. Never run by `init`. Prints what it imported by name and offers to unset/remove the source."
-- S3. CLI.md: "`rekey` | Rotate the master key." STORAGE.md: "`gentle-vault rekey` rotates the master key: decrypt, generate new key, encrypt, swap, and update keychain/key.enc atomically with a backup of the old envelope, and add the old key to `keys/retired.enc` (§ Retired keys)."
-- S4. CLI.md: "`lock` / `unlock` | Passphrase mode: drop / refresh the cached master key." STORAGE.md: "`gentle-vault lock` deletes the file."
-- S5. CLI.md: "`restore [--list] [--from TS]` | Restore the vault from an encrypted backup. Backups made under an earlier master key are opened with `keys/retired.enc`." STORAGE.md: "`gentle-vault restore --from <ts>` swaps a backup back in (with its own backup of the current state first)." CONTRACT `vault_corrupt`: "Point to `gentle-vault restore`".
-- S6. STORAGE.md § Retired keys: "`keys/retired.enc` (`format: "gentle-vault-retired/1"`, sealed with the current master key) lists the master keys this vault used before ... so `restore` can still open a backup made under an older key."
+- S3. CLI.md: "`rekey` | Rotate the master key." STORAGE.md: "`qbit-vault rekey` rotates the master key: decrypt, generate new key, encrypt, swap, and update keychain/key.enc atomically with a backup of the old envelope, and add the old key to `keys/retired.enc` (§ Retired keys)."
+- S4. CLI.md: "`lock` / `unlock` | Passphrase mode: drop / refresh the cached master key." STORAGE.md: "`qbit-vault lock` deletes the file."
+- S5. CLI.md: "`restore [--list] [--from TS]` | Restore the vault from an encrypted backup. Backups made under an earlier master key are opened with `keys/retired.enc`." STORAGE.md: "`qbit-vault restore --from <ts>` swaps a backup back in (with its own backup of the current state first)." CONTRACT `vault_corrupt`: "Point to `qbit-vault restore`".
+- S6. STORAGE.md § Retired keys: "`keys/retired.enc` (`format: "qbit-vault-retired/1"`, sealed with the current master key) lists the master keys this vault used before ... so `restore` can still open a backup made under an older key."
 - S7. AGENTS.md invariants 1, 2, 3, 6, 7: no value in any output; no plaintext on disk; init never imports; every capture is an explicit user action; every mutation snapshotted and atomic.
 
 ## Tasks

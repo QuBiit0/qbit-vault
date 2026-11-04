@@ -39,8 +39,8 @@ func TestReleaseBinaryHasNoRotateCrashSeam(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
-	bin := filepath.Join(t.TempDir(), "gentle-vault")
-	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/gentle-vault").CombinedOutput(); err != nil {
+	bin := filepath.Join(t.TempDir(), "qbit-vault")
+	if out, err := exec.Command("go", "build", "-o", bin, "../../cmd/qbit-vault").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	raw, err := os.ReadFile(bin)

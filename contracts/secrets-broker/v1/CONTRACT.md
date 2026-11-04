@@ -85,7 +85,7 @@ Response:
   "policy": { "…": "see below" } }
 ```
 
-Returns the secrets that resolve from `cwd`: every secret of the current project layer, plus every global secret not overridden by it. `project` is `null` outside a repository. Other projects' secrets are never listed. Never values. `unlinked_match` is `{ "label": "shop-api" }` when sync brought a project layer from another device whose origin URL matches this repository but the user has not linked it here (`REMOTE_SYNC.md` § 7.5): the agent may suggest that the user run `gentle-vault link shop-api`; it cannot link it itself. Otherwise `null`.
+Returns the secrets that resolve from `cwd`: every secret of the current project layer, plus every global secret not overridden by it. `project` is `null` outside a repository. Other projects' secrets are never listed. Never values. `unlinked_match` is `{ "label": "shop-api" }` when sync brought a project layer from another device whose origin URL matches this repository but the user has not linked it here (`REMOTE_SYNC.md` § 7.5): the agent may suggest that the user run `qbit-vault link shop-api`; it cannot link it itself. Otherwise `null`.
 
 `policy` tells the agent everything it may and may not do. Its strings are normative (hosts ship them verbatim) and the same text is the MCP server's `instructions`:
 
@@ -213,7 +213,7 @@ A refusal is `{ "ok": false, "refusal": { "type": "<type>", "name": "<secret nam
 | `dump_command` | Command matches the dump-guard list | no | Tell the model the command is refused while secrets are injected |
 | `not_model_callable` | `grant` arrived over MCP or without a prompt token | no | Log; this is an attack signal |
 | `vault_locked` | Keychain unavailable and no cached passphrase | yes | Prompt for passphrase |
-| `vault_corrupt` | AEAD tag or envelope check failed | no | Point to `gentle-vault restore` |
+| `vault_corrupt` | AEAD tag or envelope check failed | no | Point to `qbit-vault restore` |
 | `timeout` | `exec` exceeded `timeout_ms` | yes | Child killed; partial redacted output returned in `partial` |
 | `contract_mismatch` | Unsupported `contract` or `v` | no | Upgrade |
 | `internal` | Anything else | maybe | Message never contains values |

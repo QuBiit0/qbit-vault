@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 const (
@@ -286,7 +286,7 @@ func ModeOf(home string, opts Options) (Mode, error) {
 	return Mode(opts.os().Name()), nil
 }
 
-// Refresh is Unlock for `gentle-vault unlock`: in passphrase mode it always
+// Refresh is Unlock for `qbit-vault unlock`: in passphrase mode it always
 // asks the passphrase (it never trusts the cache), verifies it against
 // key.enc and caches the key where a cache exists. cached reports whether the
 // key is now cached, until exp. A wrong passphrase leaves the cache as it

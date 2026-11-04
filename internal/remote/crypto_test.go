@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 func key(b byte) secret.Secret { return secret.New("k", bytes.Repeat([]byte{b}, 32)) }
@@ -50,7 +50,7 @@ func TestRecoveryKeyFormatAndParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(text, "GVR1-") || len(text) != len("GVR1-")+8*4+7 {
+	if !strings.HasPrefix(text, "QVR1-") || len(text) != len("QVR1-")+8*4+7 {
 		t.Fatalf("format %q", text)
 	}
 	back, err := ParseRecoveryKey(strings.ToLower(strings.ReplaceAll(text, "-", " ")))
@@ -58,11 +58,11 @@ func TestRecoveryKeyFormatAndParse(t *testing.T) {
 		t.Fatalf("round trip: %v", err)
 	}
 	// Crockford: I and L read as 1, O as 0; the prefix is optional.
-	confusable := strings.NewReplacer("1", "I", "0", "O").Replace(strings.TrimPrefix(text, "GVR1-"))
+	confusable := strings.NewReplacer("1", "I", "0", "O").Replace(strings.TrimPrefix(text, "QVR1-"))
 	if back, err := ParseRecoveryKey(confusable); err != nil || reveal(back) != reveal(rk) {
 		t.Fatalf("confusables: %v", err)
 	}
-	for _, bad := range []string{"", "GVR1-TOO-SHORT", text + "XX", strings.Replace(text, "GVR1-", "GVR1-U", 1)} {
+	for _, bad := range []string{"", "QVR1-TOO-SHORT", text + "XX", strings.Replace(text, "QVR1-", "QVR1-U", 1)} {
 		if _, err := ParseRecoveryKey(bad); !errors.Is(err, ErrBadRecoveryKey) {
 			t.Errorf("%q: %v", bad, err)
 		}
@@ -208,7 +208,7 @@ func FuzzOpen(f *testing.F) {
 	rvk := Subkeys(key(1)).Vault
 	obj, _ := SealObject(rvk, ObjectAAD{AccountID: "acc1", Generation: 1, Version: 1}, []byte(`{"schema":2}`))
 	f.Add(obj)
-	f.Add([]byte(`{"format":"gentle-vault-remote/1","aad":{},"nonce":"","ct":""}`))
+	f.Add([]byte(`{"format":"qbit-vault-remote/1","aad":{},"nonce":"","ct":""}`))
 	f.Fuzz(func(t *testing.T, in []byte) {
 		for _, err := range []error{
 			func() error { _, _, err := OpenObject(rvk, "acc1", in); return err }(),
@@ -230,8 +230,8 @@ func hexOf(s secret.Secret) string { b := s.Reveal(); defer clear(b); return hex
 
 func decodedLen(b64 string) int { b, _ := base64.StdEncoding.DecodeString(b64); return len(b) }
 
-// vaultKeyVector is HKDF-SHA256(0x01*32, salt "gentle-vault/v1", info "remote-vault"), first 8 bytes.
-const vaultKeyVector = "888fb20b8110087c"
+// vaultKeyVector is HKDF-SHA256(0x01*32, salt "qbit-vault/v1", info "remote-vault"), first 8 bytes.
+const vaultKeyVector = "742d452644d92830"
 
 func TestEnvelopeEphPub(t *testing.T) {
 	issuer, recipient := DeviceFromSecret(key(1)), DeviceFromSecret(key(2))
@@ -248,7 +248,7 @@ func TestEnvelopeEphPub(t *testing.T) {
 	if eph2, _ := EnvelopeEphPub(raw2); bytes.Equal(eph, eph2) {
 		t.Fatal("two envelopes share an ephemeral key")
 	}
-	for _, bad := range [][]byte{nil, []byte(`{}`), []byte(`{"format":"gentle-vault-keyenv/1","eph_pub":"AAAA"}`), []byte(`not json`)} {
+	for _, bad := range [][]byte{nil, []byte(`{}`), []byte(`{"format":"qbit-vault-keyenv/1","eph_pub":"AAAA"}`), []byte(`not json`)} {
 		if _, err := EnvelopeEphPub(bad); !errors.Is(err, ErrEnvelope) {
 			t.Errorf("%q: %v", bad, err)
 		}

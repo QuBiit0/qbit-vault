@@ -10,13 +10,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 )
 
 const fixture = "TESTSECRET_panic_value_0123456789"
 
 const (
-	helpHint    = "Run 'gentle-vault --help' for usage.\n"
+	helpHint    = "Run 'qbit-vault --help' for usage.\n"
 	sessionHelp = "invalid --session: must match ^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$"
 )
 
@@ -38,7 +38,7 @@ func runWith(t *testing.T, env map[string]string, extra []func(*globals) *cobra.
 
 func TestVersionHuman(t *testing.T) {
 	code, out, errs := run(t, nil, "version")
-	want := "gentle-vault " + Version + " (" + Commit + ", " + runtime.GOOS + "/" + runtime.GOARCH + ")\n"
+	want := "qbit-vault " + Version + " (" + Commit + ", " + runtime.GOOS + "/" + runtime.GOARCH + ")\n"
 	if code != exitcode.OK || out != want || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
@@ -96,7 +96,7 @@ func TestUsageErrors(t *testing.T) {
 		{"bad args json", []string{"version", "extra", "--json"}, nil, jsonUsage(extraArg), ""},
 		{"invalid session human", []string{"--session", "nope", "version"}, nil, "", "error: " + sessionHelp + "\n" + helpHint},
 		{"invalid session json", []string{"--session", "nope", "version", "--json"}, nil, jsonUsage(sessionHelp), ""},
-		{"invalid session from env", []string{"version"}, map[string]string{"GENTLE_VAULT_SESSION": "BAD"}, "", "error: " + sessionHelp + "\n" + helpHint},
+		{"invalid session from env", []string{"version"}, map[string]string{"QBIT_VAULT_SESSION": "BAD"}, "", "error: " + sessionHelp + "\n" + helpHint},
 		{"bad flag value human", []string{"version", "--json=maybe"}, nil, "", "error: " + badJSON + "\n" + helpHint},
 		{"bad flag value with json requested", []string{"--json", "--home"}, nil, jsonUsage(badHome), ""},
 		{"flag missing value human", []string{"version", "--home"}, nil, "", "error: " + badHome + "\n" + helpHint},
@@ -150,11 +150,11 @@ func TestSessionValidation(t *testing.T) {
 			t.Fatalf("session %q rejected: code=%d err=%q", s, code, errs)
 		}
 	}
-	if code, _, _ := run(t, map[string]string{"GENTLE_VAULT_SESSION": "pi:abcd1234"}, "version"); code != exitcode.OK {
+	if code, _, _ := run(t, map[string]string{"QBIT_VAULT_SESSION": "pi:abcd1234"}, "version"); code != exitcode.OK {
 		t.Fatalf("valid session from env rejected: %d", code)
 	}
 	// An explicit flag overrides an invalid env default.
-	if code, _, _ := run(t, map[string]string{"GENTLE_VAULT_SESSION": "BAD"}, "--session", "pi:abcd1234", "version"); code != exitcode.OK {
+	if code, _, _ := run(t, map[string]string{"QBIT_VAULT_SESSION": "BAD"}, "--session", "pi:abcd1234", "version"); code != exitcode.OK {
 		t.Fatalf("flag did not override env: %d", code)
 	}
 	invalid := []string{"pi:abc", "Pi:abcd", "pi:" + strings.Repeat("a", 129), "pi:ab cd", ":abcd"}
@@ -188,8 +188,8 @@ func TestGlobalsResolution(t *testing.T) {
 		wantJSON    bool
 		wantNoColor bool
 	}{
-		{"home from env", map[string]string{"GENTLE_VAULT_HOME": "/env/home"}, nil, "/env/home", false, false},
-		{"home flag wins", map[string]string{"GENTLE_VAULT_HOME": "/env/home"}, []string{"--home", "/flag/home"}, "/flag/home", false, false},
+		{"home from env", map[string]string{"QBIT_VAULT_HOME": "/env/home"}, nil, "/env/home", false, false},
+		{"home flag wins", map[string]string{"QBIT_VAULT_HOME": "/env/home"}, []string{"--home", "/flag/home"}, "/flag/home", false, false},
 		{"NO_COLOR env", map[string]string{"NO_COLOR": "1"}, nil, "", false, true},
 		{"no-color flag", nil, []string{"--no-color"}, "", false, true},
 		{"json flag", nil, []string{"--json"}, "", true, false},
@@ -208,7 +208,7 @@ func TestGlobalsResolution(t *testing.T) {
 			if tt.wantHome != "" && seen.Home() != tt.wantHome {
 				t.Fatalf("home = %q", seen.Home())
 			}
-			if tt.wantHome == "" && !strings.HasSuffix(seen.Home(), ".gentle-vault") {
+			if tt.wantHome == "" && !strings.HasSuffix(seen.Home(), ".qbit-vault") {
 				t.Fatalf("default home = %q", seen.Home())
 			}
 			if seen.JSON != tt.wantJSON || seen.NoColorEnabled() != tt.wantNoColor {

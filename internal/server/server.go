@@ -1,4 +1,4 @@
-// Package server is gentle-vault-server (docs/REMOTE_SYNC.md § 5-6, 10): a
+// Package server is qbit-vault-server (docs/REMOTE_SYNC.md § 5-6, 10): a
 // zero-knowledge store for vaults sealed on the devices. It authenticates
 // devices by signature, keeps versions with compare-and-swap, and stores
 // only ciphertext, public keys, counters and timestamps. It never sees a key
@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
 )
 
 const (
@@ -262,7 +262,7 @@ func blobAAD(blob string) (acct string, gen int, version int64, ok bool) {
 			Version    int64  `json:"version"`
 		} `json:"aad"`
 	}
-	if json.Unmarshal([]byte(blob), &o) != nil || o.Format != "gentle-vault-remote/1" {
+	if json.Unmarshal([]byte(blob), &o) != nil || o.Format != "qbit-vault-remote/1" {
 		return "", 0, 0, false
 	}
 	return o.AAD.AccountID, o.AAD.Generation, o.AAD.Version, true

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/perm"
+	"github.com/QuBiit0/qbit-vault/internal/perm"
 )
 
 func capture(name string) Record {
@@ -471,7 +471,7 @@ func checkChain(t *testing.T, home string, want int) {
 	}
 }
 
-const helperEnv = "GENTLE_VAULT_AUDIT_TEST_HOME"
+const helperEnv = "QBIT_VAULT_AUDIT_TEST_HOME"
 
 // TestHelperAppend is the child side of TestTwoProcessesKeepOneChain.
 func TestHelperAppend(t *testing.T) {

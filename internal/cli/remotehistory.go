@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/merge"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Server history and restore (docs/REMOTE_SYNC.md § 7.6). History is the
@@ -23,7 +23,7 @@ import (
 const historyLimit = 10
 
 var (
-	errVersionGone      = codedError{"restore_unavailable", "that version is not on the server; run 'gentle-vault remote history'", exitcode.Failure}
+	errVersionGone      = codedError{"restore_unavailable", "that version is not on the server; run 'qbit-vault remote history'", exitcode.Failure}
 	errVersionOlderKey  = codedError{"restore_unavailable", "that version was sealed under an older account key and cannot be restored", exitcode.Failure}
 	errVersionUnsealed  = codedError{"remote_auth", "the requested version could not be verified", exitcode.Failure}
 	unknownDeviceLabel  = "unknown device"

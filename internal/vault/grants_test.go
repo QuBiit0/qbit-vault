@@ -230,7 +230,7 @@ func TestGrantsFileLeaksNothingAndHasNoSnapshots(t *testing.T) {
 	if err := json.Unmarshal(raw, &m); err != nil || len(m) != 5 {
 		t.Fatalf("not an envelope: %v", err)
 	}
-	if !strings.Contains(string(m["format"]), "gentle-vault-grants/1") {
+	if !strings.Contains(string(m["format"]), "qbit-vault-grants/1") {
 		t.Fatalf("format = %s", m["format"])
 	}
 	_ = filepath.WalkDir(filepath.Join(home, "backups"), func(p string, d fs.DirEntry, err error) error {

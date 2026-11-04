@@ -9,13 +9,13 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
-const service = "gentle-vault"
+const service = "qbit-vault"
 
 // OSBackend stores the master key in the OS keychain through go-keyring,
-// under service "gentle-vault" and account "master:<vault-id>". The value is
+// under service "qbit-vault" and account "master:<vault-id>". The value is
 // the base64 of the key; go-keyring only speaks strings, so that string copy
 // cannot be wiped.
 type OSBackend struct{}

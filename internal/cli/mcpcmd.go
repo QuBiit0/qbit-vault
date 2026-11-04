@@ -8,7 +8,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/mcp"
+	"github.com/QuBiit0/qbit-vault/internal/mcp"
 )
 
 type nopWriteCloser struct{ io.Writer }
@@ -17,7 +17,7 @@ func (nopWriteCloser) Close() error { return nil }
 
 // newMCPCmd is the stdio MCP server the hosts start (docs/CLI.md § Host
 // plumbing). stdout carries only the protocol; the session is --session /
-// GENTLE_VAULT_SESSION, else a fresh mcp:<random> id. Each call's cwd is the
+// QBIT_VAULT_SESSION, else a fresh mcp:<random> id. Each call's cwd is the
 // server's working directory, which the host sets to the project.
 func newMCPCmd(g *globals) *cobra.Command {
 	return &cobra.Command{

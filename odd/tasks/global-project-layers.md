@@ -1,6 +1,6 @@
 # Feature: global and project layers, agent-managed vault, manual entry
 
-Spec change only (no code exists yet). Updates the gentle-vault specification so secrets live in a
+Spec change only (no code exists yet). Updates the qbit-vault specification so secrets live in a
 global layer and per-project layers, the agent can propose management actions the user confirms,
 and the agent can read the full list of what it may and may not do.
 

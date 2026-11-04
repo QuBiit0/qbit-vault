@@ -1,15 +1,15 @@
-# gentle-vault-server behind the Dokploy (Traefik) proxy, which terminates TLS
-# on the public domain. Set GV_SERVER_PUBLIC_URL to that https:// origin.
-# Invite the first account:  docker compose exec server /gentle-vault-server invite
+# qbit-vault-server behind the Dokploy (Traefik) proxy, which terminates TLS
+# on the public domain. Set QBV_SERVER_PUBLIC_URL to that https:// origin.
+# Invite the first account:  docker compose exec server /qbit-vault-server invite
 services:
   server:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: gentle-vault-server:local
+    image: qbit-vault-server:local
     environment:
-      GV_SERVER_PUBLIC_URL: ${GV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
-      GV_SERVER_TRUST_PROXY: "1"
+      QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
+      QBV_SERVER_TRUST_PROXY: "1"
     volumes:
       - vault-data:/data
     read_only: true
@@ -20,7 +20,7 @@ services:
     expose:
       - "8080"
     healthcheck:
-      test: ["CMD", "/gentle-vault-server", "health"]
+      test: ["CMD", "/qbit-vault-server", "health"]
       interval: 30s
       timeout: 5s
       retries: 3

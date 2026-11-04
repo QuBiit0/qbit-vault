@@ -10,12 +10,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/grants"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/grants"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Phase 2S hardening (odd/tasks/remote-sync-hardening.md, H1).
@@ -127,8 +127,8 @@ func TestRemoteStatusNeverPromptsAndSaysWhatIsLocked(t *testing.T) {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	for _, want := range []string{"server:        " + ss.ts.URL + "\n", "account:       01234567\n", "generation:    2\n", "version:       7\n",
-		"last sync:     2026-01-02T03:04:05Z\n", "pending push:  no\n", "conflicts:     locked (run 'gentle-vault unlock')\n",
-		"devices:       locked (run 'gentle-vault unlock')\n", "anchor:        none uploaded\n"} {
+		"last sync:     2026-01-02T03:04:05Z\n", "pending push:  no\n", "conflicts:     locked (run 'qbit-vault unlock')\n",
+		"devices:       locked (run 'qbit-vault unlock')\n", "anchor:        none uploaded\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("status lacks %q:\n%s", want, out)
 		}
@@ -164,7 +164,7 @@ func TestRemoteStatusDoesNotFinishAnInterruptedRekey(t *testing.T) {
 	id, _ := vault.ReadID(w.home)
 
 	code, out, errs := w.run("", "remote", "status")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "conflicts:     locked (run 'gentle-vault unlock')\n") || !strings.Contains(out, "version:       1\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "conflicts:     locked (run 'qbit-vault unlock')\n") || !strings.Contains(out, "version:       1\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if has, _ := keychain.HasStaged(w.home, id, keychain.Options{}); !has {
@@ -311,7 +311,7 @@ func TestRestoreOnAStaleKeyAsksForASyncFirst(t *testing.T) {
 	f := answers(yes())
 	asBackend(t, keepBackend{f})
 	code, out, errs := a.run("", "remote", "restore", "--version", ver(newest))
-	if code != exitcode.Failure || out != "" || errs != "error: the account key changed since the last sync; run 'gentle-vault remote sync', then try again\n" {
+	if code != exitcode.Failure || out != "" || errs != "error: the account key changed since the last sync; run 'qbit-vault remote sync', then try again\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if len(f.Calls) != 0 || a.vaultBytes() != before || *readState(t, a) != stBefore {

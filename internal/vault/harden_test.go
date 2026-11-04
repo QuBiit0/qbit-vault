@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	helperEnv     = "GENTLE_VAULT_TEST_HELPER"
-	helperHomeEnv = "GENTLE_VAULT_TEST_HOME"
-	helperTagEnv  = "GENTLE_VAULT_TEST_TAG"
+	helperEnv     = "QBIT_VAULT_TEST_HELPER"
+	helperHomeEnv = "QBIT_VAULT_TEST_HOME"
+	helperTagEnv  = "QBIT_VAULT_TEST_TAG"
 	putsPerWorker = 15
 )
 

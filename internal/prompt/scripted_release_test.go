@@ -13,7 +13,7 @@ import (
 )
 
 // The scripted backend answers prompts from a file, so a release binary must
-// not hold it: no GENTLE_VAULT_PROMPT value may reach it.
+// not hold it: no QBIT_VAULT_PROMPT value may reach it.
 func TestScriptedBackendIsUnknownInReleaseBuilds(t *testing.T) {
 	_, err := SelectWith(Env{GOOS: "linux", Getenv: func(k string) string {
 		if k == EnvBackend {
@@ -53,8 +53,8 @@ func TestReleaseBinaryHasNoScriptedBackend(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
-	bin := filepath.Join(t.TempDir(), "gentle-vault")
-	cmd := exec.Command("go", "build", "-o", bin, "../../cmd/gentle-vault")
+	bin := filepath.Join(t.TempDir(), "qbit-vault")
+	cmd := exec.Command("go", "build", "-o", bin, "../../cmd/qbit-vault")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -62,7 +62,7 @@ func TestReleaseBinaryHasNoScriptedBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{"GENTLE_VAULT_SCRIPTED", "e2eprompt"} {
+	for _, marker := range []string{"QBIT_VAULT_SCRIPTED", "e2eprompt"} {
 		if bytes.Contains(raw, []byte(marker)) {
 			t.Errorf("the release binary contains %q", marker)
 		}

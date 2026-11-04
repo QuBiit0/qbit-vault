@@ -9,18 +9,18 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/merge"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // errRecoveryStale: the account key changed since this device last synced
 // (another device rotated it, or a rotation here did not finish locally).
-var errRecoveryStale = codedError{"internal", "the account key changed since the last sync; run 'gentle-vault remote sync', then try again", exitcode.Failure}
+var errRecoveryStale = codedError{"internal", "the account key changed since the last sync; run 'qbit-vault remote sync', then try again", exitcode.Failure}
 
 // rotated is what a finished rotation reports.
 type rotated struct{ generation int }

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // masterKey reads the stored master key (keychain mode), for assertions.
@@ -146,7 +146,7 @@ func TestRekeyRefusedOnRolledBackVault(t *testing.T) {
 	}
 	before := w.masterKey()
 	code, out, errs := w.run("", "rekey")
-	if code != exitcode.Corrupt || out != "" || errs != "error: vault is corrupt; run 'gentle-vault restore'\n" {
+	if code != exitcode.Corrupt || out != "" || errs != "error: vault is corrupt; run 'qbit-vault restore'\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	id, _ := vault.ReadID(w.home)
@@ -154,7 +154,7 @@ func TestRekeyRefusedOnRolledBackVault(t *testing.T) {
 		t.Fatal("refused rekey changed the keys")
 	}
 	h := newHarness(t)
-	if code, _, errs := h.run("", "rekey"); code != exitcode.Failure || errs != "error: no vault here; run 'gentle-vault init'\n" {
+	if code, _, errs := h.run("", "rekey"); code != exitcode.Failure || errs != "error: no vault here; run 'qbit-vault init'\n" {
 		t.Fatalf("no vault: code=%d err=%q", code, errs)
 	}
 	if code, _, errs := w.run("", "rekey", "x"); code != exitcode.Usage || errs != usageErr("unexpected arguments") {

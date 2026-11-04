@@ -6,8 +6,8 @@ exit codes, the redacting `Secret` type, and CI with the leak grep. Branch `feat
 ## Specs
 
 - S1. ROADMAP 1.1: "Repo skeleton, cobra CLI, `--json`, exit codes, `Secret` type with redacting `String/Format/MarshalJSON`, CI with leak grep"
-- S2. Module path: user answered "mi cuenta personal" for the GitHub owner; `gh api user` reports `QuBiit0`, so the module is `github.com/QuBiit0/gentle-vault`.
-- S3. CLI.md global flags: "`--home <dir>` (default `$GENTLE_VAULT_HOME` or `~/.gentle-vault`), `--json` (machine output, exactly one JSON object on stdout), `--session <id>` (host session; required by `exec`, `set --grant`, `grant`, `revoke --session-only`), `--quiet`, `--no-color`."
+- S2. Module path: user answered "mi cuenta personal" for the GitHub owner; `gh api user` reports `QuBiit0`, so the module is `github.com/QuBiit0/qbit-vault`.
+- S3. CLI.md global flags: "`--home <dir>` (default `$QBIT_VAULT_HOME` or `~/.qbit-vault`), `--json` (machine output, exactly one JSON object on stdout), `--session <id>` (host session; required by `exec`, `set --grant`, `grant`, `revoke --session-only`), `--quiet`, `--no-color`."
 - S4. CLI.md exit codes: "0 Success", "1 Generic failure / doctor warnings", "2 Usage error / doctor errors", "3 Typed refusal (see CONTRACT.md)", "4 Vault locked", "5 Vault corrupt / rollback detected".
 - S5. AGENTS.md invariant 1: "No tool result, MCP response, hook stdout, log line, error message, panic, or debug output may contain a secret value." THREAT_MODEL L14: "Values are held in a `Secret` type whose `String()`/`Format()`/`MarshalJSON` return `[REDACTED]`".
 - S6. AGENTS.md: "Secrets in tests are fixtures with the prefix `TESTSECRET_` so a leak in CI output is greppable."
@@ -18,7 +18,7 @@ exit codes, the redacting `Secret` type, and CI with the leak grep. Branch `feat
 | --- | --- | --- | --- | --- | --- |
 | T0 | - | inline | Import the existing specification as the first commit | 9f645d6 | done |
 | T1 | S5, S6 | worker | `internal/secret`: `Secret` type, redacting formatters, wipe, tests | 0b3a338 | done |
-| T2 | S1-S4 | inline | `go.mod`, `cmd/gentle-vault`, `internal/cli`, `internal/exitcode`: root, global flags, `version`, JSON output, usage errors; tests; CLI.md | 9dfa50f | done |
+| T2 | S1-S4 | inline | `go.mod`, `cmd/qbit-vault`, `internal/cli`, `internal/exitcode`: root, global flags, `version`, JSON output, usage errors; tests; CLI.md | 9dfa50f | done |
 | T3 | S1, S6 | worker | `.github/workflows/ci.yml`, `tools/leakgrep` (Go, cross-platform): build, vet, test, leak grep over every captured byte | 54b0d60, fix in next commit | done |
 
 ## Log

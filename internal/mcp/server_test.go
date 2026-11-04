@@ -11,8 +11,8 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/QuBiit0/gentle-vault/internal/broker"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/broker"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
 )
 
 type fake struct {

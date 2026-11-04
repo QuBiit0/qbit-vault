@@ -17,7 +17,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
 )
 
 const (

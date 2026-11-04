@@ -9,10 +9,10 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 const auditWarning = "warning: audit log write failed\n"
@@ -364,7 +364,7 @@ func TestAuditWorksWithoutTheKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := keyring.Delete("gentle-vault", "master:"+id); err != nil {
+	if err := keyring.Delete("qbit-vault", "master:"+id); err != nil {
 		t.Fatal(err)
 	}
 	if code, _, _ := w.run("", "list"); code == 0 {
@@ -382,12 +382,12 @@ func TestAuditWithoutVault(t *testing.T) {
 	h := newHarness(t)
 	for _, args := range [][]string{{"audit"}, {"audit", "--verify"}} {
 		code, out, errs := h.run("", args...)
-		if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'gentle-vault init'\n" {
+		if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'qbit-vault init'\n" {
 			t.Fatalf("%v: code=%d out=%q err=%q", args, code, out, errs)
 		}
 	}
 	code, out, errs := h.run("", "--json", "audit")
-	if code != exitcode.Failure || errs != "" || out != `{"ok":false,"error":{"code":"not_initialized","message":"no vault here; run 'gentle-vault init'"}}`+"\n" {
+	if code != exitcode.Failure || errs != "" || out != `{"ok":false,"error":{"code":"not_initialized","message":"no vault here; run 'qbit-vault init'"}}`+"\n" {
 		t.Fatalf("json: code=%d out=%q err=%q", code, out, errs)
 	}
 	if _, err := os.Stat(h.home); err == nil {

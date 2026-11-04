@@ -1,4 +1,4 @@
-# PRD: gentle-vault
+# PRD: QBit Vault (`qbit-vault`)
 
 Version 0.1 (design). Requirement IDs are stable; reference them from issues, PRs and tests.
 
@@ -10,7 +10,7 @@ Coding agents routinely need credentials to finish real work: `gh` needs a token
 - the user pastes it into the chat, where it enters the transcript, the on-disk session file and the model provider's servers;
 - the user interrupts the agent and performs the step by hand, which defeats the point of having an agent.
 
-Gentle AI already blocks the *reading* of credential files through its sensitive-paths deny list and refuses to store credentials at install time. There is no sanctioned path for an agent to *use* a credential without seeing it. gentle-vault provides that path.
+Gentle AI already blocks the *reading* of credential files through its sensitive-paths deny list and refuses to store credentials at install time. There is no sanctioned path for an agent to *use* a credential without seeing it. qbit-vault provides that path.
 
 ## 2. Goals
 
@@ -21,13 +21,13 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - G5. Pi / Gentle Shell gets the richest experience (inline masked input, shell-tool override, sidebar audit); Claude Code, Codex and OpenCode get a functionally equivalent one through MCP and hooks.
 - G6. Secrets are organized in a **global** layer (used everywhere) and **project** layers (bound to one repository), managed with the same few commands by the user and, with user confirmation, by the agent.
 - G7. The agent can always learn, in one call, exactly what it may and may not do with the vault.
-- G8. The same vault works on several machines and is backed up off the machine through a self-hosted, zero-knowledge sync server (`gentle-vault-server`), with no scripts and no plaintext leaving a device. See `REMOTE_SYNC.md`.
+- G8. The same vault works on several machines and is backed up off the machine through a self-hosted, zero-knowledge sync server (`qbit-vault-server`), with no scripts and no plaintext leaving a device. See `REMOTE_SYNC.md`.
 - G9. When a task needs several values (host, user and password of a database), the agent asks once and the user fills every box in one prompt; fields that are not secret (a hostname) are visible while typed, secret ones are masked.
 
 ## 3. Non-goals (v1)
 
 - Team or multi-user sharing of secrets.
-- Third-party backends (1Password, Bitwarden, Infisical, HashiCorp Vault, cloud secret managers). The backend interface is defined so these can be added in v2. gentle-vault's own sync server (G8) is in v1; it stores ciphertext only and is not a backend in this sense.
+- Third-party backends (1Password, Bitwarden, Infisical, HashiCorp Vault, cloud secret managers). The backend interface is defined so these can be added in v2. qbit-vault's own sync server (G8) is in v1; it stores ciphertext only and is not a backend in this sense.
 - Secret rotation, expiry of the values themselves, or leak detection in external services.
 - A long-running daemon on the user's machine. v1 is a stateless CLI plus a stdio MCP server started by the host; sync runs inside the commands that change or read the vault (`REMOTE_SYNC.md` § 7.1). The sync server is a separate, optional deployment.
 - Browser-based capture page.
@@ -41,36 +41,36 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - F1 *First use*: agent needs `GITHUB_TOKEN`; vault has none; user types it in a masked prompt; chooses grant scope; command runs; output is redacted.
 - F2 *Reuse*: agent needs `GITHUB_TOKEN` in a new session; vault has it; user is asked only for a grant.
 - F3 *Accidental paste*: user pastes `ghp_…` into the chat; the extension intercepts it before the model sees it and offers to store it as `secret://GITHUB_TOKEN`.
-- F4 *Inspection*: user runs `gentle-vault list` / `audit` to see names, layers, scopes and who used what, when.
-- F7 *Manual entry*: user runs `gentle-vault set DATABASE_URL --project` (or `/vault set` in Pi) and types the value in a masked prompt, with no agent involved.
+- F4 *Inspection*: user runs `qbit-vault list` / `audit` to see names, layers, scopes and who used what, when.
+- F7 *Manual entry*: user runs `qbit-vault set DATABASE_URL --project` (or `/vault set` in Pi) and types the value in a masked prompt, with no agent involved.
 - F8 *Agent-proposed management*: agent calls `secret_manage(move, DATABASE_URL, to: project, reason)`; user sees the proposal out of band and confirms or declines; the agent only learns `ok` or `user_declined`.
 - F9 *Project override*: `DATABASE_URL` exists globally and in repo A; commands in repo A use A's value, everywhere else the global one.
-- F5 *Revocation*: user runs `gentle-vault revoke GITHUB_TOKEN` (grant) or `gentle-vault rm GITHUB_TOKEN` (value).
-- F6 *Uninstall*: `gentle-vault uninstall` restores every agent config from its snapshot and optionally deletes the vault.
+- F5 *Revocation*: user runs `qbit-vault revoke GITHUB_TOKEN` (grant) or `qbit-vault rm GITHUB_TOKEN` (value).
+- F6 *Uninstall*: `qbit-vault uninstall` restores every agent config from its snapshot and optionally deletes the vault.
 - F10 *Several fields*: agent needs a database; it calls `secret_request` once with `DB_HOST` (text), `DB_USER` (text) and `DB_PASSWORD` (secret); the user fills three boxes in one dialog and picks one scope; the agent gets three references.
-- F11 *First sync*: user runs `gentle-vault remote register --server https://vault.example.com`, types the invite code, writes down the recovery key; every later change syncs on its own.
-- F12 *Second machine*: user runs `gentle-vault init` and `gentle-vault remote join --server …` on the new machine, then `gentle-vault remote approve` on the old one and types the codes each one shows; the new machine has every secret. In a repository it already had, `gentle-vault link <label>` binds the project layer to the local checkout.
-- F13 *Lost machine*: from another device, `gentle-vault remote revoke-device <id>` removes it and rotates the master key and the recovery key; with no device left, `remote join --recovery` and the recovery key restore the vault.
+- F11 *First sync*: user runs `qbit-vault remote register --server https://vault.example.com`, types the invite code, writes down the recovery key; every later change syncs on its own.
+- F12 *Second machine*: user runs `qbit-vault init` and `qbit-vault remote join --server …` on the new machine, then `qbit-vault remote approve` on the old one and types the codes each one shows; the new machine has every secret. In a repository it already had, `qbit-vault link <label>` binds the project layer to the local checkout.
+- F13 *Lost machine*: from another device, `qbit-vault remote revoke-device <id>` removes it and rotates the master key and the recovery key; with no device left, `remote join --recovery` and the recovery key restore the vault.
 
 ## 5. Functional requirements
 
 ### 5.1 Vault
 
-- R-VAULT-01. Secrets MUST be stored in a single encrypted file at `$GENTLE_VAULT_HOME/vault.enc` (default `~/.gentle-vault/`), using an AEAD cipher (XChaCha20-Poly1305) with a per-write random nonce. See `STORAGE.md`.
-- R-VAULT-02. The master key MUST be stored in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). When no keychain is available, the key MUST be wrapped with a user passphrase using Argon2id and stored at `$GENTLE_VAULT_HOME/key.enc`.
+- R-VAULT-01. Secrets MUST be stored in a single encrypted file at `$QBIT_VAULT_HOME/vault.enc` (default `~/.qbit-vault/`), using an AEAD cipher (XChaCha20-Poly1305) with a per-write random nonce. See `STORAGE.md`.
+- R-VAULT-02. The master key MUST be stored in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). When no keychain is available, the key MUST be wrapped with a user passphrase using Argon2id and stored at `$QBIT_VAULT_HOME/key.enc`.
 - R-VAULT-03. The vault file, key file, grants file and audit log MUST be created with mode `0600` (owner-only ACL on Windows).
-- R-VAULT-04. Every write MUST be atomic (write temp file in the same directory, fsync, rename) and MUST be preceded by an encrypted snapshot to `$GENTLE_VAULT_HOME/backups/`.
+- R-VAULT-04. Every write MUST be atomic (write temp file in the same directory, fsync, rename) and MUST be preceded by an encrypted snapshot to `$QBIT_VAULT_HOME/backups/`.
 - R-VAULT-05. Secret names MUST match `^[A-Z][A-Z0-9_]{0,63}$` so that a name is always a valid environment variable name on every platform.
 - R-VAULT-06. Each secret record MUST carry: name, layer (`global` or `project`), `kind` (`secret`, masked at capture, or `text`, visible at capture; both are stored, injected and redacted alike and never returned), description (optional), created_at, updated_at, `sensitive` flag, allowed `binaries` (list of executable base names; empty = any), allowed `hosts` (list of hostnames; empty = any; advisory in v1, see R-EXEC-08).
 - R-VAULT-07. The vault MUST never store the value in any derived or cached form outside the encrypted file (no index, no search cache, no clipboard).
-- R-VAULT-08. `init` and `sync` MUST NOT read, import or copy any value from the process environment, from `.env` files or from other credential stores. Importing is an explicit `gentle-vault import` the user runs with a path.
-- R-VAULT-09. Everything except the cleartext envelope header MUST be encrypted at rest: values, names, descriptions, project roots and grants. A copy of `$GENTLE_VAULT_HOME` without the master key MUST reveal no secret value and no secret name outside the audit log (see `STORAGE.md` § What a leaked directory reveals).
+- R-VAULT-08. `init` and `sync` MUST NOT read, import or copy any value from the process environment, from `.env` files or from other credential stores. Importing is an explicit `qbit-vault import` the user runs with a path.
+- R-VAULT-09. Everything except the cleartext envelope header MUST be encrypted at rest: values, names, descriptions, project roots and grants. A copy of `$QBIT_VAULT_HOME` without the master key MUST reveal no secret value and no secret name outside the audit log (see `STORAGE.md` § What a leaked directory reveals).
 
 ### 5.1a Layers
 
 - R-LAYER-01. Every secret belongs to exactly one layer: `global`, or `project` bound to one repository root (resolved with `git rev-parse --show-toplevel`, else the nearest ancestor containing `.git`).
 - R-LAYER-02. The same name MAY exist in the global layer and in any number of project layers. Resolution for a `cwd` is: the project layer of the repository containing `cwd`, else the global layer, else `unknown_secret`.
-- R-LAYER-03. Project layers MUST be stored inside `vault.enc` in `$GENTLE_VAULT_HOME`, never inside the repository, so they cannot be committed.
+- R-LAYER-03. Project layers MUST be stored inside `vault.enc` in `$QBIT_VAULT_HOME`, never inside the repository, so they cannot be committed.
 - R-LAYER-04. `request` and `set` outside a repository MUST only offer the global layer. Asking for the project layer there is refused with `no_project`.
 - R-LAYER-05. Moving a secret between layers (`mv`, `manage move`) MUST keep its value and metadata, MUST drop its grants, and MUST ask before overwriting an existing secret with the same name in the target layer.
 
@@ -85,21 +85,21 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - R-CAP-06. The extension MUST intercept user input that matches known secret patterns (GitHub `ghp_`/`github_pat_`, OpenAI `sk-`, AWS `AKIA`, Slack `xox`, Stripe `sk_live`, private key PEM blocks, JWTs, and high-entropy strings ≥ 32 chars when preceded by `=` or `:`) **before** it reaches the model, and offer to store it as a named secret, replacing the text with its reference.
 - R-CAP-08. One capture MUST be able to ask for 1 to 8 fields under a single reason, a single layer choice and a single scope choice (R-API-02). Fields already stored are shown as stored and get no box; the model is not told which ones were. The offered scopes are those every field allows (a `sensitive` field limits all of them to `once`). Every backend renders the fields in one interaction: one form where the backend has forms (Pi, PowerShell, zenity `--forms`), otherwise consecutive boxes in the same prompt, where cancelling any box cancels the whole capture.
 - R-CAP-09. A `text` field MUST be visible while typed and a `secret` field masked; nothing else differs. The kind is chosen by the agent's request and shown to the user, who can still cancel; an agent that marks a secret as `text` only makes it visible on the user's own screen.
-- R-CAP-07. The user MUST be able to add or replace a value manually, without any agent request: `gentle-vault set NAME [--global|--project]` in any terminal and `/vault set NAME` in Pi / Gentle Shell. Both use the same masked capture (R-CAP-01) and never accept the value as an argument. Inside a repository with neither flag, the prompt asks for the layer.
+- R-CAP-07. The user MUST be able to add or replace a value manually, without any agent request: `qbit-vault set NAME [--global|--project]` in any terminal and `/vault set NAME` in Pi / Gentle Shell. Both use the same masked capture (R-CAP-01) and never accept the value as an argument. Inside a repository with neither flag, the prompt asks for the layer.
 
 ### 5.3 Grants
 
 - R-GRANT-01. A grant binds (secret name, layer, session id, scope, expiry). A grant for the global `NAME` does not cover a project `NAME`, and the reverse. No exec may inject a secret without an active grant.
 - R-GRANT-02. Scopes: `once` (this exec only), `session` (this host session, default TTL 30 min, configurable), `project` (this repository root until revoked; survives sessions). Secrets flagged `sensitive` MUST only accept `once`.
 - R-GRANT-03. A grant MUST be created only from an explicit user confirmation delivered through the host UI or the native prompt. The MCP tool surface MUST NOT be able to create a grant on its own.
-- R-GRANT-04. Grants MUST be persisted (metadata only, no values), encrypted with the master key, at `$GENTLE_VAULT_HOME/grants.enc` so that a host restart does not silently widen or narrow access.
+- R-GRANT-04. Grants MUST be persisted (metadata only, no values), encrypted with the master key, at `$QBIT_VAULT_HOME/grants.enc` so that a host restart does not silently widen or narrow access.
 - R-GRANT-05. Subagents MUST NOT inherit grants. A subagent is a different session id and must obtain its own.
-- R-GRANT-06. `gentle-vault revoke <name> [--all]` and `gentle-vault revoke --session <id>` MUST take effect immediately for any later exec.
+- R-GRANT-06. `qbit-vault revoke <name> [--all]` and `qbit-vault revoke --session <id>` MUST take effect immediately for any later exec.
 
 ### 5.4 Exec (injection)
 
-- R-EXEC-01. `gentle-vault exec --session <id> --secret NAME[=ENV] ... -- <command>` MUST run `<command>` as a child process whose environment is the parent environment **minus** any variable already named like a vault secret, **plus** the granted values. The value MUST NOT be exported to the parent.
-- R-EXEC-02. The host-side shell tool (Pi `bash` override, Claude Code `PreToolUse` hook) MUST rewrite a command that references a known secret (`$NAME`, `${NAME}`, `%NAME%`, `$env:NAME`, `{{secret:NAME}}`) into a `gentle-vault exec` invocation. A reference to a name with no active grant MUST trigger the grant prompt (R-GRANT-03), not a silent empty variable.
+- R-EXEC-01. `qbit-vault exec --session <id> --secret NAME[=ENV] ... -- <command>` MUST run `<command>` as a child process whose environment is the parent environment **minus** any variable already named like a vault secret, **plus** the granted values. The value MUST NOT be exported to the parent.
+- R-EXEC-02. The host-side shell tool (Pi `bash` override, Claude Code `PreToolUse` hook) MUST rewrite a command that references a known secret (`$NAME`, `${NAME}`, `%NAME%`, `$env:NAME`, `{{secret:NAME}}`) into a `qbit-vault exec` invocation. A reference to a name with no active grant MUST trigger the grant prompt (R-GRANT-03), not a silent empty variable.
 - R-EXEC-03. While any secret is injected, the command MUST be refused (typed refusal `dump_command`) if it matches the dump-command list: `env`, `printenv`, `set` (bare), `export -p`, `declare -x`, `cat|less|more /proc/*/environ`, `Get-ChildItem Env:`, `gci env:`, `[Environment]::GetEnvironmentVariables()`, `echo $NAME`/`echo %NAME%`/`Write-Output $env:NAME` where NAME is injected. The list MUST be a data file, not code, so it can be extended without a release. The list also covers bare `export`, `declare`/`typeset` (bare, `-p`, or naming an injected variable), `compgen -e|-v`, any read of `/proc/<self|pid|$$|$BASHPID>/environ`, `find -exec env|printenv`, `${!var}` indirection, here-strings and here-documents that reference an injected name, interpreter one-liners that read the environment (awk, perl, python, node, ruby), `$env:NAME` anywhere and `Get-Content env:`, cmd `set PREFIX` and `%NAME:~0,5%`; wrappers (`nice`, `timeout`, `stdbuf`, `strace`, `chroot`, `ionice`, `setsid`, `doas`, `xargs`, `sudo`, `env`, ...) are resolved before matching. Under `--shell cmd|pwsh` the raw command is tested too. This is a best-effort layer (THREAT_MODEL R1, R2).
 - R-EXEC-04. stdout and stderr MUST be streamed through the redactor (R-RED-01) before being returned to the host.
 - R-EXEC-05. The child's exit code MUST be propagated unchanged.
@@ -128,35 +128,35 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 ### 5.7 Hosts
 
-- R-HOST-01. Pi / Gentle Shell: the extension `gentle-vault-pi` MUST provide masked capture, bash override, read/write redaction, paste interception, `/vault` commands and a sidebar audit widget. See `GENTLE_SHELL_EXTENSION.md`.
-- R-HOST-02. Claude Code: `init` MUST register the MCP server (`claude mcp add` or `~/.claude/settings.json` merge), a `PreToolUse` hook on `Bash` that rewrites to `exec` and enforces the dump-command list, a `PostToolUse` hook on `Bash`/`Read` for redaction, a `UserPromptSubmit` hook for paste interception, and add `$GENTLE_VAULT_HOME` to the `permissions.deny` read list.
+- R-HOST-01. Pi / Gentle Shell: the extension `qbit-vault-pi` MUST provide masked capture, bash override, read/write redaction, paste interception, `/vault` commands and a sidebar audit widget. See `GENTLE_SHELL_EXTENSION.md`.
+- R-HOST-02. Claude Code: `init` MUST register the MCP server (`claude mcp add` or `~/.claude/settings.json` merge), a `PreToolUse` hook on `Bash` that rewrites to `exec` and enforces the dump-command list, a `PostToolUse` hook on `Bash`/`Read` for redaction, a `UserPromptSubmit` hook for paste interception, and add `$QBIT_VAULT_HOME` to the `permissions.deny` read list.
 - R-HOST-03. Codex: `init` MUST register the MCP server in `~/.codex/config.toml`. Capture uses the native dialog. Exec is through `secret_exec` only.
 - R-HOST-04. OpenCode: `init` MUST register the MCP server in the OpenCode config and, where the OpenCode plugin API offers `tool.execute.before/after`, install a plugin for bash rewrite and redaction; otherwise `secret_exec` only.
-- R-HOST-05. Every host registration MUST be reversible by `gentle-vault uninstall` using the snapshots taken at registration time.
+- R-HOST-05. Every host registration MUST be reversible by `qbit-vault uninstall` using the snapshots taken at registration time.
 
 ### 5.8 Audit
 
-- R-AUD-01. An append-only JSONL log at `$GENTLE_VAULT_HOME/audit.jsonl` MUST record: capture (name, layer, session, reason, `by: agent|user`), grant (name, layer, session, scope, expiry), exec (R-EXEC-06), manage (action, name, layer, session, reason, outcome), refusal (type, name, session), revoke, rm, mv. Never values.
-- R-AUD-02. Each record MUST include the SHA-256 of the previous record (hash chain) so tampering is detectable by `gentle-vault audit --verify`.
+- R-AUD-01. An append-only JSONL log at `$QBIT_VAULT_HOME/audit.jsonl` MUST record: capture (name, layer, session, reason, `by: agent|user`), grant (name, layer, session, scope, expiry), exec (R-EXEC-06), manage (action, name, layer, session, reason, outcome), refusal (type, name, session), revoke, rm, mv. Never values.
+- R-AUD-02. Each record MUST include the SHA-256 of the previous record (hash chain) so tampering is detectable by `qbit-vault audit --verify`.
 - R-AUD-03. The log MUST never leave the machine. No telemetry in v1. With sync enabled, only an encrypted digest of the log's head (sequence number and line hash) is uploaded, so tampering with the local log becomes detectable (R-SYNC-10).
 
 ### 5.9 Install, sync, doctor, uninstall
 
-- R-INS-01. `npx gentle-vault@latest init` MUST complete the whole setup (R-INS-02..06) with no further input on a machine with a working keychain; it MUST ask exactly one question (passphrase) where no keychain exists.
-- R-INS-02. The npm launcher MUST have no `postinstall`. Platform binaries MUST ship as `optionalDependencies` (`@gentle-vault/cli-darwin-arm64`, etc.) and be verified against a checksum embedded in the launcher before first run.
+- R-INS-01. `npx qbit-vault@latest init` MUST complete the whole setup (R-INS-02..06) with no further input on a machine with a working keychain; it MUST ask exactly one question (passphrase) where no keychain exists.
+- R-INS-02. The npm launcher MUST have no `postinstall`. Platform binaries MUST ship as `optionalDependencies` (`@qbit-vault/cli-darwin-arm64`, etc.) and be verified against a checksum embedded in the launcher before first run.
 - R-INS-03. `init` MUST detect installed agents by their config directories and register only those present, unless `--agents` is given.
-- R-INS-04. Every config file `init` touches MUST be snapshotted first to `$GENTLE_VAULT_HOME/backups/<timestamp>/<path>` and written atomically with a merge that preserves unrelated keys.
-- R-INS-05. `init` MUST add `$GENTLE_VAULT_HOME/**` to each agent's file-read deny list where the agent supports one, and MUST verify that the Gentle AI permissions component's deny list, when present, is not weakened.
+- R-INS-04. Every config file `init` touches MUST be snapshotted first to `$QBIT_VAULT_HOME/backups/<timestamp>/<path>` and written atomically with a merge that preserves unrelated keys.
+- R-INS-05. `init` MUST add `$QBIT_VAULT_HOME/**` to each agent's file-read deny list where the agent supports one, and MUST verify that the Gentle AI permissions component's deny list, when present, is not weakened.
 - R-INS-06. `init` MUST finish by running `doctor` and printing its report.
 - R-INS-07. `doctor` MUST be read-only and report: binary version and signature status, vault present/locked/unlocked, keychain backend in use, per-agent registration status (MCP, hooks, deny-list), extension version for Pi, active grants count, audit chain validity, and with sync enabled the server, last sync, pending push, conflicts, generation and anchor state (without contacting the server).
-- R-INS-08. `sync` MUST re-apply registrations idempotently after a host or gentle-vault upgrade.
+- R-INS-08. `sync` MUST re-apply registrations idempotently after a host or qbit-vault upgrade.
 - R-INS-09. `uninstall` MUST restore all snapshots, remove the extension, and leave the vault in place unless `--purge` is given, which requires typing the word `purge`.
 
 ### 5.10 Remote sync
 
 Normative protocol: `REMOTE_SYNC.md`.
 
-- R-SYNC-01. Sync MUST be opt-in (`gentle-vault remote register` or `remote join`). Without it gentle-vault makes no network call beyond those of AGENTS.md invariant 8.
+- R-SYNC-01. Sync MUST be opt-in (`qbit-vault remote register` or `remote join`). Without it qbit-vault makes no network call beyond those of AGENTS.md invariant 8.
 - R-SYNC-02. The server MUST be zero-knowledge: it stores only ciphertext sealed on the device, public keys, counters and timestamps. No key that decrypts a vault object is ever sent to it, and authentication to it uses keys independent of the encryption keys.
 - R-SYNC-03. The client MUST refuse a server URL that is not `https://`, except loopback `http://`, and MUST verify every downloaded object (AEAD, AAD account, generation and version, signatures) before using it. A version or generation older than one already seen is `remote_rollback`.
 - R-SYNC-04. A new device MUST obtain the master key only by pairing with an existing device, verified by two codes typed by the user (the new device's key fingerprint on the approver, a confirmation code derived from the master key on the new device), or by the user's recovery key. Neither path lets the server substitute a device key or plant a master key of its own.
@@ -166,8 +166,8 @@ Normative protocol: `REMOTE_SYNC.md`.
 - R-SYNC-08. Grants, prompt tokens, configuration and the audit log MUST NOT sync. A grant never applies to a record replaced on another device.
 - R-SYNC-09. The local vault MUST stay authoritative and usable offline. `exec` MUST NOT touch the network; a change made offline syncs on a later command.
 - R-SYNC-10. With sync enabled the client MUST upload, encrypted, the head of its audit log, and `audit --verify` MUST check the local log against those anchors.
-- R-SYNC-11. Project layers MUST be identified independently of their path, with one root per device. A project layer reaches a new machine only when the user links it (`gentle-vault link`), never by matching a remote URL automatically.
-- R-SYNC-12. `gentle-vault-server` MUST ship as one static binary and a container image that runs as non-root with a read-only root filesystem and one data volume, deployable behind a TLS reverse proxy (Dokploy).
+- R-SYNC-11. Project layers MUST be identified independently of their path, with one root per device. A project layer reaches a new machine only when the user links it (`qbit-vault link`), never by matching a remote URL automatically.
+- R-SYNC-12. `qbit-vault-server` MUST ship as one static binary and a container image that runs as non-root with a read-only root filesystem and one data volume, deployable behind a TLS reverse proxy (Dokploy).
 
 ## 6. Non-functional requirements
 
@@ -188,6 +188,6 @@ Normative protocol: `REMOTE_SYNC.md`.
 
 ## 8. Open questions
 
-- Q1. Should `project` grants and project layers be keyed by git remote URL instead of filesystem root, so a re-clone keeps them? (Decided for v1: root path. `gentle-vault relink OLD NEW` moves a project layer and its grants to a new checkout path. Remote keying stays a v2 candidate. With sync, project layers get a path-independent id and per-device roots (R-SYNC-11); the origin URL only produces a hint to run `link`.)
+- Q1. Should `project` grants and project layers be keyed by git remote URL instead of filesystem root, so a re-clone keeps them? (Decided for v1: root path. `qbit-vault relink OLD NEW` moves a project layer and its grants to a new checkout path. Remote keying stays a v2 candidate. With sync, project layers get a path-independent id and per-device roots (R-SYNC-11); the origin URL only produces a hint to run `link`.)
 - Q2. Should `secret_list` be hidden from the model entirely and exposed only to the user via `/vault list`? (Leaning: keep it; the agent needs to know which handles exist to avoid re-asking.)
 - Q3. Windows native prompt: PowerShell window vs. a tiny Go/Win32 dialog. (Leaning: PowerShell for v1, zero extra dependencies.)

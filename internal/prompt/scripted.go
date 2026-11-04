@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // The scripted backend is for the Docker e2e battery (docs/TESTING.md § Tier
 // 2). It exists only in binaries built with -tags e2eprompt; a release build
-// has no code for it (scripted_off.go), so GENTLE_VAULT_PROMPT=scripted is an
+// has no code for it (scripted_off.go), so QBIT_VAULT_PROMPT=scripted is an
 // unknown backend there.
 //
 // Every answer comes from a file, one line per prompt, in the order asked.
@@ -27,14 +27,14 @@ import (
 // and shown is appended to the transcript, never an answer.
 const (
 	// EnvScriptedAnswers names the file of answers, one per line.
-	EnvScriptedAnswers = "GENTLE_VAULT_SCRIPTED_ANSWERS"
+	EnvScriptedAnswers = "QBIT_VAULT_SCRIPTED_ANSWERS"
 	// EnvScriptedTranscript names the file asked and shown text is appended to.
-	EnvScriptedTranscript = "GENTLE_VAULT_SCRIPTED_TRANSCRIPT"
+	EnvScriptedTranscript = "QBIT_VAULT_SCRIPTED_TRANSCRIPT"
 	// EnvScriptedPassphrase names the file whose first line is the passphrase.
-	EnvScriptedPassphrase = "GENTLE_VAULT_SCRIPTED_PASSPHRASE_FILE"
+	EnvScriptedPassphrase = "QBIT_VAULT_SCRIPTED_PASSPHRASE_FILE"
 	// EnvScriptedWait is how long to wait for a missing answer (Go duration,
 	// default 60s).
-	EnvScriptedWait = "GENTLE_VAULT_SCRIPTED_WAIT"
+	EnvScriptedWait = "QBIT_VAULT_SCRIPTED_WAIT"
 )
 
 func testBackend(name string, e Env) (Backend, bool) {

@@ -1,4 +1,4 @@
-// Package cli implements the gentle-vault command line (docs/CLI.md).
+// Package cli implements the qbit-vault command line (docs/CLI.md).
 package cli
 
 import (
@@ -14,8 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
 )
 
 // Set by ldflags at release time.
@@ -25,8 +25,8 @@ var (
 )
 
 const (
-	envHome    = "GENTLE_VAULT_HOME"
-	envSession = "GENTLE_VAULT_SESSION"
+	envHome    = "QBIT_VAULT_HOME"
+	envSession = "QBIT_VAULT_SESSION"
 	envNoColor = "NO_COLOR"
 )
 
@@ -45,8 +45,8 @@ type globals struct {
 	NoColor   bool
 }
 
-// Home returns the vault directory: --home, else $GENTLE_VAULT_HOME, else
-// ~/.gentle-vault. It is resolved lazily so commands that do not need it
+// Home returns the vault directory: --home, else $QBIT_VAULT_HOME, else
+// ~/.qbit-vault. It is resolved lazily so commands that do not need it
 // never touch the user's home directory.
 func (g *globals) Home() string {
 	if g.home != "" {
@@ -56,9 +56,9 @@ func (g *globals) Home() string {
 		return h
 	}
 	if h, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(h, ".gentle-vault")
+		return filepath.Join(h, ".qbit-vault")
 	}
-	return ".gentle-vault"
+	return ".qbit-vault"
 }
 
 // NoColorEnabled reports whether colored output must be suppressed.
@@ -148,7 +148,7 @@ func report(stdout, stderr io.Writer, asJSON bool, code, msg string, exit int) i
 	}
 	fmt.Fprintf(stderr, "error: %s\n", msg)
 	if code == "usage" {
-		fmt.Fprintln(stderr, "Run 'gentle-vault --help' for usage.")
+		fmt.Fprintln(stderr, "Run 'qbit-vault --help' for usage.")
 	}
 	return exit
 }
@@ -183,7 +183,7 @@ func writeJSON(w io.Writer, v any) error {
 
 func newRoot(g *globals, entered *bool) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "gentle-vault",
+		Use:           "qbit-vault",
 		Short:         "Local secrets broker for coding agents",
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -211,7 +211,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.SetFlagErrorFunc(flagUsageError)
 
 	f := root.PersistentFlags()
-	f.StringVar(&g.home, "home", "", "vault directory (default $"+envHome+" or ~/.gentle-vault)")
+	f.StringVar(&g.home, "home", "", "vault directory (default $"+envHome+" or ~/.qbit-vault)")
 	f.BoolVar(&g.JSON, "json", false, "machine output: exactly one JSON object on stdout")
 	f.StringVar(&g.Session, "session", g.getenv(envSession), "host session id (default $"+envSession+")")
 	f.BoolVar(&g.Quiet, "quiet", false, "suppress non-essential output")
@@ -276,7 +276,7 @@ func newVersion(g *globals) *cobra.Command {
 					Go: runtime.Version(), OS: runtime.GOOS, Arch: runtime.GOARCH,
 				})
 			}
-			_, err := fmt.Fprintf(out, "gentle-vault %s (%s, %s/%s)\n", Version, Commit, runtime.GOOS, runtime.GOARCH)
+			_, err := fmt.Fprintf(out, "qbit-vault %s (%s, %s/%s)\n", Version, Commit, runtime.GOOS, runtime.GOARCH)
 			return err
 		},
 	}

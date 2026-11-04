@@ -10,11 +10,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/dotenv"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/dotenv"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // maxDotenvBytes bounds the dotenv file import reads.
@@ -180,7 +180,7 @@ func newImport(g *globals) *cobra.Command {
 				fmt.Fprintf(stderr, "note: skipped %d %s (invalid name, no '=', or empty value)\n", src.skipped, plural(src.skipped, "line", "lines"))
 			}
 			if envGiven {
-				fmt.Fprintf(stderr, "hint: unset %s in your shell; gentle-vault cannot change the environment of the shell that started it\n", strings.Join(src.order, " "))
+				fmt.Fprintf(stderr, "hint: unset %s in your shell; qbit-vault cannot change the environment of the shell that started it\n", strings.Join(src.order, " "))
 			}
 			remoteState := g.pushAfterCmd(cmd, s)
 			return writeImported(g, cmd.OutOrStdout(), layer, src, replaced, res.Changed, removed, remoteState)

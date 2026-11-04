@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/merge"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Sync conflicts (docs/REMOTE_SYNC.md § 7.4). `remote conflicts` lists the
@@ -19,7 +19,7 @@ import (
 
 var (
 	errNoConflict = codedError{"not_found", "no sync conflict for that name", exitcode.Failure}
-	errUnlinked   = codedError{"not_found", "that project layer is not linked on this device; run 'gentle-vault link'", exitcode.Failure}
+	errUnlinked   = codedError{"not_found", "that project layer is not linked on this device; run 'qbit-vault link'", exitcode.Failure}
 )
 
 // winnerLabel names the device whose version won, from the roster.

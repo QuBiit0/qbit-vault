@@ -25,7 +25,7 @@ func showDialog(title, text string) dialog {
 	for i, l := range lines {
 		lines[i] = escape(l)
 	}
-	return dialog{kind: dialogShow, title: "gentle-vault: " + escape(title), text: strings.Join(lines, "\n")}
+	return dialog{kind: dialogShow, title: "qbit-vault: " + escape(title), text: strings.Join(lines, "\n")}
 }
 
 // Show implements Shower.

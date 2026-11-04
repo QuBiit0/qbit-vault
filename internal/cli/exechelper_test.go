@@ -14,12 +14,12 @@ import (
 )
 
 // The test binary doubles as the child process of `exec` tests: when
-// GV_CLI_CHILD is set, TestMain runs that mode instead of the tests, which
+// QBV_CLI_CHILD is set, TestMain runs that mode instead of the tests, which
 // keeps them portable (no sh utilities needed).
 const (
-	envChild     = "GV_CLI_CHILD"
-	envChildArg  = "GV_CLI_ARG"
-	envChildExit = "GV_CLI_EXIT"
+	envChild     = "QBV_CLI_CHILD"
+	envChildArg  = "QBV_CLI_ARG"
+	envChildExit = "QBV_CLI_EXIT"
 )
 
 func childMain(mode string) {

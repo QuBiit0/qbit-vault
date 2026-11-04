@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
 )
 
 const (
@@ -177,7 +177,7 @@ func TestExecUsageErrors(t *testing.T) {
 func TestExecNotInitialized(t *testing.T) {
 	w := newBareWorld(t)
 	code, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, "x")...)
-	if code != 1 || out != "" || errs != "error: no vault here; run 'gentle-vault init'\n" {
+	if code != 1 || out != "" || errs != "error: no vault here; run 'qbit-vault init'\n" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, errs)
 	}
 }
@@ -231,7 +231,7 @@ func TestExecUserDumpGuardExtension(t *testing.T) {
 	w.grantTo(sessA, "GITHUB_TOKEN", "session")
 	mk := marker(t)
 	run := child(t, "mark", mk, 0)
-	if err := os.WriteFile(filepath.Join(w.home, "dumpguard.yaml"), []byte("format: gentle-vault-dumpguard/1\npatterns:\n  - '^mytool\\s+--dump$'\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(w.home, "dumpguard.yaml"), []byte("format: qbit-vault-dumpguard/1\npatterns:\n  - '^mytool\\s+--dump$'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	w.wantRefusal(refusal.DumpCommand, "", execArgs(sessA, []string{"GITHUB_TOKEN"}, "mytool --dump; "+run)...)
@@ -248,7 +248,7 @@ func TestExecMalformedDumpGuardFileFailsClosed(t *testing.T) {
 	w.grantTo(sessA, "GITHUB_TOKEN", "session")
 	mk := marker(t)
 	run := child(t, "mark", mk, 0)
-	if err := os.WriteFile(filepath.Join(w.home, "dumpguard.yaml"), []byte("format: gentle-vault-dumpguard/1\npatterns:\n  - nope\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(w.home, "dumpguard.yaml"), []byte("format: qbit-vault-dumpguard/1\npatterns:\n  - nope\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	code, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, run)...)

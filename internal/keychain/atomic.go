@@ -1,7 +1,7 @@
 package keychain
 
 import (
-	"github.com/QuBiit0/gentle-vault/internal/perm"
+	"github.com/QuBiit0/qbit-vault/internal/perm"
 
 	"crypto/rand"
 	"encoding/hex"

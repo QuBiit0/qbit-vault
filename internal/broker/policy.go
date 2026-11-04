@@ -44,7 +44,7 @@ func policy(inProject bool, cooldowns []Cooldown) Policy {
 // Instructions is the MCP server's `instructions`: the same policy text.
 func Instructions() string {
 	var b strings.Builder
-	b.WriteString("gentle-vault: use credentials without seeing them.\nYou can:\n")
+	b.WriteString("qbit-vault: use credentials without seeing them.\nYou can:\n")
 	for _, s := range PolicyCan {
 		b.WriteString("- " + s + "\n")
 	}

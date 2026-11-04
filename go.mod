@@ -1,4 +1,4 @@
-module github.com/QuBiit0/gentle-vault
+module github.com/QuBiit0/qbit-vault
 
 go 1.26.0
 

@@ -204,7 +204,7 @@ func TestNewerSchemaRefused(t *testing.T) {
 	_, home := newVault(t)
 	writeBody(t, home, `{"schema":3,"global":{}}`)
 	_, err := Open(home, testKey(1))
-	if !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "newer gentle-vault") {
+	if !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), "newer qbit-vault") {
 		t.Fatalf("err=%v", err)
 	}
 }

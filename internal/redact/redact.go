@@ -29,7 +29,7 @@ import (
 	"io"
 	"regexp"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // ShortLen is the length below which a value is reported by Warnings.

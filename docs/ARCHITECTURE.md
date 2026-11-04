@@ -4,14 +4,14 @@
 
 ```
                          ┌──────────────────────────────────────────┐
-                         │  packages/gentle-vault  (npm launcher)   │
+                         │  packages/qbit-vault  (npm launcher)   │
                          │  resolves platform binary, runs `init`   │
                          └───────────────┬──────────────────────────┘
                                          │ spawns
 ┌────────────────────────────────────────▼──────────────────────────────────────┐
-│  gentle-vault  (Go binary)                                                    │
+│  qbit-vault  (Go binary)                                                    │
 │                                                                               │
-│  cmd/gentle-vault ── cobra CLI ──┬── init / sync / doctor / uninstall         │
+│  cmd/qbit-vault ── cobra CLI ──┬── init / sync / doctor / uninstall         │
 │                                  ├── set / rm / mv / list / import / audit    │
 │                                  ├── grant / revoke                           │
 │                                  ├── exec                                     │
@@ -37,23 +37,23 @@
           ▲ CLI (--json)                      ▲ MCP stdio
           │                                   │
 ┌─────────┴───────────────┐      ┌────────────┴────────────────────────────────┐
-│ packages/gentle-vault-pi│      │ Claude Code / Codex / OpenCode / Pi (MCP)   │
+│ packages/qbit-vault-pi│      │ Claude Code / Codex / OpenCode / Pi (MCP)   │
 │ Pi / Gentle Shell ext.  │      │ tools: secret_request, secret_list,         │
 │ masked UI, bash override│      │        secret_exec, secret_manage           │
 │ redaction, paste guard  │      │ hooks (where the host has them)             │
 └─────────────────────────┘      └─────────────────────────────────────────────┘
 ```
 
-With sync enabled, `internal/remote` talks HTTPS to **`gentle-vault-server`** (`cmd/gentle-vault-server`, `internal/server`): a self-hosted, zero-knowledge store of sealed vault versions, key envelopes, device public keys and audit anchors (`REMOTE_SYNC.md`). It is a separate deployment; the client stays daemon-free.
+With sync enabled, `internal/remote` talks HTTPS to **`qbit-vault-server`** (`cmd/qbit-vault-server`, `internal/server`): a self-hosted, zero-knowledge store of sealed vault versions, key envelopes, device public keys and audit anchors (`REMOTE_SYNC.md`). It is a separate deployment; the client stays daemon-free.
 
 Two rules shape everything:
 
 1. **The broker is the only entry point for hosts.** Extension, MCP server and hooks all call `internal/broker`, which implements `contracts/secrets-broker/v1`. Nothing else is reachable from an agent.
-2. **Values live in exactly three places**: the encrypted file, process memory of `gentle-vault` for the duration of one operation, and the environment of one `exec` child. The `Secret` type makes accidental printing impossible by construction (`String()` returns `[REDACTED]`). With sync, the server holds a further copy, but only as ciphertext sealed on the device; it never holds a plaintext value or a key that opens one.
+2. **Values live in exactly three places**: the encrypted file, process memory of `qbit-vault` for the duration of one operation, and the environment of one `exec` child. The `Secret` type makes accidental printing impossible by construction (`String()` returns `[REDACTED]`). With sync, the server holds a further copy, but only as ciphertext sealed on the device; it never holds a plaintext value or a key that opens one.
 
 ## Process model
 
-- No daemon. Every host operation is a fresh `gentle-vault` process (CLI) or a long-lived stdio MCP server **started and owned by the host** (one per host session). Both are stateless apart from the files in `$GENTLE_VAULT_HOME`.
+- No daemon. Every host operation is a fresh `qbit-vault` process (CLI) or a long-lived stdio MCP server **started and owned by the host** (one per host session). Both are stateless apart from the files in `$QBIT_VAULT_HOME`.
 - Session identity: the host passes `--session <id>` (Pi session id, Claude Code `session_id` from hook input, MCP server gets it at startup from the host's env or generates one and reports it in `doctor`). Grants are keyed by it.
 - Keychain unlock happens per process; the OS caches it. In passphrase mode the unlocked key is cached with a TTL only in a `0600` file under `$XDG_RUNTIME_DIR` (tmpfs on Linux), so the user is not asked on every exec; where no such memory-backed directory exists there is no cache and the passphrase is asked on each unlock.
 
@@ -64,9 +64,9 @@ Two rules shape everything:
 ```
 model ──secret_request(GITHUB_TOKEN, "gh release create")──▶ extension
 extension ──ctx.ui.custom(masked input + scope)──▶ user types value, picks "session"
-extension ──spawn: gentle-vault set GITHUB_TOKEN --stdin --session S --grant session --reason "..."
+extension ──spawn: qbit-vault set GITHUB_TOKEN --stdin --session S --grant session --reason "..."
             (value on stdin, never argv)
-gentle-vault: keychain.unlock → vault.put → grants.add(S, GITHUB_TOKEN, session, +30m) → audit
+qbit-vault: keychain.unlock → vault.put → grants.add(S, GITHUB_TOKEN, session, +30m) → audit
             ◀── {"ok":true,"ref":"secret://GITHUB_TOKEN","grant":{...}}
 extension ──tool result──▶ model   (same JSON, no value)
 ```
@@ -77,8 +77,8 @@ extension ──tool result──▶ model   (same JSON, no value)
 model ──bash("gh release create v1 --notes x")──▶ extension (bash override)
 extension: references? scans for $NAME/{{secret:NAME}} AND for known names used by
            the binary (gh → GITHUB_TOKEN via the implicit-binding table, see below)
-extension ──spawn: gentle-vault exec --session S --secret GITHUB_TOKEN -- gh release create v1 --notes x
-gentle-vault: grants.check(S, GITHUB_TOKEN) → ok
+extension ──spawn: qbit-vault exec --session S --secret GITHUB_TOKEN -- gh release create v1 --notes x
+qbit-vault: grants.check(S, GITHUB_TOKEN) → ok
               dumpguard.check(cmd) → ok
               env = scrub(parent env) + {GITHUB_TOKEN: value}
               child = run(cmd, env, pgroup, timeout)
@@ -87,17 +87,17 @@ gentle-vault: grants.check(S, GITHUB_TOKEN) → ok
 extension ──tool result (redacted)──▶ model
 ```
 
-If `grants.check` fails: gentle-vault exits with refusal `grant_required` (JSON). The extension then opens the grant prompt (Flow A without the value step), and retries once.
+If `grants.check` fails: qbit-vault exits with refusal `grant_required` (JSON). The extension then opens the grant prompt (Flow A without the value step), and retries once.
 
 ### Flow C — Claude Code
 
 ```
-model ──Bash(cmd)──▶ Claude Code ──PreToolUse hook──▶ gentle-vault hook pre-bash --json
+model ──Bash(cmd)──▶ Claude Code ──PreToolUse hook──▶ qbit-vault hook pre-bash --json
 hook: same reference scan + dumpguard; returns updatedInput with
-      command = "gentle-vault exec --session <session_id> --secret ... -- <cmd>"
+      command = "qbit-vault exec --session <session_id> --secret ... -- <cmd>"
       or {decision:"block", reason:"grant_required: GITHUB_TOKEN"} which makes the model
       call secret_request (MCP) → native dialog → grant → model retries Bash.
-Claude Code ──PostToolUse hook──▶ gentle-vault hook post --json  (redacts tool_response)
+Claude Code ──PostToolUse hook──▶ qbit-vault hook post --json  (redacts tool_response)
 ```
 
 ### Flow E — agent proposes a management action
@@ -105,7 +105,7 @@ Claude Code ──PostToolUse hook──▶ gentle-vault hook post --json  (reda
 ```
 model ──secret_list()──▶ broker ──▶ {project, secrets (with layer), policy}
 model ──secret_manage(move, DATABASE_URL, layer: global, to: project, reason)──▶ host
-host ──confirmation prompt (Pi ctx.ui.custom or `gentle-vault prompt --confirm`)──▶ user
+host ──confirmation prompt (Pi ctx.ui.custom or `qbit-vault prompt --confirm`)──▶ user
         "Move DATABASE_URL from global to shop-api?  reason: …  [Confirm] [Decline]"
 user confirms → prompt token → broker: vault.move → grants.drop(DATABASE_URL, global) → audit(manage)
             ◀── {"ok":true,"applied":true,"action":"move","name":"DATABASE_URL","layer":"project"}
@@ -117,8 +117,8 @@ Like grants, applying a `manage` action requires a prompt token that only the br
 ### Flow F — user enters a secret manually
 
 ```
-user ──gentle-vault set DATABASE_URL (or /vault set in Pi)──▶ masked prompt: value + layer
-gentle-vault: keychain.unlock → vault.put(layer) → audit(capture, by: user)
+user ──qbit-vault set DATABASE_URL (or /vault set in Pi)──▶ masked prompt: value + layer
+qbit-vault: keychain.unlock → vault.put(layer) → audit(capture, by: user)
 ```
 
 No model, no tool call, no grant; the next agent use asks only for a grant.
@@ -129,9 +129,9 @@ No model, no tool call, no grant; the next agent use asks only for a grant.
 model ──secret_request(fields: [DB_HOST:text, DB_USER:text, DB_PASSWORD:secret], reason)──▶ host
 host ──one prompt (Pi form / PowerShell form / zenity --forms / consecutive boxes)──▶ user
         three boxes (two visible, one masked), layer once, scope once
-host ──spawn: gentle-vault set --stdin --fields DB_HOST,DB_USER,DB_PASSWORD --kinds text,text,secret
+host ──spawn: qbit-vault set --stdin --fields DB_HOST,DB_USER,DB_PASSWORD --kinds text,text,secret
             --grant session --from-prompt-token T   (JSON of values on stdin)
-gentle-vault: one locked write of all three → one grant per record → audit(capture)
+qbit-vault: one locked write of all three → one grant per record → audit(capture)
             ◀── {"ok":true,"refs":[…three…],"grant":{…}}
 ```
 
@@ -140,7 +140,7 @@ All-or-nothing: a blank box or a cancel stores and grants nothing.
 ### Flow H — a change on one machine reaches another
 
 ```
-laptop: gentle-vault set NPM_TOKEN  → local save → seal body (RVK) → PUT /v1/vault base=41 → version 42
+laptop: qbit-vault set NPM_TOKEN  → local save → seal body (RVK) → PUT /v1/vault base=41 → version 42
 desktop (later): agent calls secret_list → broker pulls (If-None-Match 41) → version 42
          verify AAD + AEAD → merge(base 41, local, remote 42) under vault.lock → local save
          → secret_list shows NPM_TOKEN; first exec asks for a grant on the desktop
@@ -150,7 +150,7 @@ desktop (later): agent calls secret_list → broker pulls (If-None-Match 41) →
 
 ### Flow D — Codex / OpenCode (MCP only)
 
-The model calls `secret_exec(command, secrets)` directly. Behavior identical to Flow B inside gentle-vault. OpenCode additionally gets a plugin for bash rewrite when the plugin API is available.
+The model calls `secret_exec(command, secrets)` directly. Behavior identical to Flow B inside qbit-vault. OpenCode additionally gets a plugin for bash rewrite when the plugin API is available.
 
 ## Implicit binding table
 
@@ -158,7 +158,7 @@ To keep usage natural ("run gh" instead of "run gh with GITHUB_TOKEN"), the exte
 
 ```yaml
 gh:        [GITHUB_TOKEN, GH_TOKEN]
-git:       [GITHUB_TOKEN]        # only when remote is github.com and credential helper is gentle-vault
+git:       [GITHUB_TOKEN]        # only when remote is github.com and credential helper is qbit-vault
 aws:       [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN]
 gcloud:    [CLOUDSDK_AUTH_ACCESS_TOKEN]
 vercel:    [VERCEL_TOKEN]
@@ -196,7 +196,7 @@ A binding only *proposes* names: if the vault has one of them and the session ha
 | D18 | Project layers by id with per-device roots, linked by the user | Key layers by git remote URL | Paths differ per machine; a URL match alone would hand a project's secrets to any clone of it |
 | D19 | Grants and the audit log stay local; only an encrypted audit-head anchor syncs | Sync grants; sync the log | A grant is a decision about one machine and session; the log must stay verifiable offline, and the anchor gives tamper evidence without uploading its content |
 
-## Directory `$GENTLE_VAULT_HOME` (default `~/.gentle-vault/`)
+## Directory `$QBIT_VAULT_HOME` (default `~/.qbit-vault/`)
 
 ```
 vault.enc        AEAD envelope (see STORAGE.md)

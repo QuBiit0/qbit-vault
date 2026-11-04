@@ -7,12 +7,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 const (
-	fmtA         = "gentle-vault/1"
-	fmtB         = "gentle-vault-grants/1"
+	fmtA         = "qbit-vault/1"
+	fmtB         = "qbit-vault-grants/1"
 	fixtureValue = "TESTSECRET_envelope_value_0123456789"
 )
 
@@ -81,9 +81,9 @@ func TestShapeCarriesFormat(t *testing.T) {
 		t.Fatalf("unexpected key count %d", len(m))
 	}
 	for k, want := range map[string]string{
-		"format": `"gentle-vault-grants/1"`,
+		"format": `"qbit-vault-grants/1"`,
 		"cipher": `"xchacha20poly1305"`,
-		"aad":    `{"format":"gentle-vault-grants/1","cipher":"xchacha20poly1305","created_at":"2026-11-03T00:00:00Z","writes":3}`,
+		"aad":    `{"format":"qbit-vault-grants/1","cipher":"xchacha20poly1305","created_at":"2026-11-03T00:00:00Z","writes":3}`,
 	} {
 		if string(m[k]) != want {
 			t.Fatalf("%s = %s, want %s", k, m[k], want)
@@ -145,9 +145,9 @@ func TestOpenRefusals(t *testing.T) {
 		{"tampered nonce", key, edit(t, good, flipB64("nonce"))},
 		{"tampered aad writes", key, edit(t, good, func(m map[string]any) { m["aad"].(map[string]any)["writes"] = 1 })},
 		{"tampered aad created_at", key, edit(t, good, func(m map[string]any) { m["aad"].(map[string]any)["created_at"] = "2000-01-01T00:00:00Z" })},
-		{"wrong format", key, edit(t, good, func(m map[string]any) { m["format"] = "gentle-vault/2" })},
+		{"wrong format", key, edit(t, good, func(m map[string]any) { m["format"] = "qbit-vault/2" })},
 		{"tampered aad cipher", key, edit(t, good, func(m map[string]any) { m["aad"].(map[string]any)["cipher"] = "aes" })},
-		{"tampered aad format", key, edit(t, good, func(m map[string]any) { m["aad"].(map[string]any)["format"] = "gentle-vault/2" })},
+		{"tampered aad format", key, edit(t, good, func(m map[string]any) { m["aad"].(map[string]any)["format"] = "qbit-vault/2" })},
 		{"unknown top-level field", key, edit(t, good, func(m map[string]any) { m["extra"] = 1 })},
 		{"wrong cipher", key, edit(t, good, func(m map[string]any) { m["cipher"] = "aes" })},
 		{"bad base64 ct", key, edit(t, good, func(m map[string]any) { m["ct"] = "!!!" })},

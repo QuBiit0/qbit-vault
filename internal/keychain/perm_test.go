@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/perm"
+	"github.com/QuBiit0/qbit-vault/internal/perm"
 )
 
 // key.enc and the unlock cache are owner-only, independent of what the
@@ -20,8 +20,8 @@ func TestKeyFileAndCacheAreOwnerOnly(t *testing.T) {
 	}
 	paths := []string{
 		filepath.Join(home, keyFileName),
-		filepath.Join(run, "gentle-vault"),
-		filepath.Join(run, "gentle-vault", testID+".key"),
+		filepath.Join(run, "qbit-vault"),
+		filepath.Join(run, "qbit-vault", testID+".key"),
 	}
 	for _, p := range paths {
 		if ok, detail := perm.Check(p); !ok {

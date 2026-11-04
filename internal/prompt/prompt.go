@@ -20,14 +20,14 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // EnvBackend is the environment variable that forces a prompt backend.
-const EnvBackend = "GENTLE_VAULT_PROMPT"
+const EnvBackend = "QBIT_VAULT_PROMPT"
 
 // EnvTimeout sets how long a prompt waits for the user, as a Go duration.
-const EnvTimeout = "GENTLE_VAULT_PROMPT_TIMEOUT"
+const EnvTimeout = "QBIT_VAULT_PROMPT_TIMEOUT"
 
 // The prompt timeout when EnvTimeout is unset, and its bounds.
 const (
@@ -44,11 +44,11 @@ var (
 	ErrUnavailable = errors.New("prompt backend unavailable")
 	// ErrMismatch means the two passphrase entries differ.
 	ErrMismatch = errors.New("passphrases do not match")
-	// ErrUnknownBackend means GENTLE_VAULT_PROMPT names no backend.
+	// ErrUnknownBackend means QBIT_VAULT_PROMPT names no backend.
 	ErrUnknownBackend = errors.New("unknown prompt backend")
 	// ErrTimeout means the user did not answer in time.
 	ErrTimeout = errors.New("prompt timed out")
-	// ErrBadTimeout means GENTLE_VAULT_PROMPT_TIMEOUT is not a duration in bounds.
+	// ErrBadTimeout means QBIT_VAULT_PROMPT_TIMEOUT is not a duration in bounds.
 	ErrBadTimeout = errors.New("invalid prompt timeout")
 	// ErrTrailingInput means more input followed Enter in a hidden read, as
 	// with a multi-line paste. The extra text is discarded, not left for the
@@ -119,9 +119,9 @@ type Terminal interface {
 	Close() error
 }
 
-// Select picks the backend for this machine: GENTLE_VAULT_PROMPT when it is
+// Select picks the backend for this machine: QBIT_VAULT_PROMPT when it is
 // set, else the platform's native dialog when a desktop session is available,
-// else the terminal (L2). The wait is bounded by GENTLE_VAULT_PROMPT_TIMEOUT.
+// else the terminal (L2). The wait is bounded by QBIT_VAULT_PROMPT_TIMEOUT.
 func Select(getenv func(string) string) (Backend, error) {
 	return SelectWith(Env{GOOS: runtime.GOOS, Getenv: getenv, LookPath: exec.LookPath, Interactive: interactiveSession, SystemRoot: systemRoot})
 }
@@ -340,7 +340,7 @@ func Header(req SecretRequest) string {
 		value += ", visible while typed"
 	}
 	var b strings.Builder
-	b.WriteString("gentle-vault: secret capture\n")
+	b.WriteString("qbit-vault: secret capture\n")
 	fmt.Fprintf(&b, "  name:    %s\n", escape(req.Name))
 	fmt.Fprintf(&b, "  reason:  %s\n", escape(req.Reason))
 	fmt.Fprintf(&b, "  from:    host %s, session %s\n", orDash(req.Host), orDash(req.Session))

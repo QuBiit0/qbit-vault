@@ -4,9 +4,9 @@ Sliced so every PR stays ≤ 400 changed lines (Gentle AI's review budget), each
 
 ## Phase 0 — alignment (no code)
 
-- [ ] Discussion opened in gentle-ai (done: `gentle-vault-proposal.md`).
+- [ ] Discussion opened in gentle-ai (done: `qbit-vault-proposal.md`).
 - [ ] Decide repo location from maintainer feedback (companion repo vs. in-tree).
-- [ ] Reserve names: npm `gentle-vault`, `gentle-vault-pi`, `@gentle-vault/cli-*`; Go module path.
+- [ ] Reserve names: npm `qbit-vault`, `qbit-vault-pi`, `@qbit-vault/cli-*`; Go module path.
 
 ## Phase 1 — core vault (CLI only, no hosts)
 
@@ -50,7 +50,7 @@ Runs after Phase 2 so the contract is settled; S.1 can land earlier because it o
 | S.3 | `internal/remote` crypto: key derivations, device keys, recovery key format, key and recovery envelopes, remote vault object with padding, anchors, pairing and confirmation codes (pure, test vectors) | R-SYNC-02,04 |
 | S.4 | `internal/server` core: file store, accounts and invites, device auth (challenge, token), vault CAS and last 10 versions, limits and rate limits, logging rules | R-SYNC-02,03 |
 | S.5 | Server pairing, recovery, atomic `rekey`/revoke, anchors endpoints | R-SYNC-04,06,10 |
-| S.6 | Packaging: `cmd/gentle-vault-server` (`serve`, `invite`), Dockerfile (static, non-root, read-only), `deploy/compose.yaml` for Dokploy, release jobs | R-SYNC-12 |
+| S.6 | Packaging: `cmd/qbit-vault-server` (`serve`, `invite`), Dockerfile (static, non-root, read-only), `deploy/compose.yaml` for Dokploy, release jobs | R-SYNC-12 |
 | S.7 | Client transport and `remote register` / `join` (pairing and `--recovery`) / `approve` / `logout`, all user-only through the prompt backend | R-SYNC-01,03,04,05 |
 | S.8 | Sync rounds wired into mutating and reading commands, pending pushes, `remote sync` / `status` / `devices`, `--json` `remote` field, `doctor` | R-SYNC-07,09 |
 | S.9 | `remote revoke-device`, `recovery-key --rotate`, rekey with sync, `conflicts` / `resolve`, `history` / `restore`, `audit --verify` anchors | R-SYNC-06,10 |
@@ -63,14 +63,14 @@ Exit criterion: TESTING.md Tier 2 step 7 green; a secret set on one OS is usable
 | Slice | Content | Req |
 | --- | --- | --- |
 | 3.1 | `filemerge`: snapshot + atomic JSON/TOML merge + 3-way revert | R-INS-04 |
-| 3.2 | Claude Code adapter: MCP entry, hooks (`pre-bash`, `post`, `user-prompt`; `pre-bash` refuses `gentle-vault` mutating, `remote` and `link` subcommands in the agent's shell), deny-list, Gentle AI preservation check | R-HOST-02, R-INS-05, R-SYNC-05 |
+| 3.2 | Claude Code adapter: MCP entry, hooks (`pre-bash`, `post`, `user-prompt`; `pre-bash` refuses `qbit-vault` mutating, `remote` and `link` subcommands in the agent's shell), deny-list, Gentle AI preservation check | R-HOST-02, R-INS-05, R-SYNC-05 |
 | 3.3 | Codex adapter (MCP, sandbox → tty prompt) | R-HOST-03 |
 | 3.4 | OpenCode adapter (MCP + plugin when available) | R-HOST-04 |
 | 3.5 | Pi (plain) adapter: MCP entry + extension install | R-HOST-01 |
 | 3.6 | `init`, `sync`, `doctor`, `uninstall`, `state.json` receipts | R-INS-* |
 | 3.7 | npm launcher + platform packages + goreleaser + Minisign | R-INS-02, R-NFR-03 |
 
-## Phase 4 — Gentle Shell extension (`gentle-vault-pi`)
+## Phase 4 — Gentle Shell extension (`qbit-vault-pi`)
 
 | Slice | Content |
 | --- | --- |
@@ -86,7 +86,7 @@ Exit criterion: TESTING.md Tier 2 step 7 green; a secret set on one OS is usable
 ## Phase 5 — hardening and release 0.1.0
 
 - Cross-agent battery green on macOS/Linux/Windows.
-- Sync battery green; `gentle-vault-server` image published and deployed once on Dokploy from `deploy/compose.yaml`.
+- Sync battery green; `qbit-vault-server` image published and deployed once on Dokploy from `deploy/compose.yaml`.
 - Security review checklist (THREAT_MODEL.md) walked for every package.
 - Docs pass; `README` quickstart verified on a clean VM per OS in < 3 min.
 - Tag `v0.1.0`, publish npm with provenance, Homebrew tap formula, `install.sh`/`install.ps1`.
@@ -102,4 +102,4 @@ Exit criterion: TESTING.md Tier 2 step 7 green; a secret set on one OS is usable
 - Keyed-hash secret names in the audit log (THREAT_MODEL R6).
 - `gentle-ai install --components vault` native integration; contract moved under gentle-ai `contracts/`.
 - Browser-based capture for remote/SSH sessions.
-- Secret-rotation hooks (`gentle-vault rotate NAME --via gh auth refresh`).
+- Secret-rotation hooks (`qbit-vault rotate NAME --via gh auth refresh`).

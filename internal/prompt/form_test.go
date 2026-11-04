@@ -121,9 +121,9 @@ func TestPowerShellFormParses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	drv := `foreach ($fi in Get-ChildItem -LiteralPath $env:GV_DIR -Filter *.ps1) { $e = $null; [void][System.Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($fi.FullName), [ref]$null, [ref]$e); Write-Output ($fi.Name + ' ' + $e.Count) }`
+	drv := `foreach ($fi in Get-ChildItem -LiteralPath $env:QBV_DIR -Filter *.ps1) { $e = $null; [void][System.Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText($fi.FullName), [ref]$null, [ref]$e); Write-Output ($fi.Name + ' ' + $e.Count) }`
 	cmd := exec.Command(ps, "-NoProfile", "-NonInteractive", "-Command", drv)
-	cmd.Env = append(os.Environ(), "GV_DIR="+dir)
+	cmd.Env = append(os.Environ(), "QBV_DIR="+dir)
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("driver: %v", err)

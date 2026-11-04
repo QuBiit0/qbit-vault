@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // Fixtures use the TESTSECRET_ prefix so a leak in CI output is greppable.

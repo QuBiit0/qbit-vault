@@ -186,7 +186,7 @@ func TestPromoteDropsStaleCacheEvenWhenItFails(t *testing.T) {
 	if err := Promote(home, testID, fixedKey(5), opts); err == nil {
 		t.Fatal("Promote succeeded over a directory")
 	}
-	if _, err := os.Stat(filepath.Join(run, "gentle-vault", testID+".key")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(run, "qbit-vault", testID+".key")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("the old key is still cached after a failed promotion")
 	}
 }

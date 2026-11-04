@@ -1,4 +1,4 @@
-// Package exitcode defines the process exit codes of gentle-vault
+// Package exitcode defines the process exit codes of qbit-vault
 // (docs/CLI.md § Exit codes).
 package exitcode
 

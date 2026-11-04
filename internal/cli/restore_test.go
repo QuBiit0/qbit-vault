@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // backupIDs returns the snapshot ids, newest first.
@@ -81,7 +81,7 @@ func TestRestoreList(t *testing.T) {
 	}
 	h := newHarness(t)
 	code, out, errs := h.run("", "restore", "--list")
-	if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'gentle-vault init'\n" {
+	if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'qbit-vault init'\n" {
 		t.Fatalf("no vault: code=%d out=%q err=%q", code, out, errs)
 	}
 }
@@ -161,7 +161,7 @@ func TestRestoreRepairsCorruptVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, _, errs := w.run("", "list")
-	if code != exitcode.Corrupt || errs != "error: vault is corrupt; run 'gentle-vault restore'\n" {
+	if code != exitcode.Corrupt || errs != "error: vault is corrupt; run 'qbit-vault restore'\n" {
 		t.Fatalf("corrupt list: code=%d err=%q", code, errs)
 	}
 	w.mustRun("", "restore", "--from", id, "--yes")

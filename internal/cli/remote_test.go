@@ -16,13 +16,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/server"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/server"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // The tests run two devices as two vault homes against one real in-process
@@ -31,7 +31,7 @@ import (
 // `remote approve` on the first device while the new one waits.
 
 var (
-	rkRE   = regexp.MustCompile(`GVR1(?:-[0-9A-Z]{4}){8}`)
+	rkRE   = regexp.MustCompile(`QVR1(?:-[0-9A-Z]{4}){8}`)
 	confRE = regexp.MustCompile(`\b[0-9A-Z]{4}-[0-9A-Z]{4}\b`)
 )
 
@@ -392,11 +392,11 @@ func TestRemoteRegisterRefusals(t *testing.T) {
 			t.Fatalf("code=%d id=%q", code, id)
 		}
 	})
-	t.Run("GENTLE_VAULT_NO_REMOTE", func(t *testing.T) {
+	t.Run("QBIT_VAULT_NO_REMOTE", func(t *testing.T) {
 		w := newWorld(t)
 		f := answers()
 		asBackend(t, keepBackend{f})
-		code, _, errs := w.runEnv(map[string]string{"GENTLE_VAULT_NO_REMOTE": "1"}, "", "remote", "register", "--server", ss.ts.URL)
+		code, _, errs := w.runEnv(map[string]string{"QBIT_VAULT_NO_REMOTE": "1"}, "", "remote", "register", "--server", ss.ts.URL)
 		wantCoded(t, code, errs, "remote_unreachable", exitcode.Failure)
 		if len(f.Calls) != 0 {
 			t.Fatal("prompted although remote calls are off")
@@ -498,7 +498,7 @@ func TestRemoteJoinPairingMergesTwoDevices(t *testing.T) {
 	if code != exitcode.OK {
 		t.Fatalf("join: code=%d out=%q err=%q", code, out, errs)
 	}
-	if !strings.Contains(out, "pairing code: ") || !strings.Contains(out, "gentle-vault remote approve") || !strings.Contains(out, "joined ") {
+	if !strings.Contains(out, "pairing code: ") || !strings.Contains(out, "qbit-vault remote approve") || !strings.Contains(out, "joined ") {
 		t.Fatalf("join output = %q", out)
 	}
 	if !strings.Contains(fb.Calls[0].Q, "2 local secrets will be added to the synced vault on") {
@@ -951,7 +951,7 @@ func TestRemoteSyncOutcomes(t *testing.T) {
 
 	t.Run("offline switch marks pending", func(t *testing.T) {
 		w.mustRun(fxVal, "set", "N_KEY", "--global", "--stdin")
-		code, out, _ := w.runEnv(map[string]string{"GENTLE_VAULT_NO_REMOTE": "1"}, "", "remote", "sync")
+		code, out, _ := w.runEnv(map[string]string{"QBIT_VAULT_NO_REMOTE": "1"}, "", "remote", "sync")
 		if code != 0 || !strings.HasPrefix(out, "pending: ") || !readState(t, w).PendingPush {
 			t.Fatalf("code=%d out=%q state=%+v", code, out, readState(t, w))
 		}

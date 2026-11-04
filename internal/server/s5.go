@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
 )
 
 const (

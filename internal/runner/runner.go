@@ -27,8 +27,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/redact"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/redact"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // DefaultCaptureLimit is the per-stream cap in capture mode (CONTRACT § exec).

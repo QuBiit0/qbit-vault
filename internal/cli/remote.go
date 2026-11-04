@@ -14,19 +14,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // The `remote` commands (docs/CLI.md § Remote sync, docs/REMOTE_SYNC.md § 4).
 // Every message here is a fixed string: none carries a value, a key, a code
 // or a token, and none echoes what the server or the user sent.
 
-const envNoRemote = "GENTLE_VAULT_NO_REMOTE"
+const envNoRemote = "QBIT_VAULT_NO_REMOTE"
 
 // Test seams for the pairing wait of `remote join` (§ 4.2): the poll
 // interval, how long to wait, and a hook that runs once the pairing exists,
@@ -40,11 +40,11 @@ var (
 
 // Typed failures of REMOTE_SYNC.md § 11.
 var (
-	errNotConfigured = codedError{"remote_not_configured", "this vault does not sync; run 'gentle-vault remote register' or 'remote join'", exitcode.Failure}
+	errNotConfigured = codedError{"remote_not_configured", "this vault does not sync; run 'qbit-vault remote register' or 'remote join'", exitcode.Failure}
 	errUnreachable   = codedError{"remote_unreachable", "the server is unreachable; try again later", exitcode.Failure}
 	errRemoteOff     = codedError{"remote_unreachable", "remote calls are disabled by " + envNoRemote, exitcode.Failure}
 	errRemoteAuth    = codedError{"remote_auth", "the server refused the request", exitcode.Failure}
-	errIncompatible  = codedError{"server_incompatible", "the server speaks another API version; upgrade gentle-vault or the server", exitcode.Failure}
+	errIncompatible  = codedError{"server_incompatible", "the server speaks another API version; upgrade qbit-vault or the server", exitcode.Failure}
 	errRollback      = codedError{"remote_rollback", "the server offered a version older than one already seen", exitcode.Corrupt}
 	errPairingFailed = codedError{"pairing_failed", "the pairing could not be confirmed", exitcode.Failure}
 	errPairingGone   = codedError{"pairing_failed", "the pairing was not found or has expired", exitcode.Failure}
@@ -57,7 +57,7 @@ var interruptSignals = []os.Signal{os.Interrupt}
 func newRemote(g *globals) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remote",
-		Short: "Sync the vault between machines through gentle-vault-server",
+		Short: "Sync the vault between machines through qbit-vault-server",
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return usageError{"unknown command"}

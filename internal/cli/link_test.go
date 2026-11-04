@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
-const linkHint = "hint: project secrets \"shop-api\" from another device match this repository; run 'gentle-vault link shop-api'\n"
+const linkHint = "hint: project secrets \"shop-api\" from another device match this repository; run 'qbit-vault link shop-api'\n"
 
 // syncedProject stores a "shop-api" layer from another device and gives the
 // fake repository the same origin.

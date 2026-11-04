@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 )
 
 // rpc frames newline-delimited JSON-RPC requests for the MCP stdio server.

@@ -64,7 +64,7 @@ func decodeBody(pt []byte, device string) (*body, error) {
 		return nil, corrupt("unreadable body")
 	}
 	if w.Schema > schemaVersion {
-		return nil, corrupt("vault was written by a newer gentle-vault; upgrade")
+		return nil, corrupt("vault was written by a newer qbit-vault; upgrade")
 	}
 	b := newBody()
 	b.device = device

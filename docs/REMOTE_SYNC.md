@@ -2,7 +2,7 @@
 
 Status: design (v1). Requirement IDs `R-SYNC-*` live in `PRD.md` § 5.10; this document is the normative protocol behind them.
 
-gentle-vault can keep the same vault on several machines through **`gentle-vault-server`**, a small self-hosted service. The server is **zero-knowledge**: it stores ciphertext, public keys and counters, and has nothing that decrypts them. Sync is opt-in; a vault that never runs `gentle-vault remote register` makes no network call (AGENTS.md invariant 8).
+qbit-vault can keep the same vault on several machines through **`qbit-vault-server`**, a small self-hosted service. The server is **zero-knowledge**: it stores ciphertext, public keys and counters, and has nothing that decrypts them. Sync is opt-in; a vault that never runs `qbit-vault remote register` makes no network call (AGENTS.md invariant 8).
 
 ## 1. What syncs and what stays on the machine
 
@@ -19,7 +19,7 @@ gentle-vault can keep the same vault on several machines through **`gentle-vault
 
 ## 2. Keys
 
-All derivations use HKDF-SHA256 with salt `gentle-vault/v1` and the info string shown. All symmetric encryption is XChaCha20-Poly1305 with a random 24-byte nonce and canonical-JSON AAD, as in `STORAGE.md`.
+All derivations use HKDF-SHA256 with salt `qbit-vault/v1` and the info string shown. All symmetric encryption is XChaCha20-Poly1305 with a random 24-byte nonce and canonical-JSON AAD, as in `STORAGE.md`.
 
 | Key | Size | Where it lives | Purpose |
 | --- | --- | --- | --- |
@@ -37,18 +37,18 @@ All derivations use HKDF-SHA256 with salt `gentle-vault/v1` and the info string 
 
 The **generation** `g` counts master keys: 1 at registration, +1 at every rekey. It is in the AAD of every remote object, so an object sealed under an old key is recognizably old.
 
-**Recovery key format.** 20 random bytes in Crockford base32 (32 characters, case-insensitive, `I L O` read as `1 1 0`), shown as `GVR1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. It is high-entropy by construction, so the server cannot brute-force it the way it could a password.
+**Recovery key format.** 20 random bytes in Crockford base32 (32 characters, case-insensitive, `I L O` read as `1 1 0`), shown as `QVR1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. It is high-entropy by construction, so the server cannot brute-force it the way it could a password.
 
-**Device identity.** `device_id` is 16 random bytes (hex), created with the vault (or at the schema-2 migration) and stored in `state.json`; it names the device in the roster and in project roots even when sync is off. The **pairing code** is the first 80 bits of `SHA-256("gentle-vault/pairing/v1" || sign_pub || box_pub)` in Crockford base32, shown as `XXXX-XXXX-XXXX-XXXX`; it fingerprints the new device's public keys.
+**Device identity.** `device_id` is 16 random bytes (hex), created with the vault (or at the schema-2 migration) and stored in `state.json`; it names the device in the roster and in project roots even when sync is off. The **pairing code** is the first 80 bits of `SHA-256("qbit-vault/pairing/v1" || sign_pub || box_pub)` in Crockford base32, shown as `XXXX-XXXX-XXXX-XXXX`; it fingerprints the new device's public keys.
 
 ## 3. Objects the server stores
 
 | Object | Content | Sealed with | AAD |
 | --- | --- | --- | --- |
-| remote vault | the plaintext body (STORAGE § Plaintext body, schema 2), padded with zero bytes after the JSON to a multiple of 4 KiB | `RVK` | `{format: "gentle-vault-remote/1", cipher, account_id, generation, version, writer, created_at}` |
-| key envelope (one per device per generation) | `{generation, master_key}` | X25519 sealed box to the device's box key (ephemeral key, `HKDF(shared, salt = eph_pub ‖ box_pub, "key-envelope")`), then signed with the issuing device's Ed25519 key over AAD ‖ eph_pub ‖ ct | `{format: "gentle-vault-keyenv/1", account_id, device_id, generation, issuer}` |
-| recovery envelope | `{generation, master_key}` | recovery wrap key | `{format: "gentle-vault-recoveryenv/1", account_id, generation}` |
-| audit anchor | `{device_id, seq, line, at}` (§ 8) | `AAK` | `{format: "gentle-vault-anchor/1", account_id, device_id, generation}` |
+| remote vault | the plaintext body (STORAGE § Plaintext body, schema 2), padded with zero bytes after the JSON to a multiple of 4 KiB | `RVK` | `{format: "qbit-vault-remote/1", cipher, account_id, generation, version, writer, created_at}` |
+| key envelope (one per device per generation) | `{generation, master_key}` | X25519 sealed box to the device's box key (ephemeral key, `HKDF(shared, salt = eph_pub ‖ box_pub, "key-envelope")`), then signed with the issuing device's Ed25519 key over AAD ‖ eph_pub ‖ ct | `{format: "qbit-vault-keyenv/1", account_id, device_id, generation, issuer}` |
+| recovery envelope | `{generation, master_key}` | recovery wrap key | `{format: "qbit-vault-recoveryenv/1", account_id, generation}` |
+| audit anchor | `{device_id, seq, line, at}` (§ 8) | `AAK` | `{format: "qbit-vault-anchor/1", account_id, device_id, generation}` |
 | device record (cleartext) | `device_id`, `sign_pub`, `box_pub`, created, last seen, revoked | — | used only to authenticate requests |
 
 The server keeps the **last 10 versions** of the remote vault per account, so a client can list and restore earlier states (§ 7.6). Everything the server holds is ciphertext or public keys; backing up its `/data` volume is safe.
@@ -57,7 +57,7 @@ The server keeps the **last 10 versions** of the remote vault per account, so a 
 
 Every command in this section except `remote status`, `remote devices` and `remote history` is **user-only**: it asks its questions and shows its codes through the prompt backend (native dialog when a desktop session exists, else the controlling terminal; `AGENT_INTEGRATIONS.md` § Native capture dialog), never reads codes or keys from arguments or stdin, and never writes the recovery key or a confirmation code to stdout, stderr, `--json` output or the audit log. With no prompt backend available they are refused with `not_model_callable`. Host hooks refuse them in an agent's shell (phase 3). See THREAT_MODEL L26–L28.
 
-### 4.1 Register the first device: `gentle-vault remote register --server URL`
+### 4.1 Register the first device: `qbit-vault remote register --server URL`
 
 1. Refuse a URL that is not `https://`, except `http://` to `localhost`, `127.0.0.1` or `[::1]`. `GET /v1/info` must answer API major 1.
 2. Prompt (out of band): the **invite code** (masked) and the confirmation *"Sync this vault to `<host>`? Secrets are encrypted on this device before upload; the server can never read them."*
@@ -71,9 +71,9 @@ Every command in this section except `remote status`, `remote devices` and `remo
 On the **new** device:
 
 1. Create `DK` if absent. `POST /v1/pairings {code, sign_pub, box_pub}` (unauthenticated, rate-limited, expires in 10 minutes).
-2. Print the pairing code (it is a public-key fingerprint, safe on stdout) and *"On a device that already syncs, run `gentle-vault remote approve`."* Poll every 2 s until approved, expired or Ctrl-C.
+2. Print the pairing code (it is a public-key fingerprint, safe on stdout) and *"On a device that already syncs, run `qbit-vault remote approve`."* Poll every 2 s until approved, expired or Ctrl-C.
 
-On an **existing** device, `gentle-vault remote approve`:
+On an **existing** device, `qbit-vault remote approve`:
 
 3. Prompt (out of band) for the pairing code and a label for the new device. `GET /v1/pairings/{code}`; recompute the fingerprint of the returned keys and refuse (`pairing_failed`) unless it equals the code typed, so the server cannot substitute its own device key.
 4. Confirm out of band: *"Add device `<label>` to your vault on `<host>`? It will be able to read every secret."*
@@ -110,7 +110,7 @@ A revoked device still knows the current `MK`, so revocation always **rotates th
 
 Other devices see generation `g+1` on their next pull (the generation in the cleartext AAD of the version is only a hint to try the swap), fetch their envelope (`GET /v1/keys/self`), and accept it only if its issuer is a device of their **local** roster that is not revoked and its signature, AAD (account, this device, generation, issuer) and the decrypted remote vault all verify (otherwise `remote_auth` and the device keeps its key); then they swap keys the same way. The revoked device gets `device_revoked` from the server, turns sync off and keeps its local copy: revocation cannot wipe a machine, so credentials that device held must be rotated at their provider (THREAT_MODEL R11).
 
-`gentle-vault rekey` with sync enabled runs steps 3–6 without revoking anyone.
+`qbit-vault rekey` with sync enabled runs steps 3–6 without revoking anyone.
 
 **A device that missed a rotation.** The issuer check uses the local roster on purpose, so a server cannot vouch for a device of its own. The cost: a device that was offline while the roster gained a device which then issued the next rotation does not know that issuer and refuses the envelope (`remote_auth`). It keeps its local vault and key; add it again with `remote join` (pairing or recovery).
 
@@ -120,14 +120,14 @@ Other devices see generation `g+1` on their next pull (the generation in the cle
 
 - `remote recovery-key --rotate`: new `RK`, new recovery envelope, old one deleted on the server. For a lost or exposed recovery key while a device still works. It is `PUT /v1/recovery {generation, lookup_id, auth, envelope}` at the current generation (409 when the account key changed meanwhile); the master key and the vault do not change. When the master key may be exposed too, run `rekey`, which replaces both.
 - `remote logout`: confirm, delete this device on the server (best effort), remove `remote/` and `state.json.remote`. The local vault and key stay.
-- `remote status`: server, account (first 8 hex), device, generation, version, last sync, pending push, conflicts, devices, anchor state. Read-only, never prompts and never finishes a rekey: without a key that opens the vault as it is, the counts that need the encrypted roster read `locked (run 'gentle-vault unlock')`.
+- `remote status`: server, account (first 8 hex), device, generation, version, last sync, pending push, conflicts, devices, anchor state. Read-only, never prompts and never finishes a rekey: without a key that opens the vault as it is, the counts that need the encrypted roster read `locked (run 'qbit-vault unlock')`.
 - `remote devices`: the roster (labels from the encrypted body, last sync per device, revoked ones marked).
 
 ## 5. Server authentication
 
-- **Device token.** `POST /v1/auth/challenge {device_id}` returns a 32-byte nonce valid 60 s; `POST /v1/auth/token {device_id, nonce, sig}` where `sig = Ed25519(sign_key, "gentle-vault/auth/v1" ‖ server_origin ‖ nonce)` returns a random bearer token valid 15 minutes. Binding `server_origin` (the configured public URL) stops a signature from being relayed to another server.
+- **Device token.** `POST /v1/auth/challenge {device_id}` returns a 32-byte nonce valid 60 s; `POST /v1/auth/token {device_id, nonce, sig}` where `sig = Ed25519(sign_key, "qbit-vault/auth/v1" ‖ server_origin ‖ nonce)` returns a random bearer token valid 15 minutes. Binding `server_origin` (the configured public URL) stops a signature from being relayed to another server.
 - **Recovery token.** From the recovery auth secret; valid 10 minutes; can only read the recovery envelope and register one device.
-- **Invite.** Account creation needs a single-use invite issued by the server operator (`gentle-vault-server invite --ttl 24h`, default 24 h); the server stores only its SHA-256.
+- **Invite.** Account creation needs a single-use invite issued by the server operator (`qbit-vault-server invite --ttl 24h`, default 24 h); the server stores only its SHA-256.
 - Tokens are never logged; the client keeps them in memory only.
 
 ## 6. Server API (v1)
@@ -160,7 +160,7 @@ The server verifies only what it can: token validity, CAS on `version`, sizes an
 
 ### 7.1 When it runs (no daemon)
 
-- **Push after every mutation.** `set`, `rm`, `mv`, `edit`, `relink`, `link`, `import`, `restore`, `rekey` and an applied `manage` run one sync round after releasing the vault lock, with a 5 s budget (`config.remote.timeout`). If the server is unreachable the change stays committed locally, `state.json.remote.pending_push` is set and stderr says `warning: not synced (server unreachable); will retry`. `--json` output gains `"remote":"synced"|"pending"` when sync is enabled (not on the broker's `manage`, whose response is pinned by the contract). A round that fails for a reason other than reachability (`remote_rollback`, a refused verification or device) keeps the change local and the push pending and prints `warning: not synced (<code>); the change is kept on this device; run 'gentle-vault remote status'`; it is never reported as unreachable. After three conflicts in a row (another device pushed first each time) the push stays pending and stderr says `warning: not synced (the server changed while syncing); will retry`. Until a `config.yaml` loader exists the budgets and the pull interval are constants (`pushBudget`, `pullBudget`, `pullInterval` in `internal/cli/remoteauto.go`). `GENTLE_VAULT_NO_REMOTE=1` makes no call and marks pushes pending, without a warning.
+- **Push after every mutation.** `set`, `rm`, `mv`, `edit`, `relink`, `link`, `import`, `restore`, `rekey` and an applied `manage` run one sync round after releasing the vault lock, with a 5 s budget (`config.remote.timeout`). If the server is unreachable the change stays committed locally, `state.json.remote.pending_push` is set and stderr says `warning: not synced (server unreachable); will retry`. `--json` output gains `"remote":"synced"|"pending"` when sync is enabled (not on the broker's `manage`, whose response is pinned by the contract). A round that fails for a reason other than reachability (`remote_rollback`, a refused verification or device) keeps the change local and the push pending and prints `warning: not synced (<code>); the change is kept on this device; run 'qbit-vault remote status'`; it is never reported as unreachable. After three conflicts in a row (another device pushed first each time) the push stays pending and stderr says `warning: not synced (the server changed while syncing); will retry`. Until a `config.yaml` loader exists the budgets and the pull interval are constants (`pushBudget`, `pullBudget`, `pullInterval` in `internal/cli/remoteauto.go`). `QBIT_VAULT_NO_REMOTE=1` makes no call and marks pushes pending, without a warning.
 - **Pull before reading for a person or the agent.** `list`, `describe`, the broker's `request` and `list`, `prompt`, `set` and `remote sync` pull first when the last pull is older than `config.remote.pull_interval` (default 60 s), with a 2 s budget; a failure is silent there and shown by `remote status` and `doctor`. A pending push is retried at the same moments.
 - **Never on the hot path.** `exec`, `grant`, `revoke`, `grants` and `audit` (except `audit --verify`, § 8) never touch the network, so running a command with a secret works offline and keeps its latency (R-NFR-02).
 
@@ -199,7 +199,7 @@ When both sides changed a key, the losing version is kept in the encrypted body 
 
 ### 7.5 Projects on several machines
 
-A project layer is identified by a random `id`, not by its path. Its `roots` map each device to that device's checkout (STORAGE § Layers). Resolution uses `roots[this device]` only. On a machine where a layer has no root yet, it is invisible to resolution; when the repository of `cwd` has an `origin` URL (read from `.git/config`, normalized: scheme and `.git` suffix dropped, host lower-cased) equal to the layer's `origin`, human commands print `hint: project secrets "<label>" from another device match this repository; run 'gentle-vault link <label>'` on stderr, and the broker's `list` returns `unlinked_match: {label}` so the agent can suggest it. Only the user links: `gentle-vault link LABEL [DIR]` confirms out of band and is never automatic, because a match by URL alone would let any clone of that repository receive its secrets.
+A project layer is identified by a random `id`, not by its path. Its `roots` map each device to that device's checkout (STORAGE § Layers). Resolution uses `roots[this device]` only. On a machine where a layer has no root yet, it is invisible to resolution; when the repository of `cwd` has an `origin` URL (read from `.git/config`, normalized: scheme and `.git` suffix dropped, host lower-cased) equal to the layer's `origin`, human commands print `hint: project secrets "<label>" from another device match this repository; run 'qbit-vault link <label>'` on stderr, and the broker's `list` returns `unlinked_match: {label}` so the agent can suggest it. Only the user links: `qbit-vault link LABEL [DIR]` confirms out of band and is never automatic, because a match by URL alone would let any clone of that repository receive its secrets.
 
 ### 7.6 History and restore
 
@@ -228,13 +228,13 @@ The "never learns" column is tested, not just claimed: `e2e/docker-test.sh` (TES
 
 ## 10. The server
 
-`gentle-vault-server` is a Go binary in the same module (`cmd/gentle-vault-server`), standard library only.
+`qbit-vault-server` is a Go binary in the same module (`cmd/qbit-vault-server`), standard library only.
 
-- **Run:** `gentle-vault-server serve`. Env: `GV_SERVER_DATA` (default `/data`), `GV_SERVER_LISTEN` (default `:8080`), `GV_SERVER_PUBLIC_URL` (required; the origin clients sign, § 5), `GV_SERVER_TLS_CERT` / `GV_SERVER_TLS_KEY` (optional; otherwise TLS terminates at the reverse proxy), `GV_SERVER_TRUST_PROXY=1` (take the client IP for rate limits from `X-Forwarded-For`).
-- **Admin:** `gentle-vault-server invite [--ttl 24h]` (1 s to 720 h) prints one invite code; it is an operator credential, not a vault secret. `gentle-vault-server health` exits 0 when `/healthz` answers on `GV_SERVER_LISTEN` (the image's health check; the image has no shell). Exit codes: 0 ok, 1 failure, 2 usage. `serve` stops gracefully on SIGTERM.
-- **Storage:** files under `GV_SERVER_DATA` (`accounts/<id>/…`, `pairings/`, `invites/`, `recovery/`, `revoked/`), every write atomic (temp file, `fsync`, rename) and serialized per account. One instance per data directory.
+- **Run:** `qbit-vault-server serve`. Env: `QBV_SERVER_DATA` (default `/data`), `QBV_SERVER_LISTEN` (default `:8080`), `QBV_SERVER_PUBLIC_URL` (required; the origin clients sign, § 5), `QBV_SERVER_TLS_CERT` / `QBV_SERVER_TLS_KEY` (optional; otherwise TLS terminates at the reverse proxy), `QBV_SERVER_TRUST_PROXY=1` (take the client IP for rate limits from `X-Forwarded-For`).
+- **Admin:** `qbit-vault-server invite [--ttl 24h]` (1 s to 720 h) prints one invite code; it is an operator credential, not a vault secret. `qbit-vault-server health` exits 0 when `/healthz` answers on `QBV_SERVER_LISTEN` (the image's health check; the image has no shell). Exit codes: 0 ok, 1 failure, 2 usage. `serve` stops gracefully on SIGTERM.
+- **Storage:** files under `QBV_SERVER_DATA` (`accounts/<id>/…`, `pairings/`, `invites/`, `recovery/`, `revoked/`), every write atomic (temp file, `fsync`, rename) and serialized per account. One instance per data directory.
 - **Logs:** method, path template, status, duration and the first 8 hex of the account id. Never bodies, tokens, codes or IPs beyond the rate limiter's memory.
-- **Image:** `deploy/Dockerfile` (build from the repository root: `docker build -f deploy/Dockerfile .`), published as `ghcr.io/<owner>/gentle-vault-server`: a static binary on `gcr.io/distroless/static-debian12:nonroot`, user 65532, one volume `/data`, `HEALTHCHECK` through `gentle-vault-server health`. `deploy/compose.yaml` runs it read-only with all capabilities dropped and `no-new-privileges`, behind the Dokploy (Traefik) proxy that terminates TLS on the public domain (`GV_SERVER_PUBLIC_URL` is required, `GV_SERVER_TRUST_PROXY=1`).
+- **Image:** `deploy/Dockerfile` (build from the repository root: `docker build -f deploy/Dockerfile .`), published as `ghcr.io/<owner>/qbit-vault-server`: a static binary on `gcr.io/distroless/static-debian12:nonroot`, user 65532, one volume `/data`, `HEALTHCHECK` through `qbit-vault-server health`. `deploy/compose.yaml` runs it read-only with all capabilities dropped and `no-new-privileges`, behind the Dokploy (Traefik) proxy that terminates TLS on the public domain (`QBV_SERVER_PUBLIC_URL` is required, `QBV_SERVER_TRUST_PROXY=1`).
 
 ## 11. Client state and errors
 

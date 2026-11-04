@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
 )
 
 func pairBody(d dev, box []byte) map[string]any {

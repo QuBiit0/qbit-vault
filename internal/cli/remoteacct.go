@@ -9,14 +9,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/merge"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Account lifecycle commands (docs/REMOTE_SYNC.md § 4): register, join,
@@ -36,11 +36,11 @@ const (
 // Failures after the account or the key already changed: each says the state
 // the device is in and the command that finishes it (REMOTE_SYNC § 4.1, § 4.2).
 var (
-	errRegisterLocal = codedError{"internal", "the account was created on the server but this device could not save its sync state; run 'gentle-vault remote register' again with a new invite code", exitcode.Failure}
-	errJoinLocal     = codedError{"internal", "the vault now uses the account key but this device could not save its sync state; run 'gentle-vault remote join --recovery' to finish", exitcode.Failure}
+	errRegisterLocal = codedError{"internal", "the account was created on the server but this device could not save its sync state; run 'qbit-vault remote register' again with a new invite code", exitcode.Failure}
+	errJoinLocal     = codedError{"internal", "the vault now uses the account key but this device could not save its sync state; run 'qbit-vault remote join --recovery' to finish", exitcode.Failure}
 )
 
-const msgJoinHalf = "this device joined the account but the first sync did not finish; run 'gentle-vault remote sync'"
+const msgJoinHalf = "this device joined the account but the first sync did not finish; run 'qbit-vault remote sync'"
 
 // joinHalf is the error of a first round that failed after the join saved
 // its state: the typed code of the failure stays, the message names the way
@@ -75,7 +75,7 @@ func newRemoteRegister(g *globals) *cobra.Command {
 	var server, caFile string
 	cmd := &cobra.Command{
 		Use:   "register --server URL",
-		Short: "Register this vault on a gentle-vault-server as the first device",
+		Short: "Register this vault on a qbit-vault-server as the first device",
 		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if server == "" {
@@ -93,7 +93,7 @@ func newRemoteRegister(g *globals) *cobra.Command {
 			if st, err := vault.ReadRemote(s.home); err != nil {
 				return mapErr(err, "")
 			} else if st != nil {
-				return usageError{"this vault already syncs; run 'gentle-vault remote logout' first"}
+				return usageError{"this vault already syncs; run 'qbit-vault remote logout' first"}
 			}
 			ask, show, err := g.userBackend(true)
 			if err != nil {
@@ -268,7 +268,7 @@ func newRemoteJoin(g *globals) *cobra.Command {
 			if st, err := vault.ReadRemote(s.home); err != nil {
 				return mapErr(err, "")
 			} else if st != nil {
-				return usageError{"this vault already syncs; run 'gentle-vault remote logout' first"}
+				return usageError{"this vault already syncs; run 'qbit-vault remote logout' first"}
 			}
 			ask, _, err := g.userBackend(false)
 			if err != nil {
@@ -421,7 +421,7 @@ func (j *joining) printPairing(code string) {
 	if j.g.JSON {
 		w = j.cmd.ErrOrStderr()
 	}
-	fmt.Fprintf(w, "pairing code: %s\nOn a device that already syncs, run 'gentle-vault remote approve'.\n", code)
+	fmt.Fprintf(w, "pairing code: %s\nOn a device that already syncs, run 'qbit-vault remote approve'.\n", code)
 }
 
 // wait polls until the pairing is approved, expired or interrupted (§ 4.2).
@@ -567,7 +567,7 @@ type approveBody struct {
 	Label    string `json:"label"`
 }
 
-const warnApproveRoster = "warning: the new device was approved on the server but this vault could not record it in the roster; check 'gentle-vault remote devices'"
+const warnApproveRoster = "warning: the new device was approved on the server but this vault could not record it in the roster; check 'qbit-vault remote devices'"
 
 func newRemoteApprove(g *globals) *cobra.Command {
 	return &cobra.Command{

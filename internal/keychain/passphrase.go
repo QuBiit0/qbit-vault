@@ -12,12 +12,12 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
 
-	"github.com/QuBiit0/gentle-vault/internal/perm"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 const (
-	formatKey   = "gentle-vault-key/1"
+	formatKey   = "qbit-vault-key/1"
 	algArgon2id = "argon2id"
 	saltSize    = 16
 

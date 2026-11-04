@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/envelope"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/envelope"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // Remote sync state on the vault side (docs/REMOTE_SYNC.md § 11, STORAGE.md
@@ -21,8 +21,8 @@ const (
 	remoteDir      = "remote"
 	deviceFile     = "device.enc"
 	baseFile       = "base.enc"
-	formatDevice   = "gentle-vault-device/1"
-	formatBase     = "gentle-vault-base/1"
+	formatDevice   = "qbit-vault-device/1"
+	formatBase     = "qbit-vault-base/1"
 	remoteStateKey = "remote"
 )
 

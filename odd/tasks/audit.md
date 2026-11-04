@@ -6,8 +6,8 @@ commands, and audit records written by the existing CLI commands. Branch `feat/c
 ## Specs
 
 - S1. ROADMAP 1.5: "`audit`: hash chain, `--verify`, event writers" (R-AUD-*).
-- S2. R-AUD-01: "An append-only JSONL log at `$GENTLE_VAULT_HOME/audit.jsonl` MUST record: capture (name, layer, session, reason, `by: agent|user`), grant (name, layer, session, scope, expiry), exec (R-EXEC-06), manage (action, name, layer, session, reason, outcome), refusal (type, name, session), revoke, rm, mv. Never values."
-- S3. R-AUD-02: "Each record MUST include the SHA-256 of the previous record (hash chain) so tampering is detectable by `gentle-vault audit --verify`." STORAGE.md § Audit log record example with `ts`, `seq`, `prev` ("hash of previous line"), `event`, `session`, `host`, `names`, `cwd`, `hash` ("hash of this line without the hash field").
+- S2. R-AUD-01: "An append-only JSONL log at `$QBIT_VAULT_HOME/audit.jsonl` MUST record: capture (name, layer, session, reason, `by: agent|user`), grant (name, layer, session, scope, expiry), exec (R-EXEC-06), manage (action, name, layer, session, reason, outcome), refusal (type, name, session), revoke, rm, mv. Never values."
+- S3. R-AUD-02: "Each record MUST include the SHA-256 of the previous record (hash chain) so tampering is detectable by `qbit-vault audit --verify`." STORAGE.md § Audit log record example with `ts`, `seq`, `prev` ("hash of previous line"), `event`, `session`, `host`, `names`, `cwd`, `hash` ("hash of this line without the hash field").
 - S4. docs/CLI.md: "`audit [--tail N] [--since 24h] [--name NAME] [--event exec] [--json]` | Read the log." "`audit --verify` | Validate the hash chain."
 - S5. TESTING.md: "`audit` | hash chain; verify detects an edited middle line, a deleted line, a truncated file".
 - S6. R-AUD-03: "The log MUST never leave the machine." AGENTS.md invariant 1: never values.

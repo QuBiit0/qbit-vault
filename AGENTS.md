@@ -1,6 +1,6 @@
-# AGENTS.md — instructions for the coding agent building gentle-vault
+# AGENTS.md — instructions for the coding agent building QBit Vault (`qbit-vault`)
 
-You are implementing gentle-vault from the specification in this repository. Read this file first, then `docs/PRD.md`, `docs/THREAT_MODEL.md`, `docs/ARCHITECTURE.md` and `contracts/secrets-broker/v1/CONTRACT.md` before writing code (and `docs/REMOTE_SYNC.md` before touching sync or the server). The spec is the authority; when code and spec disagree, fix the code or open a spec change, never silently diverge.
+You are implementing qbit-vault from the specification in this repository. Read this file first, then `docs/PRD.md`, `docs/THREAT_MODEL.md`, `docs/ARCHITECTURE.md` and `contracts/secrets-broker/v1/CONTRACT.md` before writing code (and `docs/REMOTE_SYNC.md` before touching sync or the server). The spec is the authority; when code and spec disagree, fix the code or open a spec change, never silently diverge.
 
 ## Non-negotiables (security invariants)
 
@@ -8,7 +8,7 @@ These are tested, not just documented. A PR that breaks one is rejected regardle
 
 1. **No secret value ever crosses the model boundary.** No tool result, MCP response, hook stdout, log line, error message, panic, or debug output may contain a secret value. Errors mention the secret **name** only.
 2. **No secret value ever touches disk unencrypted.** Not in temp files, not in shell history, not in crash dumps you control, not in the audit log.
-3. **Install and host registration (`init`, `sync`) never ask for, read, or store a secret.** `init` creates an empty vault. It never reads `process.env` or the shell environment for values. Remote sync is a separate, explicit user action (`gentle-vault remote …`).
+3. **Install and host registration (`init`, `sync`) never ask for, read, or store a secret.** `init` creates an empty vault. It never reads `process.env` or the shell environment for values. Remote sync is a separate, explicit user action (`qbit-vault remote …`).
 4. **Injection is per child process.** Values go into the environment of exactly one `exec` child (or a pipe/file descriptor when the tool supports it). Never into the agent process, never exported to the parent shell, never inherited by subagents without their own grant.
 5. **All output is redacted before return.** stdout, stderr, and any file content the agent reads while a grant is active, for every active value and its common encodings.
 6. **Every capture and every grant is an explicit user action.** No auto-approval paths in v1. No "remember forever" without the user choosing it in the prompt.
@@ -19,9 +19,9 @@ These are tested, not just documented. A PR that breaks one is rejected regardle
 ## Repository layout (target)
 
 ```
-gentle-vault/
-├── cmd/gentle-vault/           Go main: CLI entry
-├── cmd/gentle-vault-server/    Go main: optional self-hosted sync server
+qbit-vault/
+├── cmd/qbit-vault/           Go main: CLI entry
+├── cmd/qbit-vault-server/    Go main: optional self-hosted sync server
 ├── deploy/                     server Dockerfile and compose.yaml (Dokploy)
 ├── internal/
 │   ├── vault/                  encrypted store, envelope format, atomic writes
@@ -37,12 +37,12 @@ gentle-vault/
 │   ├── filemerge/              snapshot + atomic merge (mirror gentle-ai semantics)
 │   ├── merge/                  three-way per-record merge for sync (pure)
 │   ├── remote/                 sync client: keys, pairing, envelopes, rounds, anchors
-│   ├── server/                 gentle-vault-server: zero-knowledge store and HTTP API
+│   ├── server/                 qbit-vault-server: zero-knowledge store and HTTP API
 │   └── doctor/                 read-only health report
 ├── contracts/secrets-broker/v1/ CONTRACT.md + schema (byte-pinned once released)
 ├── packages/
-│   ├── gentle-vault/           npm launcher: resolves platform binary, `init` entrypoint
-│   └── gentle-vault-pi/        TypeScript Pi / Gentle Shell extension
+│   ├── qbit-vault/           npm launcher: resolves platform binary, `init` entrypoint
+│   └── qbit-vault-pi/        TypeScript Pi / Gentle Shell extension
 ├── scripts/install.sh, install.ps1
 ├── docs/
 └── e2e/                        docker-based leak tests and cross-agent battery
@@ -50,7 +50,7 @@ gentle-vault/
 
 ## Conventions
 
-- Go 1.25+, module `github.com/<owner>/gentle-vault`. Standard library first; allowed third-party: `golang.org/x/crypto` (chacha20poly1305, argon2), `github.com/zalando/go-keyring`, an MCP SDK (`github.com/modelcontextprotocol/go-sdk`), `github.com/spf13/cobra`. Anything else needs a line in the PR explaining why. The MCP SDK (v1.8.0) compiles in, transitively: `github.com/google/jsonschema-go` (tool input schemas), `github.com/segmentio/asm` and `github.com/segmentio/encoding` (its JSON), `github.com/yosida95/uritemplate/v3`, `golang.org/x/oauth2` (its `auth` package, imported by `mcp` though gentle-vault uses no OAuth), `golang.org/x/sync` and `golang.org/x/time`. `github.com/google/jsonschema-go` is also imported directly, only by `internal/conformance`, which only tests import (it is not in the binary).
+- Go 1.25+, module `github.com/<owner>/qbit-vault`. Standard library first; allowed third-party: `golang.org/x/crypto` (chacha20poly1305, argon2), `github.com/zalando/go-keyring`, an MCP SDK (`github.com/modelcontextprotocol/go-sdk`), `github.com/spf13/cobra`. Anything else needs a line in the PR explaining why. The MCP SDK (v1.8.0) compiles in, transitively: `github.com/google/jsonschema-go` (tool input schemas), `github.com/segmentio/asm` and `github.com/segmentio/encoding` (its JSON), `github.com/yosida95/uritemplate/v3`, `golang.org/x/oauth2` (its `auth` package, imported by `mcp` though qbit-vault uses no OAuth), `golang.org/x/sync` and `golang.org/x/time`. `github.com/google/jsonschema-go` is also imported directly, only by `internal/conformance`, which only tests import (it is not in the binary).
 - TypeScript extension: peer-depends on `@mariozechner/pi-coding-agent`, `@mariozechner/pi-tui`, `@sinclair/typebox`; never bundles them. No hardcoded `~/.pi/agent` paths; use the paths Pi provides.
 - Conventional Commits. Branch `feat/...`, `fix/...`. PRs ≤ 400 changed lines; split into chained PRs otherwise (see `docs/ROADMAP.md` for the pre-sliced plan).
 - Work-unit commits: code + tests + docs for one behavior together.
@@ -62,10 +62,10 @@ gentle-vault/
 - [ ] Behavior matches the spec section it implements (cite it in the PR).
 - [ ] Unit tests, including the negative/refusal cases.
 - [ ] Leak test extended if the feature touches exec, redact, prompt, mcp or hooks.
-- [ ] `gentle-vault doctor` reflects the new state if it changes config.
+- [ ] `qbit-vault doctor` reflects the new state if it changes config.
 - [ ] Docs updated in the same PR.
 - [ ] AI-assistance disclosed in the PR body.
 
 ## What not to build in v1
 
-Team sharing, third-party backends (1Password, Infisical, Vault), browser-based capture, a client daemon, secret rotation, auto-approval policies. gentle-vault's own sync server (`docs/REMOTE_SYNC.md`) **is** in v1. Keep the `Backend` interface so these can come later. See `docs/PRD.md` § Non-goals.
+Team sharing, third-party backends (1Password, Infisical, Vault), browser-based capture, a client daemon, secret rotation, auto-approval policies. qbit-vault's own sync server (`docs/REMOTE_SYNC.md`) **is** in v1. Keep the `Backend` interface so these can come later. See `docs/PRD.md` § Non-goals.

@@ -20,19 +20,19 @@ import (
 
 	"golang.org/x/crypto/chacha20poly1305"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 const (
-	salt = "gentle-vault/v1"
+	salt = "qbit-vault/v1"
 	// PadBlock is the size the remote vault plaintext is padded to a
 	// multiple of, so its size tells the server little (§ 9).
 	PadBlock = 4096
 
-	formatObject   = "gentle-vault-remote/1"
-	formatKeyEnv   = "gentle-vault-keyenv/1"
-	formatRecovery = "gentle-vault-recoveryenv/1"
-	formatAnchor   = "gentle-vault-anchor/1"
+	formatObject   = "qbit-vault-remote/1"
+	formatKeyEnv   = "qbit-vault-keyenv/1"
+	formatRecovery = "qbit-vault-recoveryenv/1"
+	formatAnchor   = "qbit-vault-anchor/1"
 	cipherName     = "xchacha20poly1305"
 )
 
@@ -124,28 +124,28 @@ func groups(s string, n int) string {
 // AuthMessage is what a device signs to get a token: the server's origin
 // binds the signature to that server, so it cannot be relayed to another.
 func AuthMessage(origin string, nonce []byte) []byte {
-	return append([]byte("gentle-vault/auth/v1"+origin), nonce...)
+	return append([]byte("qbit-vault/auth/v1"+origin), nonce...)
 }
 
 // ---- recovery key ----
 
 // NewRecoveryKey returns 20 random bytes and their text form
-// GVR1-XXXX-...-XXXX (Crockford base32, 8 groups of 4).
+// QVR1-XXXX-...-XXXX (Crockford base32, 8 groups of 4).
 func NewRecoveryKey() (secret.Secret, string, error) {
 	var b [20]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return secret.Secret{}, "", errors.New("remote: random source failed")
 	}
 	defer clear(b[:])
-	return secret.New("recovery", b[:]), "GVR1-" + groups(b32(b[:], 32), 4), nil
+	return secret.New("recovery", b[:]), "QVR1-" + groups(b32(b[:], 32), 4), nil
 }
 
 // ParseRecoveryKey reads a recovery key typed by the user: case, spaces and
-// dashes do not matter, I and L read as 1 and O as 0, the GVR1- prefix is
+// dashes do not matter, I and L read as 1 and O as 0, the QVR1- prefix is
 // optional.
 func ParseRecoveryKey(text string) (secret.Secret, error) {
 	s := strings.ToUpper(strings.NewReplacer("-", "", " ", "", "\t", "").Replace(strings.TrimSpace(text)))
-	s = strings.TrimPrefix(s, "GVR1")
+	s = strings.TrimPrefix(s, "QVR1")
 	s = strings.NewReplacer("I", "1", "L", "1", "O", "0").Replace(s)
 	if len(s) != 32 {
 		return secret.Secret{}, ErrBadRecoveryKey
@@ -186,10 +186,10 @@ func RecoveryFromKey(rk secret.Secret) Recovery {
 // ---- pairing ----
 
 // PairingCode fingerprints a new device's public keys: 80 bits of
-// SHA-256("gentle-vault/pairing/v1" || sign_pub || box_pub), XXXX-XXXX-XXXX-XXXX.
+// SHA-256("qbit-vault/pairing/v1" || sign_pub || box_pub), XXXX-XXXX-XXXX-XXXX.
 func PairingCode(signPub, boxPub []byte) string {
 	h := sha256.New()
-	h.Write([]byte("gentle-vault/pairing/v1"))
+	h.Write([]byte("qbit-vault/pairing/v1"))
 	h.Write(signPub)
 	h.Write(boxPub)
 	return groups(b32(h.Sum(nil)[:10], 16), 4)

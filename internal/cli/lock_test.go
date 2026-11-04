@@ -3,10 +3,10 @@ package cli
 import (
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
 )
 
 func osMode() string { return keychain.NewOS().Name() }
@@ -104,7 +104,7 @@ func TestLockUnlockWithoutVaultAndBadArgs(t *testing.T) {
 	h := newHarness(t)
 	for _, cmd := range []string{"lock", "unlock"} {
 		code, out, errs := h.run("", cmd)
-		if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'gentle-vault init'\n" {
+		if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'qbit-vault init'\n" {
 			t.Errorf("%s without vault: code=%d out=%q err=%q", cmd, code, out, errs)
 		}
 		code, out, errs = h.run("", cmd, "extra")

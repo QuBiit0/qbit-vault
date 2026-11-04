@@ -7,8 +7,8 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // TestMain swaps the OS keychain for go-keyring's in-memory mock so no test

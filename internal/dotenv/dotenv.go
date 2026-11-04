@@ -1,4 +1,4 @@
-// Package dotenv parses .env files for `gentle-vault import --from-file`
+// Package dotenv parses .env files for `qbit-vault import --from-file`
 // (docs/CLI.md). Values never appear in errors: a problem is reported by line
 // number only.
 package dotenv

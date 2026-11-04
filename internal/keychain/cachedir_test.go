@@ -18,7 +18,7 @@ func TestCacheDirRejectsRelativeRuntimeDir(t *testing.T) {
 		t.Fatalf("relative XDG_RUNTIME_DIR accepted as cache dir")
 	}
 	abs := filepath.Join(cwd, "rel")
-	if got := cacheDir(Options{goos: "linux", getenv: env(map[string]string{"XDG_RUNTIME_DIR": abs})}); got != filepath.Join(abs, "gentle-vault") {
+	if got := cacheDir(Options{goos: "linux", getenv: env(map[string]string{"XDG_RUNTIME_DIR": abs})}); got != filepath.Join(abs, "qbit-vault") {
 		t.Fatalf("absolute XDG_RUNTIME_DIR rejected")
 	}
 }

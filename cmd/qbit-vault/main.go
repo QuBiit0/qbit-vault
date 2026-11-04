@@ -1,10 +1,10 @@
-// Command gentle-vault is the CLI entry point.
+// Command qbit-vault is the CLI entry point.
 package main
 
 import (
 	"os"
 
-	"github.com/QuBiit0/gentle-vault/internal/cli"
+	"github.com/QuBiit0/qbit-vault/internal/cli"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-// Package mcp is the stdio MCP server of `gentle-vault mcp` (R-API-01,
+// Package mcp is the stdio MCP server of `qbit-vault mcp` (R-API-01,
 // R-API-05, R-API-06): exactly four tools, secret_request, secret_list,
 // secret_exec and secret_manage, with the normative descriptions of
 // CONTRACT.md, and the policy text as the server instructions. Every call
@@ -15,7 +15,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/QuBiit0/gentle-vault/internal/broker"
+	"github.com/QuBiit0/qbit-vault/internal/broker"
 )
 
 // ToolDescriptions are CONTRACT.md § Model-facing tool definitions, verbatim.
@@ -73,7 +73,7 @@ type manageIn struct {
 
 // NewServer builds the MCP server over a broker backend.
 func NewServer(b broker.Backend, o Options) *sdk.Server {
-	srv := sdk.NewServer(&sdk.Implementation{Name: "gentle-vault", Version: o.Version}, &sdk.ServerOptions{Instructions: broker.Instructions()})
+	srv := sdk.NewServer(&sdk.Implementation{Name: "qbit-vault", Version: o.Version}, &sdk.ServerOptions{Instructions: broker.Instructions()})
 	add(srv, b, o, "secret_request", "request")
 	add(srv, b, o, "secret_list", "list")
 	add(srv, b, o, "secret_exec", "exec")

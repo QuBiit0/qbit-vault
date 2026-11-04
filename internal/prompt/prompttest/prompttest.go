@@ -9,8 +9,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // Answer is one scripted reply. A Fake method uses the field it needs.

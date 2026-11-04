@@ -1,5 +1,5 @@
-// Command gentle-vault-server is the self-hosted, zero-knowledge sync server
-// of gentle-vault (docs/REMOTE_SYNC.md § 10).
+// Command qbit-vault-server is the self-hosted, zero-knowledge sync server
+// of qbit-vault (docs/REMOTE_SYNC.md § 10).
 package main
 
 import (
@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/QuBiit0/gentle-vault/internal/server"
+	"github.com/QuBiit0/qbit-vault/internal/server"
 )
 
 func main() {

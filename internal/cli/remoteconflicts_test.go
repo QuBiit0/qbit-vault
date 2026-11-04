@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
 )
 
 // Slice S.9b: conflicts and their resolution (REMOTE_SYNC § 7.4).

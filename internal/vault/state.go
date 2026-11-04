@@ -10,13 +10,13 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 const (
 	vaultFile   = "vault.enc"
 	stateFile   = "state.json"
-	formatState = "gentle-vault-state/1"
+	formatState = "qbit-vault-state/1"
 )
 
 // state is the part of state.json this package owns. Unknown top-level keys

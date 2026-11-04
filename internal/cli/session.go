@@ -8,13 +8,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/keychain"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // stdinOverride replaces the process stdin; tests set it.
@@ -37,7 +37,7 @@ type codedError struct {
 
 func (e codedError) Error() string { return e.msg }
 
-var errNotInitialized = codedError{"not_initialized", "no vault here; run 'gentle-vault init'", exitcode.Failure}
+var errNotInitialized = codedError{"not_initialized", "no vault here; run 'qbit-vault init'", exitcode.Failure}
 
 // session is an unlocked, open vault for the duration of one command.
 type session struct {

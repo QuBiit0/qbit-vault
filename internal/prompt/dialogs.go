@@ -15,7 +15,7 @@ func secretDialog(req SecretRequest) dialog {
 	}
 	return dialog{
 		kind:    dialogSecret,
-		title:   "gentle-vault: secret capture",
+		title:   "qbit-vault: secret capture",
 		text:    strings.TrimRight(body, "\n") + "\n\n" + input,
 		visible: req.Visible,
 	}
@@ -26,7 +26,7 @@ func passphraseDialog(again bool) dialog {
 	if again {
 		text = "Confirm passphrase (input is hidden):"
 	}
-	return dialog{kind: dialogSecret, title: "gentle-vault: vault passphrase", text: text}
+	return dialog{kind: dialogSecret, title: "qbit-vault: vault passphrase", text: text}
 }
 
 func chooseDialog(q string, options []string, def int) dialog {
@@ -34,11 +34,11 @@ func chooseDialog(q string, options []string, def int) dialog {
 	for i, o := range options {
 		opts[i] = escape(o)
 	}
-	return dialog{kind: dialogChoose, title: "gentle-vault: choose", text: escape(q), options: opts, def: def}
+	return dialog{kind: dialogChoose, title: "qbit-vault: choose", text: escape(q), options: opts, def: def}
 }
 
 func confirmDialog(q string) dialog {
-	return dialog{kind: dialogConfirm, title: "gentle-vault: confirm", text: escape(q)}
+	return dialog{kind: dialogConfirm, title: "qbit-vault: confirm", text: escape(q)}
 }
 
 // noDash keeps a row of text from reading as an option to helpers that take

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const fxShown = "GVR1-TESTSECRET-SHOWN-KEY"
+const fxShown = "QVR1-TESTSECRET-SHOWN-KEY"
 
 // Shown text must never reach a helper's argv: on Linux any local user can
 // read another process's command line.
@@ -92,9 +92,9 @@ func TestPowerShellShowParses(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "show.ps1"), powershellTool{}.build(ps, showDialog("T", "a 'b' $c\nline 2")).Stdin, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	drv := `$e = $null; [void][System.Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText((Join-Path $env:GV_DIR 'show.ps1')), [ref]$null, [ref]$e); Write-Output $e.Count`
+	drv := `$e = $null; [void][System.Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText((Join-Path $env:QBV_DIR 'show.ps1')), [ref]$null, [ref]$e); Write-Output $e.Count`
 	cmd := exec.Command(ps, "-NoProfile", "-NonInteractive", "-Command", drv)
-	cmd.Env = append(os.Environ(), "GV_DIR="+dir)
+	cmd.Env = append(os.Environ(), "QBV_DIR="+dir)
 	out, err := cmd.Output()
 	if err != nil || strings.TrimSpace(string(out)) != "0" {
 		t.Fatalf("parse errors: %q %v", out, err)

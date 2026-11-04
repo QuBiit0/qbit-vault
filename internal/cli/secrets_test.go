@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
-const usageTail = "Run 'gentle-vault --help' for usage.\n"
+const usageTail = "Run 'qbit-vault --help' for usage.\n"
 
 var tsRE = regexp.MustCompile(`\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z`)
 
@@ -230,7 +230,7 @@ func TestSetRefusals(t *testing.T) {
 func TestSetWithoutVault(t *testing.T) {
 	h := newHarness(t)
 	code, out, errs := h.run(fxVal, "set", "A_KEY", "--global", "--stdin")
-	if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'gentle-vault init'\n" {
+	if code != exitcode.Failure || out != "" || errs != "error: no vault here; run 'qbit-vault init'\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 }

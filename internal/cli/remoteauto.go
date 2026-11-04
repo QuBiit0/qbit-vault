@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // Sync rounds inside the ordinary commands (docs/REMOTE_SYNC.md § 7.1). The
@@ -82,7 +82,7 @@ func warnRound(w io.Writer, err error) {
 		fmt.Fprintln(w, "warning: "+errRevoked.msg)
 		return
 	}
-	fmt.Fprintf(w, "warning: not synced (%s); the change is kept on this device; run 'gentle-vault remote status'\n", code)
+	fmt.Fprintf(w, "warning: not synced (%s); the change is kept on this device; run 'qbit-vault remote status'\n", code)
 }
 
 // pushAfter runs the round that follows a change to the vault, once the

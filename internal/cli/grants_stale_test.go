@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/grants"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/grants"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // failingDrop is a grants editor whose drops always fail, simulating a crash

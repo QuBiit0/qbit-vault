@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/prompt/prompttest"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
 )
 
 // runEnv is run with a process environment.
@@ -27,7 +27,7 @@ var importEnv = map[string]string{
 	"EMPTY_VAR": "",
 }
 
-const hintUnset = "hint: unset GH_TOKEN NPM_TOKEN in your shell; gentle-vault cannot change the environment of the shell that started it\n"
+const hintUnset = "hint: unset GH_TOKEN NPM_TOKEN in your shell; qbit-vault cannot change the environment of the shell that started it\n"
 
 func TestImportFromEnv(t *testing.T) {
 	w := newWorld(t)

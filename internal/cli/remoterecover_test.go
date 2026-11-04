@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/QuBiit0/gentle-vault/internal/exitcode"
-	"github.com/QuBiit0/gentle-vault/internal/remote"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/remote"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
 
 // S2 of the Phase 2S hardening: a command that fails after the account or
@@ -81,7 +81,7 @@ func joinUntil(t *testing.T, w, a *world, ss *syncServer, afterApprove func(), e
 }
 
 func TestJoinFirstRoundFailureSaysWhatToRun(t *testing.T) {
-	const msg = "error: this device joined the account but the first sync did not finish; run 'gentle-vault remote sync'\n"
+	const msg = "error: this device joined the account but the first sync did not finish; run 'qbit-vault remote sync'\n"
 	for _, c := range []struct {
 		name string
 		drop bool
@@ -118,14 +118,14 @@ func TestJoinFirstRoundFailureSaysWhatToRun(t *testing.T) {
 		a.register(ss)
 		fail := ss.failVaultGets(true)
 		code, out, _ := joinUntil(t, b, a, ss, func() { fail.Store(true) }, "--json")
-		if code != exitcode.Failure || !strings.Contains(out, `"code":"remote_unreachable"`) || !strings.Contains(out, "run 'gentle-vault remote sync'") {
+		if code != exitcode.Failure || !strings.Contains(out, `"code":"remote_unreachable"`) || !strings.Contains(out, "run 'qbit-vault remote sync'") {
 			t.Fatalf("code=%d out=%q", code, out)
 		}
 	})
 }
 
 func TestJoinLocalFailureAfterTheKeySwapIsFinishedByRecovery(t *testing.T) {
-	const msg = "error: the vault now uses the account key but this device could not save its sync state; run 'gentle-vault remote join --recovery' to finish\n"
+	const msg = "error: the vault now uses the account key but this device could not save its sync state; run 'qbit-vault remote join --recovery' to finish\n"
 	ss := newSyncServer(t)
 	a, b := newWorld(t), newWorld(t)
 	rk := a.register(ss)
@@ -162,7 +162,7 @@ func TestJoinLocalFailureAfterTheKeySwapIsFinishedByRecovery(t *testing.T) {
 }
 
 func TestRegisterLocalFailureAfterTheAccountExistsCanBeRegisteredAgain(t *testing.T) {
-	const msg = "error: the account was created on the server but this device could not save its sync state; run 'gentle-vault remote register' again with a new invite code\n"
+	const msg = "error: the account was created on the server but this device could not save its sync state; run 'qbit-vault remote register' again with a new invite code\n"
 	ss := newSyncServer(t)
 	w := newWorld(t)
 	w.mustRun("TESTSECRET_w", "set", "W_KEY", "--global", "--stdin")
@@ -211,7 +211,7 @@ func TestApproveShowsTheCodeWhenTheRosterWriteFails(t *testing.T) {
 	f := answers(val(p.Code), val("Laptop X"), yes(), no())
 	asBackend(t, keepBackend{f})
 	code, out, errs := a.run("", "remote", "approve")
-	if code != exitcode.OK || errs != "warning: the new device was approved on the server but this vault could not record it in the roster; check 'gentle-vault remote devices'\n" ||
+	if code != exitcode.OK || errs != "warning: the new device was approved on the server but this vault could not record it in the roster; check 'qbit-vault remote devices'\n" ||
 		out != "approved Laptop X ("+newID+")\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}

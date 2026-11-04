@@ -12,12 +12,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/gentle-vault/internal/audit"
-	"github.com/QuBiit0/gentle-vault/internal/grants"
-	"github.com/QuBiit0/gentle-vault/internal/prompt"
-	"github.com/QuBiit0/gentle-vault/internal/refusal"
-	"github.com/QuBiit0/gentle-vault/internal/secret"
-	"github.com/QuBiit0/gentle-vault/internal/vault"
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/grants"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 // maxValueBytes bounds a value read from stdin (docs/CLI.md § set).
@@ -97,7 +97,7 @@ type listEntry struct {
 	CreatedAt       string   `json:"created_at"`
 	UpdatedAt       string   `json:"updated_at"`
 	// Unlinked marks a layer synced from another device that has no root
-	// on this one (gentle-vault link binds it).
+	// on this one (qbit-vault link binds it).
 	Unlinked bool `json:"unlinked,omitempty"`
 }
 
@@ -764,12 +764,12 @@ func newList(g *globals) *cobra.Command {
 				return err
 			}
 			if n, cerr := s.v.ConflictCount(); cerr == nil && n > 0 {
-				fmt.Fprintf(cmd.ErrOrStderr(), "%d sync conflicts; run 'gentle-vault remote conflicts'\n", n)
+				fmt.Fprintf(cmd.ErrOrStderr(), "%d sync conflicts; run 'qbit-vault remote conflicts'\n", n)
 			}
 			// A layer synced from another device that matches this
 			// repository is only suggested; the user links it (R-SYNC-11).
 			if label, ok, merr := s.v.UnlinkedMatch(cwd); merr == nil && ok {
-				fmt.Fprintf(cmd.ErrOrStderr(), "hint: project secrets %q from another device match this repository; run 'gentle-vault link %s'\n", oneLine(label), oneLine(label))
+				fmt.Fprintf(cmd.ErrOrStderr(), "hint: project secrets %q from another device match this repository; run 'qbit-vault link %s'\n", oneLine(label), oneLine(label))
 			}
 			return nil
 		},

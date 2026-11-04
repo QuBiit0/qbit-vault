@@ -63,7 +63,7 @@ Every command in this section except `remote status`, `remote devices` and `remo
 2. Prompt (out of band): the **invite code** (masked) and the confirmation *"Sync this vault to `<host>`? Secrets are encrypted on this device before upload; the server can never read them."*
 3. Generate `account_id` (16 random bytes), `DK`, `RK`. The existing `MK` becomes the account key; `generation` = 1.
 4. Seal the remote vault (version 1), the device's key envelope (issuer = itself) and the recovery envelope. `POST /v1/accounts`.
-5. Show `RK` out of band with *"Write this recovery key down and keep it offline. It is the only way to open your vault on a new machine if you lose access to every device."* and ask the user to type its last four characters to confirm they saved it. A wrong answer shows it again; cancel at this step leaves the account registered and `remote status` keeps warning `recovery key not confirmed` until `remote recovery-key --rotate`.
+5. Save the device state (step 6) with the flag `recovery_unconfirmed`, then show `RK` out of band with *"Write this recovery key down and keep it offline. It is the only way to open your vault on a new machine if you lose access to every device."* and ask the user to type its last four characters to confirm they saved it. A wrong answer shows it again (up to 5 times); cancel at this step leaves the account registered and `remote status` keeps warning `recovery key not confirmed` until `remote recovery-key --rotate`.
 6. Write `remote/device.enc`, `remote/base.enc` and `state.json.remote`; append the audit record `remote` (`detail: "registered"`).
 
 ### 4.2 Add a device by pairing: `remote join --server URL` + `remote approve`
@@ -77,13 +77,13 @@ On an **existing** device, `gentle-vault remote approve`:
 
 3. Prompt (out of band) for the pairing code and a label for the new device. `GET /v1/pairings/{code}`; recompute the fingerprint of the returned keys and refuse (`pairing_failed`) unless it equals the code typed, so the server cannot substitute its own device key.
 4. Confirm out of band: *"Add device `<label>` to your vault on `<host>`? It will be able to read every secret."*
-5. Pull and merge (§ 7), add the device to the roster, seal a key envelope for it (issuer = this device), `POST /v1/pairings/{code}/approve`, push.
+5. Pull and merge (§ 7), seal a key envelope for it (issuer = this device), `POST /v1/pairings/{code}/approve`, then add the device to the roster and push (the roster entry is added after the server accepted the approval, so a refused approval leaves no entry).
 6. Show the **confirmation code** out of band: the first 40 bits of `HMAC-SHA256(PCK, code ‖ device_id ‖ eph_pub)` in base32, `XXXX-XXXX`, with *"Type this code on the new device."*
 
 Back on the **new** device:
 
 7. The poll returns `{account_id, envelope, issuer}`. Decrypt the envelope, compute the confirmation code from the received `MK` and ask the user (out of band) to type the code shown on the other device. A mismatch wipes the received key, deletes the device on the server and fails with `pairing_failed`: the server tried to plant a master key of its own, or the user typed the code of another pairing. The server cannot compute the code because it never holds `MK`.
-8. Store `MK` (keychain, or `key.enc` under a local passphrase asked twice), write `device.enc`, pull, merge the local vault into the account (§ 4.4), push, and audit `remote` (`detail: "joined (pairing)"`).
+8. Adopt `MK` on the existing local vault (`join` needs `init` first): stage it in the keychain (or `key.enc` under the current passphrase), re-seal the local files and retire the old key as `rekey` does (§ 4.4), write `device.enc`, pull, merge the local vault into the account (§ 4.4), push, and audit `remote` (`detail: "joined (pairing)"`).
 
 ### 4.3 Recover on a new machine: `remote join --server URL --recovery`
 

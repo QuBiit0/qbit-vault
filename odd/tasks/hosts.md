@@ -19,7 +19,7 @@ Branch `feat/cli-skeleton`. Spec authority: docs/ROADMAP.md § Phase 3, docs/PRD
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| P1 | S2-S4, S7 | worker | 3.1 `internal/filemerge`: snapshot to backups, atomic write, order-preserving JSON merge/unmerge of owned keys, TOML table editor, 3-way revert | | pending |
+| P1 | S2-S4, S7 | worker | 3.1 `internal/filemerge`: snapshot to backups, atomic write, order-preserving JSON merge/unmerge of owned keys, TOML table editor, 3-way revert | 2561f4c | done |
 | P2 | S2, S3, S7 | worker | 3.6a `state.json` hosts receipts, `init` step runner (idempotent, re-runs host steps on an existing vault), minimal read-only `doctor` | | pending |
 | P3 | S2, S6, S7 | worker | hooks: `hook pre-bash/post-bash/post-read/user-prompt`, bindings, refusal of mutating/remote/link subcommands, fail-open | | pending |
 | P4 | S2, S3, S7 | worker | 3.2 Claude Code adapter (MCP, hooks, deny-list, Gentle AI preservation) | | pending |

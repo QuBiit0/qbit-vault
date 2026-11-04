@@ -13,6 +13,8 @@ Branch `feat/cli-skeleton`. Spec authority: docs/ROADMAP.md § Phase 3, docs/PRD
 - S6. Decision (user): broken hook: "Fail-open: el comando corre sin reescritura y el agente ve un aviso. Los secretos igual nunca están en el entorno del agente; un hook roto no bloquea todo tu trabajo."
 - S7. Parent decisions (doc contradictions found by exploration): hook subcommand names follow CLI.md (`hook pre-bash`, `hook post-bash`, `hook post-read`, `hook user-prompt`); receipts in state.json use absolute paths (no `~`, Windows-portable); the Claude deny entry uses the resolved vault home, not a literal `~/.qbit-vault`; JSON merges preserve the user's key order and formatting outside our keys; a hooks slice (bindings.yaml, dumpguard loading, `hook` subcommands) is added before 3.2.
 
+- S8. User (2026-11-04): "lo que recomiendes creo que con que funcione para claude, codex y gentle-shell (pi) esta bien". Scope: Claude Code, Codex and Gentle Shell/Pi only; OpenCode out; packaging to Phase 5; Pi works through its MCP entry plus the printed extension install command (the native extension stays Phase 4).
+
 ## Tasks
 
 | ID | Specs | Route | Change | Commit | Status |
@@ -22,12 +24,13 @@ Branch `feat/cli-skeleton`. Spec authority: docs/ROADMAP.md § Phase 3, docs/PRD
 | P3 | S2, S6, S7 | worker | hooks: `hook pre-bash/post-bash/post-read/user-prompt`, bindings, refusal of mutating/remote/link subcommands, fail-open | | pending |
 | P4 | S2, S3, S7 | worker | 3.2 Claude Code adapter (MCP, hooks, deny-list, Gentle AI preservation) | | pending |
 | P5 | S2, S4 | worker | 3.3 Codex adapter (TOML, sandbox -> tty) | | pending |
-| P6 | S2 | worker | 3.4 OpenCode adapter (MCP; plugin when available) | | pending |
+| P6 | S2, S8 | - | 3.4 OpenCode adapter (MCP; plugin when available) | | dropped |
 | P7 | S2, S5 | worker | 3.5 Pi adapter (MCP entry, printed install command) | | pending |
 | P8 | S2, S3 | worker | 3.6b `sync`, `uninstall` (+ `--purge`), full `doctor` (incl. sync conflicts) | | pending |
-| P9 | S2 | worker | 3.7 npm launcher, platform packages, goreleaser, Minisign | | pending |
+| P9 | S2, S8 | - | 3.7 npm launcher, platform packages, goreleaser, Minisign: moved to Phase 5 (install with `go install` meanwhile) | | dropped |
 
 ## Log
 
 - L1. User answers (verbatim choices): TOML "Editor mínimo propio (Recomendado)"; Pi "Imprime el comando (Recomendado)"; broken hook "Deja pasar y avisa (Recomendado)".
 - L2. Exploration (gentle-ai-explore): nothing host-side exists; `init` is vault-only and returns early on an existing vault; no `hook`, `doctor`, `sync`, `uninstall`, `filemerge`, `bindings.yaml`, `packages/` or goreleaser. Order: P1 and P2 first, P3 before P4, P4-P7 independent of each other after P1-P3, P8 after an adapter exists, P9 independent.
+- L3. The product was renamed to QBit Vault (`qbit-vault`, odd/tasks/rename-qbit.md); every path and name in this document now reads qbit-vault. After an honest comparison with similar tools (secrets-mcp, blindfold, keymaxxer, wundervault, sandbroker, 1Password `op run`, Infisical Agent Vault), the user chose the recommended scope: a working tool for their own hosts (S8).

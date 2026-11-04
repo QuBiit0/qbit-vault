@@ -31,3 +31,21 @@ ENV QBIT_VAULT_HOME=/home/qbv/vault \
     QBIT_VAULT_SCRIPTED_ANSWERS=/home/qbv/answers \
     QBIT_VAULT_SCRIPTED_TRANSCRIPT=/home/qbv/transcript
 CMD ["sleep", "infinity"]
+
+# The host registration battery (e2e/hosts-test.sh): the same test binary plus
+# bash, jq and python3 (tomllib) for the assertions. No claude, codex or pi
+# binary is installed: the scenario only creates their config directories.
+FROM alpine:3.21 AS hosts
+RUN apk add --no-cache bash jq python3 coreutils && adduser -D -u 1000 qbv
+COPY --from=build /out/qbit-vault /out/leakscan /usr/local/bin/
+COPY e2e/hosts/scenario.sh /usr/local/bin/hosts-scenario
+USER qbv
+WORKDIR /home/qbv
+ENV HOME=/home/qbv/fakehome \
+    XDG_RUNTIME_DIR=/dev/shm/qbv-run \
+    QBIT_VAULT_HOME=/home/qbv/vault \
+    QBIT_VAULT_PROMPT=scripted \
+    QBIT_VAULT_SCRIPTED_PASSPHRASE_FILE=/home/qbv/passphrase \
+    QBIT_VAULT_SCRIPTED_ANSWERS=/home/qbv/answers \
+    QBIT_VAULT_SCRIPTED_TRANSCRIPT=/home/qbv/transcript
+CMD ["sleep", "infinity"]

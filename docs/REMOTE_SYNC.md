@@ -224,6 +224,8 @@ The time of the last upload is kept in `state.json` under `remote_anchor_at` (be
 | size of each vault version, padded to 4 KiB (a rough count of secrets) | device labels, the roster's content |
 | generation count (how many rekeys and revocations) | audit log content, grants, which secret was used when |
 
+The "never learns" column is tested, not just claimed: `e2e/docker-test.sh` (TESTING.md § Tier 2 item 7) records every HTTP exchange through a proxy and scans those bodies, URLs and headers, and the server's whole `/data` volume, for every fixture value, secret name, project path and device label.
+
 ## 10. The server
 
 `gentle-vault-server` is a Go binary in the same module (`cmd/gentle-vault-server`), standard library only.

@@ -1,0 +1,93 @@
+# Sync battery topology (docs/TESTING.md § Tier 2 item 7): one
+# gentle-vault-server behind a recording TLS proxy, three client containers
+# and an auditor that scans the server's /data and the recorded HTTP bodies.
+# Run it with e2e/docker-test.sh (project name gv-e2e-sync); nothing is
+# published to the host.
+name: gv-e2e-sync
+
+x-client: &client
+  build:
+    context: ..
+    dockerfile: e2e/Dockerfile
+    target: client
+  image: gentle-vault-e2e-client:local
+  depends_on:
+    proxy:
+      condition: service_healthy
+  volumes:
+    - certs:/certs:ro
+  init: true
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: gentle-vault-server:e2e
+    environment:
+      # The origin the clients use: the proxy.
+      GV_SERVER_PUBLIC_URL: https://proxy:8443
+      GV_SERVER_TRUST_PROXY: "1"
+    volumes:
+      - vault-data:/data
+    read_only: true
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    expose: ["8080"]
+    healthcheck:
+      test: ["CMD", "/gentle-vault-server", "health"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 2s
+
+  proxy:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile
+      target: tools
+    image: gentle-vault-e2e-tools:local
+    environment:
+      E2E_UPSTREAM: http://server:8080
+      E2E_HOSTS: proxy
+      E2E_REC: /rec
+      E2E_CERTS: /certs
+    volumes:
+      - rec:/rec
+      - certs:/certs
+    depends_on:
+      server:
+        condition: service_healthy
+    expose: ["8443"]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/proxy", "health"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 2s
+
+  a:
+    <<: *client
+    hostname: e2e-laptop-a
+  b:
+    <<: *client
+    hostname: e2e-desktop-b
+  c:
+    <<: *client
+    hostname: e2e-phone-c
+
+  # Reads the server volume and the recorded bodies; changes neither.
+  auditor:
+    image: gentle-vault-e2e-tools:local
+    entrypoint: ["sleep", "infinity"]
+    user: root
+    volumes:
+      - vault-data:/data:ro
+      - rec:/rec:ro
+    depends_on: [proxy]
+
+volumes:
+  vault-data:
+  rec:
+  certs:

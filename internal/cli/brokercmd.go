@@ -152,6 +152,9 @@ func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResu
 	if proj, perr := vault.ProjectLayer(e.Cwd); perr == nil {
 		res.Project = &broker.Project{Root: proj.Root, Label: proj.Label}
 	}
+	if label, ok, merr := s.v.UnlinkedMatch(e.Cwd); merr == nil && ok {
+		res.Unlinked = &broker.UnlinkedMatch{Label: label}
+	}
 	now := clock()
 	for _, c := range grants.Cooldowns(st, e.Session, now) {
 		res.Cooldowns = append(res.Cooldowns, broker.Cooldown{Name: c.Name, Until: c.Until.UTC().Format(time.RFC3339)})

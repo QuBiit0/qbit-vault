@@ -125,6 +125,8 @@ type ListResult struct {
 	Project   *Project
 	Secrets   []SecretMeta
 	Cooldowns []Cooldown
+	// Unlinked is a synced project layer this repository could link.
+	Unlinked *UnlinkedMatch
 }
 
 // Policy is the normative block of `list` (R-API-06).

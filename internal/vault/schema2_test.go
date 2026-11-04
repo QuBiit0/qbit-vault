@@ -225,3 +225,67 @@ func TestNormalizeOrigin(t *testing.T) {
 }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+// otherDeviceProject writes a body holding a project layer linked only on
+// another device, with origin, and returns its id.
+func otherDeviceProject(t *testing.T, home, label, origin string) string {
+	t.Helper()
+	id := strings.Repeat("ab", 16)
+	writeBody(t, home, `{"schema":2,"global":{},"tombstones":[],"conflicts":[],"devices":{},"projects":{"`+id+`":{"label":"`+label+`","origin":"`+origin+`","roots":{"`+strings.Repeat("cd", 16)+`":"/elsewhere/`+label+`"},"secrets":{"DB":{"id":"r9","value":"TESTSECRET_linked","description":"","sensitive":false,"binaries":[],"hosts":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}}}}}`)
+	return id
+}
+
+func TestLinkBindsAnUnlinkedLayer(t *testing.T) {
+	v, home := newVault(t)
+	root := fakeRepo(t, "git@github.com:acme/shop-api.git")
+	id := otherDeviceProject(t, home, "shop-api", "github.com/acme/shop-api")
+	if label, ok, err := v.UnlinkedMatch(root); err != nil || !ok || label != "shop-api" {
+		t.Fatalf("UnlinkedMatch=%q %v %v", label, ok, err)
+	}
+	n, err := v.Link("shop-api", root)
+	if err != nil || n != 1 {
+		t.Fatalf("Link: n=%d err=%v", n, err)
+	}
+	r, l, err := v.Resolve("DB", root)
+	if err != nil || !l.Project || !sameValue(r, "TESTSECRET_linked") {
+		t.Fatalf("resolve after link: %v", err)
+	}
+	p := rawBody(t, home)["projects"].(map[string]any)[id].(map[string]any)
+	roots := p["roots"].(map[string]any)
+	if roots[deviceOf(t, home)] != root || roots[strings.Repeat("cd", 16)] != "/elsewhere/shop-api" {
+		t.Fatalf("roots=%v", roots)
+	}
+	if _, ok, _ := v.UnlinkedMatch(root); ok {
+		t.Fatal("a linked repository still matches")
+	}
+}
+
+func TestLinkRefusals(t *testing.T) {
+	v, home := newVault(t)
+	root := fakeRepo(t, "https://github.com/acme/shop-api")
+	otherDeviceProject(t, home, "shop-api", "github.com/acme/shop-api")
+	if _, err := v.Link("nope", root); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown label: %v", err)
+	}
+	if _, err := v.Link("shop-api", t.TempDir()); !errors.Is(err, ErrNoProject) {
+		t.Fatalf("not a repository: %v", err)
+	}
+	mustPut(t, v, Layer{Project: true, Root: root, Label: "shop-api"}, "LOCAL", rec("TESTSECRET_local"))
+	if _, err := v.Link("shop-api", root); !errors.Is(err, ErrExists) {
+		t.Fatalf("root already has a layer: %v", err)
+	}
+	// Two unlinked layers with one label are ambiguous.
+	_, home2 := newVault(t)
+	writeBody(t, home2, `{"schema":2,"global":{},"tombstones":[],"conflicts":[],"devices":{},"projects":{`+
+		`"`+strings.Repeat("a1", 16)+`":{"label":"x","roots":{"`+strings.Repeat("cd", 16)+`":"/a"},"secrets":{}},`+
+		`"`+strings.Repeat("b2", 16)+`":{"label":"x","roots":{"`+strings.Repeat("cd", 16)+`":"/b"},"secrets":{}}}}`)
+	v2, _ := Open(home2, testKey(1))
+	if _, err := v2.Link("x", fakeRepo(t, "")); !errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("ambiguous: %v", err)
+	}
+	// No origin means no match.
+	plain := fakeRepo(t, "")
+	if _, ok, _ := v.UnlinkedMatch(plain); ok {
+		t.Fatal("a repository without origin matched")
+	}
+}

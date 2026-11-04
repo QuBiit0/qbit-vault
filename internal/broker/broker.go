@@ -133,7 +133,7 @@ func handle(ctx context.Context, raw []byte, b Backend, t Transport) (any, error
 		if res.Secrets == nil {
 			res.Secrets = []SecretMeta{}
 		}
-		return ListResponse{OK: true, Project: res.Project, Secrets: res.Secrets, Policy: policy(res.Project != nil, res.Cooldowns)}, nil
+		return ListResponse{OK: true, Project: res.Project, Secrets: res.Secrets, UnlinkedMatch: res.Unlinked, Policy: policy(res.Project != nil, res.Cooldowns)}, nil
 	case "exec":
 		r, err := execRequest(m)
 		if err != nil {

@@ -16,8 +16,8 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| T1 | S2, S3, S6 | inline | S.1a: body schema 2 codec and migration, `device_id`, origin, hlc and tombstones stamped on save, newer schema refused | (S.1a commit) | done |
-| T2 | S2-S4 | inline | S.1b: `link`, unlinked layers in `list --layer all`, origin hint, broker `unlinked_match` | | pending |
+| T1 | S2, S3, S6 | inline | S.1a: body schema 2 codec and migration, `device_id`, origin, hlc and tombstones stamped on save, newer schema refused | fc7ebeb | done |
+| T2 | S2-S4 | inline | S.1b: `link`, unlinked layers in `list --layer all`, origin hint, broker `unlinked_match` | (S.1b commit) | done |
 | T3 | S5 | inline | S.2 merge engine | | pending |
 | T4 | S5 | inline | S.3 remote crypto | | pending |
 | T5 | S5 | inline | S.4-S.5 server | | pending |
@@ -31,3 +31,4 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 - L2. Decision (T1): the in-memory body keeps project layers keyed by this device's root, so resolution, grants and relink code stay as they are; the codec maps schema 2 (projects by id, `roots` per device) to it and keeps projects without a root for this device aside as unlinked. Every save compares the body before and after the mutation: a record whose content changed gets a fresh hlc, a record that disappeared leaves a tombstone. No command has to stamp anything.
 - L3. Decision (T1): `device_id` is created by `init`, or on the first load of a vault that has none, and saved to `state.json` with the counter repair. Tombstones older than 180 days are purged on save. The hlc is `<unix_ms>.<counter>@<device_id>`, never lower than the highest one in the body.
 - L4. T1 notes: RED observed (build). The codec lives in internal/vault/body2.go; `restore` writes a backup body as stored and it migrates on the next load. `relink` keeps the project id. `ListAll` reports unlinked layers with an empty root and `Unlinked: true`.
+- L5. T2 notes: RED observed for vault and CLI. `link` errors are fixed strings (the label is user text and never echoed). The hint is printed by a human `list` only; `--json` never prints it, the broker reports `unlinked_match` instead. `vault.AddUnlinkedForTesting` is a test seam like `SetWalkStopForTesting`.

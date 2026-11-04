@@ -42,6 +42,7 @@ const (
 	EventMv        = "mv"
 	EventEdit      = "edit"
 	EventRelink    = "relink"
+	EventLink      = "link"
 	EventRekey     = "rekey"
 	EventRestore   = "restore"
 	EventUninstall = "uninstall"
@@ -51,7 +52,7 @@ const (
 
 var events = []string{
 	EventInit, EventCapture, EventGrant, EventExec, EventManage, EventRefusal,
-	EventRevoke, EventRm, EventMv, EventEdit, EventRelink, EventRekey,
+	EventRevoke, EventRm, EventMv, EventEdit, EventRelink, EventLink, EventRekey,
 	EventRestore, EventUninstall, EventWarning, EventPrompt,
 }
 

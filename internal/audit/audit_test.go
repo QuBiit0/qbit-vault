@@ -554,11 +554,11 @@ func TestUnknownEvent(t *testing.T) {
 			t.Errorf("%s not valid", e)
 		}
 	}
-	if !ValidEvent(EventPrompt) {
-		t.Error("prompt is not valid")
+	if !ValidEvent(EventPrompt) || !ValidEvent(EventLink) {
+		t.Error("prompt or link is not valid")
 	}
-	if len(events) != 16 {
-		t.Fatalf("%d events, want 16", len(events))
+	if len(events) != 17 {
+		t.Fatalf("%d events, want 17", len(events))
 	}
 }
 

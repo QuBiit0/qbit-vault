@@ -90,6 +90,9 @@ type listEntry struct {
 	Hosts           []string `json:"hosts"`
 	CreatedAt       string   `json:"created_at"`
 	UpdatedAt       string   `json:"updated_at"`
+	// Unlinked marks a layer synced from another device that has no root
+	// on this one (gentle-vault link binds it).
+	Unlinked bool `json:"unlinked,omitempty"`
 }
 
 type listBody struct {
@@ -740,12 +743,20 @@ func newList(g *globals) *cobra.Command {
 					if e.Layer.Project {
 						le.ProjectLabel = e.Layer.Label
 					}
+					le.Unlinked = e.Unlinked
 					body.Secrets = append(body.Secrets, le)
 				}
 				return writeJSON(out, body)
 			}
-			_, err = io.WriteString(out, listTable(shown))
-			return err
+			if _, err = io.WriteString(out, listTable(shown)); err != nil {
+				return err
+			}
+			// A layer synced from another device that matches this
+			// repository is only suggested; the user links it (R-SYNC-11).
+			if label, ok, merr := s.v.UnlinkedMatch(cwd); merr == nil && ok {
+				fmt.Fprintf(cmd.ErrOrStderr(), "hint: project secrets %q from another device match this repository; run 'gentle-vault link %s'\n", oneLine(label), oneLine(label))
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&layer, "layer", "here", "which layers to show: here, global, project or all")
@@ -766,6 +777,9 @@ func listTable(es []vault.Entry) string {
 		desc := oneLine(e.Record.Description)
 		if e.OverridesGlobal {
 			desc = strings.TrimSpace(desc + " (overrides global)")
+		}
+		if e.Unlinked {
+			desc = strings.TrimSpace(desc + " (not linked on this device)")
 		}
 		rows = append(rows, [3]string{e.Name, oneLine(layer), desc})
 	}

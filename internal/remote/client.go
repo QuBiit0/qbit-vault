@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 )
@@ -34,6 +35,17 @@ var (
 	ErrRateLimited  = errors.New("remote: rate limited")
 	ErrServer       = errors.New("remote: server error")
 	ErrIncompatible = errors.New("remote: the server speaks another API version")
+	// ErrForged means the server answered with something other than what
+	// this device computed itself (a pairing id that is not its fingerprint).
+	ErrForged = errors.New("remote: the server's answer does not match this device")
+)
+
+// The ids a server returns end up in the roster, the audit log and the
+// terminal; the server is untrusted (AGENTS.md invariant 9), so they must
+// have the shape the server itself accepts.
+var (
+	accountRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	deviceRE  = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
 )
 
 // Client talks to one server.
@@ -48,7 +60,7 @@ type Client struct {
 // caFile is given, trusts that CA for TLS.
 func NewClient(server, caFile string) (*Client, error) {
 	u, err := url.Parse(server)
-	if err != nil || u.Host == "" || u.Hostname() == "" {
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil {
 		return nil, ErrInsecureURL
 	}
 	switch u.Scheme {
@@ -274,6 +286,11 @@ func (c *Client) CreatePairing(ctx context.Context, deviceID string, d Device) (
 		ExpiresAt  string `json:"expires_at"`
 	}
 	_, err := c.call(ctx, "POST", "/v1/pairings", map[string]string{"code": code, "device_id": deviceID, "sign_pub": enc(d.SignPub), "box_pub": enc(d.BoxPub)}, &out)
+	// The code the user reads must be this device's own fingerprint: an id
+	// the server picked could fingerprint keys of its own (REMOTE_SYNC § 4.2).
+	if err == nil && out.PairingID != code {
+		return Pairing{}, ErrForged
+	}
 	return Pairing{Code: out.PairingID, PollSecret: out.PollSecret, ExpiresAt: out.ExpiresAt}, err
 }
 
@@ -292,6 +309,9 @@ func (c *Client) ReadPairing(ctx context.Context, code string) (PairingKeys, err
 		BoxPub   string `json:"box_pub"`
 	}
 	_, err := c.call(ctx, "GET", "/v1/pairings/"+url.PathEscape(code), nil, &out)
+	if err == nil && !deviceRE.MatchString(out.DeviceID) {
+		return PairingKeys{}, ErrInvalid
+	}
 	return PairingKeys{DeviceID: out.DeviceID, SignPub: dec(out.SignPub), BoxPub: dec(out.BoxPub)}, err
 }
 
@@ -317,6 +337,9 @@ func (c *Client) PollPairing(ctx context.Context, code, secret string) (PollResu
 		IssuerSignPub string `json:"issuer_sign_pub"`
 	}
 	_, err := c.call(ctx, "GET", "/v1/pairings/"+url.PathEscape(code)+"?poll="+url.QueryEscape(secret), nil, &out)
+	if err == nil && out.Status == "approved" && (!accountRE.MatchString(out.AccountID) || !deviceRE.MatchString(out.Issuer)) {
+		return PollResult{}, ErrInvalid
+	}
 	return PollResult{Status: out.Status, AccountID: out.AccountID, Issuer: out.Issuer, IssuerSignPub: dec(out.IssuerSignPub), Envelope: []byte(out.Envelope)}, err
 }
 
@@ -327,6 +350,9 @@ func (c *Client) RecoveryLogin(ctx context.Context, r Recovery) (string, error) 
 		Token     string `json:"token"`
 	}
 	_, err := c.call(ctx, "POST", "/v1/recovery/token", map[string]string{"lookup_id": hex.EncodeToString(r.LookupID), "auth": recoveryAuth(r)}, &out)
+	if err == nil && !accountRE.MatchString(out.AccountID) {
+		return "", ErrInvalid
+	}
 	if err == nil {
 		c.token = out.Token
 	}
@@ -403,6 +429,11 @@ func (c *Client) Devices(ctx context.Context) ([]DeviceInfo, error) {
 		Devices []DeviceInfo `json:"devices"`
 	}
 	_, err := c.call(ctx, "GET", "/v1/devices", nil, &out)
+	for _, d := range out.Devices {
+		if err == nil && !deviceRE.MatchString(d.ID) {
+			return nil, ErrInvalid
+		}
+	}
 	return out.Devices, err
 }
 

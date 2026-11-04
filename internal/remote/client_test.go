@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -182,4 +183,58 @@ func TestRecoveryAndAnchorsThroughTheClient(t *testing.T) {
 	}
 	var probe map[string]any
 	_ = json.Unmarshal(as[0], &probe)
+}
+
+// The server is untrusted (AGENTS.md invariant 9): ids it returns end up in
+// the roster, the audit log and the terminal, so they must be plain ids.
+func TestClientRefusesMalformedIDsFromTheServer(t *testing.T) {
+	bad := "d2\x1b[2J\nforged"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1/pairings/") && r.URL.Query().Get("poll") != "":
+			_ = json.NewEncoder(w).Encode(map[string]any{"api": 1, "status": "approved", "account_id": bad, "issuer": "d1", "envelope": "{}", "issuer_sign_pub": ""})
+		case strings.HasPrefix(r.URL.Path, "/v1/pairings/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"api": 1, "device_id": bad, "sign_pub": "", "box_pub": ""})
+		case r.URL.Path == "/v1/recovery/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{"api": 1, "account_id": bad, "token": "t"})
+		case r.URL.Path == "/v1/devices":
+			_ = json.NewEncoder(w).Encode(map[string]any{"api": 1, "devices": []map[string]string{{"id": bad}}})
+		}
+	}))
+	defer srv.Close()
+	c, _ := remote.NewClient(srv.URL, "")
+	if _, err := c.ReadPairing(ctx, "CODE"); !errors.Is(err, remote.ErrInvalid) {
+		t.Errorf("read pairing: %v", err)
+	}
+	if _, err := c.PollPairing(ctx, "CODE", "s"); !errors.Is(err, remote.ErrInvalid) {
+		t.Errorf("poll: %v", err)
+	}
+	rk, _, _ := remote.NewRecoveryKey()
+	if _, err := c.RecoveryLogin(ctx, remote.RecoveryFromKey(rk)); !errors.Is(err, remote.ErrInvalid) {
+		t.Errorf("recovery login: %v", err)
+	}
+	if _, err := c.Devices(ctx); !errors.Is(err, remote.ErrInvalid) {
+		t.Errorf("devices: %v", err)
+	}
+}
+
+// The pairing code shown to the user must be the fingerprint of this
+// device's keys, never an id the server picked: a server could otherwise
+// show the fingerprint of keys of its own and receive the master key.
+func TestCreatePairingRefusesAnIDThatIsNotItsFingerprint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"api": 1, "pairing_id": "AAAA-BBBB-CCCC-DDDD", "poll_secret": "s", "expires_at": "x"})
+	}))
+	defer srv.Close()
+	c, _ := remote.NewClient(srv.URL, "")
+	if _, err := c.CreatePairing(ctx, "d2", remote.DeviceFromSecret(k(2))); !errors.Is(err, remote.ErrForged) {
+		t.Fatalf("substituted pairing id: %v", err)
+	}
+}
+
+func TestNewClientRefusesCredentialsInTheURL(t *testing.T) {
+	if _, err := remote.NewClient("https://user:TESTSECRET_pw@vault.example.com", ""); !errors.Is(err, remote.ErrInsecureURL) {
+		t.Fatalf("userinfo accepted: %v", err)
+	}
 }

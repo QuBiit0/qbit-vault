@@ -224,4 +224,3 @@ func (s *store) sealNext(st *state, created string, floor uint64, plaintext []by
 	}
 	return s.savePair(sealed, stateBytes)
 }
-

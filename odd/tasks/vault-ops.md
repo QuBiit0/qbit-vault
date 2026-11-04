@@ -18,10 +18,10 @@ backups (also those made under an earlier key). Branch `feat/cli-skeleton`.
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| T1 | S4 | inline | `lock`, `unlock` (keychain `Refresh`, CLI, docs) | | pending |
-| T2 | S5, S6 | inline | retired keys store; `restore --list/--from` (vault + CLI, docs) | | pending |
-| T3 | S3, S6, S7 | inline | crash-safe `rekey`: pending key, idempotent finish, recovery on open (keychain + vault + CLI, docs) | | pending |
-| T4 | S2, S7 | inline | `import --from-env/--from-file` (dotenv parser, one atomic write, CLI, docs) | | pending |
+| T1 | S4 | inline | `lock`, `unlock` (keychain `Refresh`, CLI, docs) | b7ff436 | done |
+| T2 | S5, S6 | inline | retired keys store; `restore --list/--from`; resumable `vault.Rekey` (vault + CLI, docs) | 3a1e772 | done |
+| T3 | S3, S6, S7 | inline | crash-safe `rekey`: staged key, promote, recovery on open (keychain + CLI, docs) | 90e50b4 | done |
+| T4 | S2, S7 | inline | `import --from-env/--from-file` (dotenv parser + fuzz, one atomic write, CLI, docs) | next commit | in progress |
 
 ## Log
 
@@ -30,3 +30,6 @@ backups (also those made under an earlier key). Branch `feat/cli-skeleton`.
 - L3. Decision (restore): `--list` needs no key. `--from ID` validates ID against the snapshot-name pattern, asks `Restore the vault from ID? The current vault is backed up first. [y/N]` unless `--yes`, opens the snapshot's `vault.enc` with the current key or a retired one, and saves its body as the next write under the current key, so the rollback counter moves forward instead of tripping `vault_corrupt`, and the current pair is snapshotted first. It works when the current vault is corrupt or rolled back (the case `vault_corrupt` points to); when `state.json` is unreadable it takes the snapshot's. Grants are kept: they bind record ids, and a restored record keeps its id.
 - L4. Decision (rekey): crash-safe in three phases. (1) Stage the new key: keychain account `master:next:<id>`, or `key.next.enc` wrapped with the same passphrase (asked and verified against `key.enc` first, so a typo cannot strand the key). (2) Finish, idempotent, under the vault lock: re-seal `vault.enc` (snapshot), `grants.enc` and `keys/retired.enc` with the new key, adding the old key to retired; each file is opened with the new key first, else the old one. (3) Promote the staged key over the main entry, refresh the unlock cache, delete the staged entry. `openSession` finishes an interrupted rekey whenever a staged key exists. Changing the passphrase is not part of rekey.
 - L5. Decision (import): needs a confirmation through the prompt backend (`Import A, B from <source> into <layer>? Existing secrets with these names are replaced.`) unless `--yes`; inside a repository without `--global`/`--project` it asks the layer, or with no prompt backend is the usage error `choose --global or --project`. All names are stored in one locked write; replaced records drop their grants. Dotenv: `KEY=VALUE`, optional `export `, `#` comments, single quotes literal, double quotes with `\n \" \\` escapes and spanning lines, unquoted values trimmed with a ` #` comment stripped; invalid names are skipped and counted, never echoed; a missing `--names` entry is a usage error naming it. `--remove-source` deletes the file afterwards; interactively the user is asked. For `--from-env` a hint to unset the variables goes to stderr. Audit `capture` with `reason: "import from env|file"`.
+- L6. Change to L4: recovery runs only when the main key cannot open the vault (and the vault is not rolled back) and a staged key exists, so no command pays an extra keychain read. A staged key left by a crash before re-sealing protects nothing and the next `rekey` overwrites it. `vault.Rekey` landed with T2 (it is what retires keys); T3 added staging, promotion and recovery.
+- L7. Change to L5: `getenv` cannot tell an unset variable from an empty one, so both are `NAME is not set or empty in the environment`. A listed name twice is `NAME is listed twice`.
+- L8. Process note: in `internal/vault` (restore, retired keys, Rekey) the code was written before its tests ran, so no RED was observed there; every CLI command and the keychain staging had an observed RED.

@@ -13,8 +13,11 @@ type Record struct {
 	// regenerated when the value is replaced, and kept by metadata edits,
 	// mv and relink; grants bind to it so a grant can never authorize a
 	// different record that reuses the name.
-	ID          string
-	Value       secret.Secret
+	ID    string
+	Value secret.Secret
+	// Kind is "secret" (masked at capture) or "text" (visible at capture);
+	// empty means secret. Both are stored, injected and redacted alike.
+	Kind        string
 	Description string
 	Sensitive   bool
 	Binaries    []string
@@ -37,6 +40,7 @@ type Entry struct {
 type wireRecord struct {
 	ID          string   `json:"id"`
 	Value       string   `json:"value"`
+	Kind        string   `json:"kind,omitempty"`
 	Description string   `json:"description"`
 	Sensitive   bool     `json:"sensitive"`
 	Binaries    []string `json:"binaries"`
@@ -65,6 +69,7 @@ func toWire(r Record) wireRecord {
 	return wireRecord{
 		ID:          r.ID,
 		Value:       string(v),
+		Kind:        r.Kind,
 		Description: r.Description,
 		Sensitive:   r.Sensitive,
 		Binaries:    nonNil(r.Binaries),
@@ -78,6 +83,7 @@ func fromWire(name string, w wireRecord) Record {
 	return Record{
 		ID:          w.ID,
 		Value:       secret.New(name, []byte(w.Value)),
+		Kind:        w.Kind,
 		Description: w.Description,
 		Sensitive:   w.Sensitive,
 		Binaries:    append([]string(nil), w.Binaries...),

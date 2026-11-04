@@ -9,10 +9,15 @@ import (
 // a title of its own.
 func secretDialog(req SecretRequest) dialog {
 	_, body, _ := strings.Cut(Header(req), "\n")
+	input := "Value (input is hidden):"
+	if req.Visible {
+		input = "Value (visible):"
+	}
 	return dialog{
-		kind:  dialogSecret,
-		title: "gentle-vault: secret capture",
-		text:  strings.TrimRight(body, "\n") + "\n\nValue (input is hidden):",
+		kind:    dialogSecret,
+		title:   "gentle-vault: secret capture",
+		text:    strings.TrimRight(body, "\n") + "\n\n" + input,
+		visible: req.Visible,
 	}
 }
 

@@ -35,7 +35,7 @@ func (v *Vault) PutManyWithGrants(layer Layer, names []string, recs map[string]R
 				rec := recs[n]
 				if old, ok := secrets[n]; ok {
 					replaced = append(replaced, n)
-					rec.Description, rec.Sensitive = old.Description, old.Sensitive
+					rec.Kind, rec.Description, rec.Sensitive = old.Kind, old.Description, old.Sensitive
 					rec.Binaries, rec.Hosts = old.Binaries, old.Hosts
 				}
 				putIn(secrets, n, rec, false)

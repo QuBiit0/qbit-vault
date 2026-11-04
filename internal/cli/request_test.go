@@ -153,3 +153,75 @@ func TestRequestReasonAndSensitive(t *testing.T) {
 		t.Fatalf("sensitive offers %v", opts)
 	}
 }
+
+const dbFields = `"fields":[{"name":"DB_HOST","kind":"text","label":"Host"},{"name":"DB_USER","kind":"text"},{"name":"DB_PASSWORD","label":"Password","description":"staging db"}]`
+
+func TestRequestSeveralFieldsInOnePrompt(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_user\n", "set", "DB_USER", "--stdin") // already stored: no box
+	f := withBackend(t, answers(val("db.internal"), val("TESTSECRET_db_password"), pick(1)))
+	code, _, out := w.broker("request", envelope("request", w.outside, dbFields+`,"reason":"run the shop-api migrations"`))
+	if code != exitcode.OK {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	want := `{"ok":true,"refs":[{"name":"DB_HOST","ref":"secret://DB_HOST","layer":"global"},{"name":"DB_USER","ref":"secret://DB_USER","layer":"global"},{"name":"DB_PASSWORD","ref":"secret://DB_PASSWORD","layer":"global"}],"grant":{"scope":"session","expires_at":"TS"}}` + "\n"
+	if shape(out) != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+	if len(f.Calls) != 3 {
+		t.Fatalf("calls=%+v", f.Calls)
+	}
+	host, pass := f.Calls[0].Request, f.Calls[1].Request
+	if !host.Visible || host.Label != "Host" || host.Field != 1 || host.Fields != 2 || pass.Visible || pass.Field != 2 || pass.Label != "Password" {
+		t.Fatalf("boxes: %+v / %+v", host, pass)
+	}
+	if q := f.Calls[2].Q; q != "Allow DB_HOST (global), DB_USER (global), DB_PASSWORD (global) for: run the shop-api migrations" {
+		t.Fatalf("scope question=%q", q)
+	}
+	w.outRepo()
+	if w.value("DB_HOST") != "db.internal" || w.value("DB_PASSWORD") != "TESTSECRET_db_password" || w.value("DB_USER") != "TESTSECRET_user" {
+		t.Fatal("values")
+	}
+	_, lm, _ := w.broker("list", envelope("list", w.outside, ""))
+	kinds := map[string]string{}
+	for _, s := range lm["secrets"].([]any) {
+		e := s.(map[string]any)
+		kinds[e["name"].(string)] = e["kind"].(string)
+		if e["grant"] == nil {
+			t.Errorf("%s has no grant", e["name"])
+		}
+	}
+	if kinds["DB_HOST"] != "text" || kinds["DB_PASSWORD"] != "secret" || kinds["DB_USER"] != "secret" {
+		t.Fatalf("kinds=%v", kinds)
+	}
+	noFixtures(t, "multi-field response", out)
+}
+
+func TestRequestSeveralFieldsAllOrNothing(t *testing.T) {
+	w := newWorld(t)
+	before := w.snapshot()
+	withBackend(t, answers(val("db.internal"), prompttest.Answer{Err: prompt.ErrCancelled}))
+	req := envelope("request", w.outside, dbFields+`,"reason":"run the shop-api migrations"`)
+	if code, m, _ := w.broker("request", req); code != exitcode.Refusal || refusalType(m) != "user_declined" {
+		t.Fatalf("cancel at the second box: code=%d m=%v", code, m)
+	}
+	if w.snapshot() != before {
+		t.Fatal("a cancelled multi-field request stored something")
+	}
+	// Every name of the request is cooling down now.
+	withBackend(t, answers())
+	one := envelope("request", w.outside, `"name":"DB_PASSWORD","reason":"run the shop-api migrations"`)
+	if code, m, _ := w.broker("request", one); code != exitcode.Refusal || refusalType(m) != "rate_limited" {
+		t.Fatalf("cooldown: code=%d m=%v", code, m)
+	}
+	nine := `"fields":[`
+	for i := 0; i < 9; i++ {
+		if i > 0 {
+			nine += ","
+		}
+		nine += `{"name":"F` + strings.Repeat("X", i) + `"}`
+	}
+	if code, m, _ := w.broker("request", envelope("request", w.outside, nine+`],"reason":"too many fields at once"`)); code != exitcode.Refusal || refusalType(m) != "internal" {
+		t.Fatalf("nine fields: code=%d m=%v", code, m)
+	}
+}

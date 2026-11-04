@@ -22,8 +22,8 @@ Branch `feat/cli-skeleton`.
 | T1 | S1-S4, S7 | inline | `internal/broker`: envelope decode and validation, dispatch, capabilities, normative policy; `broker --op`; CLI backend for `list`, `exec`, `grant`, `revoke` | 60ee2ac | done |
 | T2 | S5, S7 | inline | `request` (single name): reason heuristic, cooldown, non-disclosure, in-process prompt, store and grant | 8de9a67 | done |
 | T3 | S5 | inline | multi-field `request` (2.2b) and backend rendering (2.2c) | | pending |
-| T4 | S5 | inline | `manage` (2.2a) | | pending |
-| T5 | S6 | inline | `mcp` stdio server (2.3) | | pending |
+| T4 | S5 | inline | `manage` (2.2a) | 2785344 | done |
+| T5 | S6 | inline | `mcp` stdio server (2.3) | 634802f | done |
 | T6 | S6 | inline | conformance harness (2.4) | | pending |
 
 ## Log
@@ -37,3 +37,4 @@ Branch `feat/cli-skeleton`.
 - L7. T2 notes: RED observed for every request test and for the grants cooldown tests. `record` no longer forces `by: user`: it is the default, and a broker capture is audited `by: agent` (R-AUD-01). Cooldowns live in `grants.enc` (new `cooldowns` array; the empty-body encoding gained `"cooldowns":[]`). A blank value at the request prompt is `internal` (`empty value`) without a cooldown.
 - L8. Order change: T4 (`manage`) and T5 (MCP) before T3 (multi-field), so the model-facing surface is usable end to end before the larger prompt-rendering work.
 - L9. T5 notes: go-sdk v1.8.0 (ServerOptions.Instructions confirmed in its source). The server uses `IOTransport` over the command's stdin/stdout instead of `StdioTransport`, so the end-to-end test drives real JSON-RPC through `execute`. The test keeps stdin open until the last answer arrives: a closed stdin ends the session before queued requests are answered, as with a real host closing the stream. Tool descriptions are checked verbatim against CONTRACT.md. Transitive compiled deps listed in AGENTS.md.
+- L10. T3 split: T3a (this commit) makes multi-field requests work end to end with consecutive boxes on every backend, text fields visible (tty echoes, zenity without --hide-text, kdialog --inputbox, osascript without hidden answer, PowerShell UseSystemPasswordChar off) and a `field N of M (label)` header line; records gain an optional `kind` (`omitempty`, so schema-1 bodies stay valid). T3b adds the single-form rendering R-CAP-08 asks of PowerShell and zenity. `set --stdin --fields` and `prompt --field` are for the Pi host and move to slice 4.3 (docs say so).

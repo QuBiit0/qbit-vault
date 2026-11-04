@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/broker"
@@ -25,18 +26,25 @@ func gaveUp(err error) bool {
 		(errors.As(err, &ce) && ce.code == "cancelled")
 }
 
-// Request is CONTRACT.md § request for one field (R-API-02, R-CAP-02..05):
-// one out-of-band prompt that asks the layer and the value when the name
-// does not resolve, then the scope; nothing is stored or granted unless the
-// user completes it. The response is the same whether the value existed, so
-// the model cannot enumerate the vault. A decline or cancel starts the
-// per-session cooldown of the name.
+// asked is one field of a request and where it stands before the prompt.
+type asked struct {
+	f         broker.Field
+	exists    bool
+	layer     vault.Layer
+	recordID  string
+	sensitive bool
+	value     []byte
+}
+
+// Request is CONTRACT.md § request (R-API-02, R-CAP-02..05, R-CAP-08/09):
+// one out-of-band prompt for every field. Fields whose name does not resolve
+// from cwd get a box (masked for secret, visible for text) after one layer
+// question; then one scope menu covers all of them, offering only scopes
+// every field allows. It is all-or-nothing: nothing is stored or granted
+// unless the user completes every step. The response is the same whether a
+// value existed, so the model cannot enumerate the vault. A decline or
+// cancel starts the cooldown of every name in the request.
 func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.RequestRequest) (broker.RequestResponse, error) {
-	if len(r.Fields) != 1 {
-		return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage("invalid request: fields")
-	}
-	f := r.Fields[0]
-	name := f.Name
 	g := b.bound(e)
 	s, err := g.openSession()
 	if err != nil {
@@ -45,35 +53,40 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	defer s.close()
 	cmd := quiet()
 
-	cooling, err := g.coolingDown(s, name)
-	if err != nil {
-		return broker.RequestResponse{}, asRefusal(err)
+	fields := make([]*asked, len(r.Fields))
+	var fresh []*asked
+	for i, f := range r.Fields {
+		on, err := g.coolingDown(s, f.Name)
+		if err != nil {
+			return broker.RequestResponse{}, asRefusal(err)
+		}
+		if on {
+			return broker.RequestResponse{}, refusal.New(refusal.RateLimited, f.Name)
+		}
+		a := &asked{f: f}
+		rec, l, rerr := s.v.Resolve(f.Name, e.Cwd)
+		switch {
+		case rerr == nil:
+			rec.Value.Wipe()
+			a.exists, a.layer, a.recordID, a.sensitive = true, l, rec.ID, rec.Sensitive
+		case errors.Is(rerr, vault.ErrNotFound):
+			fresh = append(fresh, a)
+		default:
+			return broker.RequestResponse{}, asRefusal(mapErr(rerr, f.Name))
+		}
+		fields[i] = a
 	}
-	if cooling {
-		return broker.RequestResponse{}, refusal.New(refusal.RateLimited, name)
-	}
-
-	// Where the name resolves now, before anything is asked.
-	var (
-		layer     vault.Layer
-		recordID  string
-		sensitive bool
-		exists    bool
-	)
-	rec, l, rerr := s.v.Resolve(name, e.Cwd)
-	switch {
-	case rerr == nil:
-		rec.Value.Wipe()
-		layer, recordID, sensitive, exists = l, rec.ID, rec.Sensitive, true
-	case !errors.Is(rerr, vault.ErrNotFound):
-		return broker.RequestResponse{}, asRefusal(mapErr(rerr, name))
-	}
+	defer func() {
+		for _, a := range fields {
+			clear(a.value)
+		}
+	}()
 	proj, perr := vault.ProjectLayer(e.Cwd)
 	inProject := perr == nil
 	if perr != nil && !errors.Is(perr, vault.ErrNoProject) {
 		return broker.RequestResponse{}, asRefusal(mapErr(perr, ""))
 	}
-	if !exists && r.SuggestedLayer == "project" && !inProject {
+	if len(fresh) > 0 && r.SuggestedLayer == "project" && !inProject {
 		return broker.RequestResponse{}, refusal.New(refusal.NoProject, "")
 	}
 
@@ -82,9 +95,11 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
 	}
 	declined := func(outcome string) error {
-		g.coolDown(s, name)
-		g.record(io.Discard, audit.Record{Event: audit.EventPrompt, Names: []string{name}, Layer: auditLayer(layer), Outcome: outcome})
-		return refusal.New(refusal.UserDeclined, name)
+		for _, a := range fields {
+			g.coolDown(s, a.f.Name)
+		}
+		g.record(io.Discard, audit.Record{Event: audit.EventPrompt, Names: namesOf(fields), Outcome: outcome})
+		return refusal.New(refusal.UserDeclined, firstName(fields))
 	}
 	fail := func(err error) error {
 		switch {
@@ -96,47 +111,63 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		return asRefusal(err)
 	}
 
-	var value []byte
-	if !exists {
-		layer = vault.Global()
-		if inProject {
-			def := 0
-			if r.SuggestedLayer == "project" {
-				def = 1
-			}
-			i, err := ask.Choose("Which layer is "+name+" for?", []string{"global", "this project (" + proj.Label + ")"}, def)
-			if err != nil {
-				return broker.RequestResponse{}, fail(err)
-			}
-			if i == 1 {
-				layer = proj
-			}
+	// The layer of the new values, asked once.
+	layer := vault.Global()
+	if len(fresh) > 0 && inProject {
+		def := 0
+		if r.SuggestedLayer == "project" {
+			def = 1
 		}
-		sec, err := ask.Secret(prompt.SecretRequest{
-			Name: name, Reason: r.Reason, Host: hostOf(e.Session), Session: e.Session,
-			Project: layerRequest(layer), Existing: false,
-		})
+		verb := "is " + namesOf(fresh)[0]
+		if len(fresh) > 1 {
+			verb = "are " + strings.Join(namesOf(fresh), ", ")
+		}
+		i, err := ask.Choose("Which layer "+verb+" for?", []string{"global", "this project (" + proj.Label + ")"}, def)
+		if err != nil {
+			return broker.RequestResponse{}, fail(err)
+		}
+		if i == 1 {
+			layer = proj
+		}
+	}
+	for i, a := range fresh {
+		a.layer = layer
+		req := prompt.SecretRequest{Name: a.f.Name, Reason: r.Reason, Host: hostOf(e.Session), Session: e.Session,
+			Project: layerRequest(layer), Label: a.f.Label, Visible: a.f.Kind == "text"}
+		if len(fresh) > 1 {
+			req.Field, req.Fields = i+1, len(fresh)
+		}
+		sec, err := ask.Secret(req)
 		if err != nil {
 			return broker.RequestResponse{}, fail(err)
 		}
 		raw := sec.Reveal()
 		sec.Wipe()
-		defer clear(raw)
-		switch value = bytes.TrimSpace(raw); {
-		case len(value) == 0:
+		a.value = bytes.Clone(bytes.TrimSpace(raw))
+		clear(raw)
+		switch {
+		case len(a.value) == 0:
 			return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage("empty value")
-		case len(value) > maxValueBytes:
+		case len(a.value) > maxValueBytes:
 			return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage("value too large")
 		}
 	}
 
-	scopes := g.allowedScopes(name, layer, sensitive, scopeOrder)
+	// One scope for all: only those every field allows.
+	scopes := scopeOrder
+	for _, a := range fields {
+		scopes = intersect(scopes, g.allowedScopes(a.f.Name, a.layer, a.sensitive, scopeOrder))
+	}
 	if len(scopes) == 0 {
-		return broker.RequestResponse{}, refusal.New(refusal.ScopeNotAllowed, name)
+		return broker.RequestResponse{}, refusal.New(refusal.ScopeNotAllowed, firstName(fields))
 	}
 	proposed, _ := grants.ParseScope(r.SuggestedScope)
 	opts, def := scopeLabels(e.Session, scopes, proposed)
-	i, err := ask.Choose(fmt.Sprintf("Allow %s (%s) for: %s", name, layerText(layer), r.Reason), append(opts, "deny"), def)
+	var who []string
+	for _, a := range fields {
+		who = append(who, fmt.Sprintf("%s (%s)", a.f.Name, layerText(a.layer)))
+	}
+	i, err := ask.Choose("Allow "+strings.Join(who, ", ")+" for: "+r.Reason, append(opts, "deny"), def)
 	if err != nil {
 		return broker.RequestResponse{}, fail(err)
 	}
@@ -145,29 +176,78 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	}
 	scope := scopes[i]
 
-	if !exists {
-		res, err := s.v.ReplaceWithGrants(layer, name, vault.Record{Value: secret.New(name, value), Description: f.Description}, newGrantsEditor())
-		if err != nil {
-			return broker.RequestResponse{}, asRefusal(mapErr(err, name))
+	if len(fresh) > 0 {
+		names := namesOf(fresh)
+		recs := make(map[string]vault.Record, len(fresh))
+		for _, a := range fresh {
+			recs[a.f.Name] = vault.Record{Value: secret.New(a.f.Name, a.value), Kind: a.f.Kind, Description: a.f.Description}
 		}
-		recordID = res.RecordID
-		g.record(io.Discard, audit.Record{Event: audit.EventCapture, Names: []string{name}, Layer: auditLayer(layer), By: "agent", Reason: r.Reason})
+		_, _, err := s.v.PutManyWithGrants(layer, names, recs, newGrantsEditor())
+		for _, rec := range recs {
+			rec.Value.Wipe()
+		}
+		if err != nil {
+			return broker.RequestResponse{}, asRefusal(mapErr(err, ""))
+		}
+		for _, a := range fresh {
+			rec, _, err := s.v.Resolve(a.f.Name, e.Cwd)
+			if err != nil {
+				return broker.RequestResponse{}, asRefusal(mapErr(err, a.f.Name))
+			}
+			rec.Value.Wipe()
+			a.recordID = rec.ID
+		}
+		g.record(io.Discard, audit.Record{Event: audit.EventCapture, Names: names, Layer: auditLayer(layer), By: "agent", Reason: r.Reason})
 	}
-	req := g.grantRequest(name, layer, recordID, scope, 0, sensitive)
-	hash, err := g.promptToken(cmd, s, req)
-	if err != nil {
-		return broker.RequestResponse{}, asRefusal(err)
+
+	out := broker.RequestResponse{OK: true}
+	for _, a := range fields {
+		req := g.grantRequest(a.f.Name, a.layer, a.recordID, scope, 0, a.sensitive)
+		hash, err := g.promptToken(cmd, s, req)
+		if err != nil {
+			return broker.RequestResponse{}, asRefusal(err)
+		}
+		gr, err := g.create(cmd, s, req, hash)
+		if err != nil {
+			return broker.RequestResponse{}, asRefusal(err)
+		}
+		if len(out.Refs) == 0 {
+			out.Grant = broker.GrantInfo{Scope: string(gr.Scope), ExpiresAt: expiryText(gr.ExpiresAt)}
+		}
+		out.Refs = append(out.Refs, broker.Ref{Name: a.f.Name, Ref: "secret://" + a.f.Name, Layer: layerName(a.layer)})
 	}
-	gr, err := g.create(cmd, s, req, hash)
-	if err != nil {
-		return broker.RequestResponse{}, asRefusal(err)
-	}
-	g.record(io.Discard, audit.Record{Event: audit.EventPrompt, Names: []string{name}, Layer: auditLayer(layer), Scope: string(scope), Outcome: "issued"})
-	ref := broker.Ref{Name: name, Ref: "secret://" + name, Layer: layerName(layer)}
-	out := broker.RequestResponse{OK: true, Refs: []broker.Ref{ref},
-		Grant: broker.GrantInfo{Scope: string(gr.Scope), ExpiresAt: expiryText(gr.ExpiresAt)}}
+	g.record(io.Discard, audit.Record{Event: audit.EventPrompt, Names: namesOf(fields), Scope: string(scope), Outcome: "issued"})
 	if r.Single {
-		out.Ref, out.Layer = ref.Ref, ref.Layer
+		out.Ref, out.Layer = out.Refs[0].Ref, out.Refs[0].Layer
 	}
 	return out, nil
+}
+
+func namesOf(as []*asked) []string {
+	out := make([]string, len(as))
+	for i, a := range as {
+		out[i] = a.f.Name
+	}
+	return out
+}
+
+func firstName(as []*asked) string {
+	if len(as) == 1 {
+		return as[0].f.Name
+	}
+	return ""
+}
+
+// intersect keeps the scopes of a that are also in b, in a's order.
+func intersect(a, b []grants.Scope) []grants.Scope {
+	var out []grants.Scope
+	for _, x := range a {
+		for _, y := range b {
+			if x == y {
+				out = append(out, x)
+				break
+			}
+		}
+	}
+	return out
 }

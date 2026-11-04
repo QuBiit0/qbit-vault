@@ -155,7 +155,7 @@ func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResu
 	}
 	for _, en := range entries {
 		meta := broker.SecretMeta{
-			Name: en.Name, Layer: layerName(en.Layer), OverridesGlobal: en.OverridesGlobal, Kind: "secret",
+			Name: en.Name, Layer: layerName(en.Layer), OverridesGlobal: en.OverridesGlobal, Kind: kindOf(en.Record),
 			Description: en.Record.Description, Sensitive: en.Record.Sensitive,
 			Binaries: nonNil(en.Record.Binaries), Hosts: nonNil(en.Record.Hosts),
 			CreatedAt: en.Record.CreatedAt, UpdatedAt: en.Record.UpdatedAt,
@@ -274,4 +274,12 @@ func (b *cliBackend) Revoke(_ context.Context, e broker.Envelope, r broker.Revok
 		return broker.RevokeResponse{}, asRefusal(err)
 	}
 	return broker.RevokeResponse{OK: true, Revoked: n}, nil
+}
+
+// kindOf is a record's field kind; records stored before kinds are secret.
+func kindOf(r vault.Record) string {
+	if r.Kind == "" {
+		return "secret"
+	}
+	return r.Kind
 }

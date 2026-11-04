@@ -70,6 +70,7 @@ func psPrelude(d dialog) string {
 	fmt.Fprintf(&b, "$cancelLabel = Dec %s\n", psString(cancelLabel))
 	fmt.Fprintf(&b, "$opts = @(%s)\n", strings.Join(opts, ", "))
 	fmt.Fprintf(&b, "$def = %d\n", d.def)
+	fmt.Fprintf(&b, "$hide = $%t\n", !d.visible)
 	return b.String()
 }
 
@@ -133,7 +134,7 @@ $p.Controls.Add($l)
 `
 
 const psSecretInput = `$tb = New-Object System.Windows.Forms.TextBox
-$tb.UseSystemPasswordChar = $true
+$tb.UseSystemPasswordChar = $hide
 $tb.Width = 480
 $tb.MaxLength = 70000
 $p.Controls.Add($tb)

@@ -78,6 +78,13 @@ type SecretRequest struct {
 	Project string // project label, "" for the global layer
 	// Existing reports that a value is already stored under Name.
 	Existing bool
+	// Label names the field in a capture of several (default the name).
+	Label string
+	// Visible is a text field (R-CAP-09): shown while typed, not masked.
+	Visible bool
+	// Field and Fields place this box in a capture of several: "Field of
+	// Fields". Fields <= 1 is a single capture.
+	Field, Fields int
 }
 
 // Backend asks the user. Every method blocks until the user answers.
@@ -203,8 +210,14 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 	var out secret.Secret
 	err := b.with(func(ctx context.Context, t Terminal) error {
 		_, _ = io.WriteString(t, Header(req))
-		_, _ = io.WriteString(t, "Value (input is hidden): ")
-		raw, err := t.ReadHidden(ctx)
+		read := t.ReadHidden
+		if req.Visible {
+			_, _ = io.WriteString(t, "Value (visible): ")
+			read = t.ReadLine
+		} else {
+			_, _ = io.WriteString(t, "Value (input is hidden): ")
+		}
+		raw, err := read(ctx)
 		if err != nil {
 			return readErr(err)
 		}
@@ -314,12 +327,22 @@ func Header(req SecretRequest) string {
 	if req.Existing {
 		value = "already stored (it will be replaced)"
 	}
+	if req.Visible {
+		value += ", visible while typed"
+	}
 	var b strings.Builder
 	b.WriteString("gentle-vault: secret capture\n")
 	fmt.Fprintf(&b, "  name:    %s\n", escape(req.Name))
 	fmt.Fprintf(&b, "  reason:  %s\n", escape(req.Reason))
 	fmt.Fprintf(&b, "  from:    host %s, session %s\n", orDash(req.Host), orDash(req.Session))
 	fmt.Fprintf(&b, "  layer:   %s\n", layer)
+	if req.Fields > 1 {
+		label := req.Label
+		if label == "" {
+			label = req.Name
+		}
+		fmt.Fprintf(&b, "  field:   %d of %d (%s)\n", req.Field, req.Fields, escape(label))
+	}
 	fmt.Fprintf(&b, "  value:   %s\n", value)
 	return b.String()
 }

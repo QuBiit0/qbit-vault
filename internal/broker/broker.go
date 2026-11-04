@@ -43,11 +43,11 @@ const (
 	minPromptToken  = 16
 )
 
-// FieldKinds and MaxFields are what `request` accepts; capabilities reports
-// them. Multi-field requests land with roadmap slice 2.2b.
+// FieldKinds and MaxFields are what `request` accepts (R-CAP-08, R-CAP-09);
+// capabilities reports them.
 var (
-	FieldKinds = []string{"secret"}
-	MaxFields  = 1
+	FieldKinds = []string{"secret", "text"}
+	MaxFields  = 8
 )
 
 // Transport says who sent the request. The model transport (MCP) can never

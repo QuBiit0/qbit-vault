@@ -44,6 +44,7 @@ type dialog struct {
 	text    string // lines separated by \n
 	options []string
 	def     int
+	visible bool // a secret dialog for a text field: no masking
 }
 
 // command is a helper invocation. Stdin holds the script, when the helper

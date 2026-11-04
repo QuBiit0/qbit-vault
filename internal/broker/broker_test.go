@@ -140,7 +140,7 @@ func TestErrorsNeverEchoInput(t *testing.T) {
 
 func TestCapabilities(t *testing.T) {
 	got := string(Handle(context.Background(), []byte(env("capabilities", "")), &fake{}, TransportHost))
-	want := `{"ok":true,"contract":"gentle-ai.secrets-broker/v1","capabilities":"1.0","ops":["request","list","exec","manage","grant","revoke","capabilities"],"layers":["global","project"],"prompt_backends":["zenity","tty"],"field_kinds":["secret"],"max_fields":1,"keychain":"secret-service","streaming":true,"sync":false}` + "\n"
+	want := `{"ok":true,"contract":"gentle-ai.secrets-broker/v1","capabilities":"1.0","ops":["request","list","exec","manage","grant","revoke","capabilities"],"layers":["global","project"],"prompt_backends":["zenity","tty"],"field_kinds":["secret","text"],"max_fields":8,"keychain":"secret-service","streaming":true,"sync":false}` + "\n"
 	if got != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
 	}

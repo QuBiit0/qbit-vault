@@ -81,7 +81,7 @@ func TestPowerShellCommandShape(t *testing.T) {
 		t.Fatalf("argv %q", c.Args)
 	}
 	s := string(c.Stdin)
-	for _, must := range []string{"UseSystemPasswordChar = $true", "TopMost = $true", "exit 2", "OpenStandardOutput", "UseMnemonic = $false"} {
+	for _, must := range []string{"$hide = $true\n", "UseSystemPasswordChar = $hide", "TopMost = $true", "exit 2", "OpenStandardOutput", "UseMnemonic = $false"} {
 		if !strings.Contains(s, must) {
 			t.Errorf("script lacks %q", must)
 		}

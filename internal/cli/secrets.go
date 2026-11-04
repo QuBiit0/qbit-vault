@@ -391,7 +391,7 @@ func newSet(g *globals) *cobra.Command {
 				if e.Name == name && sameLayer(e.Layer, layer) {
 					replaced = true
 					// Metadata the user did not pass again survives a replace.
-					rec.Description, rec.Sensitive = e.Record.Description, e.Record.Sensitive
+					rec.Kind, rec.Description, rec.Sensitive = e.Record.Kind, e.Record.Description, e.Record.Sensitive
 					rec.Binaries, rec.Hosts = e.Record.Binaries, e.Record.Hosts
 				}
 			}

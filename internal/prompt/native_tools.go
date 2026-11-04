@@ -22,6 +22,9 @@ func (zenityTool) build(path string, d dialog) command {
 	switch d.kind {
 	case dialogSecret:
 		args = []string{"--entry", "--hide-text", "--no-markup", "--title=" + d.title, "--text=" + d.text}
+		if d.visible {
+			args = append(args[:1], args[2:]...)
+		}
 	case dialogChoose:
 		args = []string{"--list", "--radiolist", "--no-markup", "--title=" + d.title, "--text=" + d.text,
 			"--column=Pick", "--column=Index", "--column=Option", "--hide-column=2", "--print-column=2"}
@@ -74,7 +77,11 @@ func (kdialogTool) build(path string, d dialog) command {
 	args := []string{"--title", rich(d.title)}
 	switch d.kind {
 	case dialogSecret:
-		args = append(args, "--password", rich(d.text))
+		if d.visible {
+			args = append(args, "--inputbox", rich(d.text))
+		} else {
+			args = append(args, "--password", rich(d.text))
+		}
 	case dialogChoose:
 		args = append(args, "--radiolist", rich(d.text))
 		for i, o := range d.options {
@@ -110,7 +117,11 @@ func (osascriptTool) build(path string, d dialog) command {
 	var s strings.Builder
 	switch d.kind {
 	case dialogSecret:
-		fmt.Fprintf(&s, `display dialog %s with title %s default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel" with icon caution`+"\n", asString(d.text), asString(d.title))
+		hidden := " with hidden answer"
+		if d.visible {
+			hidden = ""
+		}
+		fmt.Fprintf(&s, `display dialog %s with title %s default answer ""%s buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel" with icon caution`+"\n", asString(d.text), asString(d.title), hidden)
 		s.WriteString("return text returned of result\n")
 	case dialogChoose:
 		items := make([]string, len(d.options))

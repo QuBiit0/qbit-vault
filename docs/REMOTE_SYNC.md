@@ -170,7 +170,7 @@ The server verifies only what it can: token validity, CAS on `version`, sizes an
 2. On a newer version: verify AAD (`account_id`, `generation` ≥ local, `version` ≥ `state.json.remote.last_version`, else `remote_rollback`) and decrypt. A higher generation first runs the key swap of § 4.5.
 3. Under `vault.lock`: load local `L` and base `B` (`remote/base.enc`, the body of the last version this device agreed with), compute `M = merge(B, L, R)` (§ 7.3), save `M` locally through the normal save path (snapshot, atomic write).
 4. If `M ≠ R` or a push is pending: seal `M` as `version = R.version + 1`, `PUT` with `base_version = R.version`. On 200, set `last_version` and `base = M`. On 409 go back to 1 (at most 3 times, then `pending`).
-5. Upload the audit anchor if the last one is older than 10 minutes (§ 8).
+5. Upload the audit anchor if the last one is older than 10 minutes (§ 8). It is best effort: a failure never fails the round.
 
 The network calls run outside `vault.lock`; only step 3 holds it.
 
@@ -195,6 +195,8 @@ Tombstones `{key, hlc, deleted_by}` are kept 180 days. A device that comes back 
 
 When both sides changed a key, the losing version is kept in the encrypted body under `conflicts` (at most 100 entries, 30 days): `{id, key, record or deleted: true, lost_at, winner_device}`. Nothing is ever lost silently. `remote conflicts` lists names, layers, dates and devices (never values); `remote resolve NAME [--global|--project] --keep current|conflict` (user-only, § 4) swaps or discards the kept version, and the result syncs like any change. `remote status`, `doctor` and the human output of `list` say `N sync conflicts` while any exist.
 
+`--keep current` discards every kept version of the record; `--keep conflict` swaps (the replaced record becomes the kept version, so `--keep current` afterwards ends the conflict) and gives the record that returns a fresh `hlc` and record `id`. The merge unions the `conflicts` of both sides, which alone would bring back a conflict that one device resolved, so the merge treats kept conflicts three ways like records: a conflict the base held and one side no longer holds was resolved there and stays resolved; any other conflict of either side is kept (`internal/merge`). `remote conflicts` is local and read-only; it lists the winner's label from the roster.
+
 ### 7.5 Projects on several machines
 
 A project layer is identified by a random `id`, not by its path. Its `roots` map each device to that device's checkout (STORAGE § Layers). Resolution uses `roots[this device]` only. On a machine where a layer has no root yet, it is invisible to resolution; when the repository of `cwd` has an `origin` URL (read from `.git/config`, normalized: scheme and `.git` suffix dropped, host lower-cased) equal to the layer's `origin`, human commands print `hint: project secrets "<label>" from another device match this repository; run 'gentle-vault link <label>'` on stderr, and the broker's `list` returns `unlinked_match: {label}` so the agent can suggest it. Only the user links: `gentle-vault link LABEL [DIR]` confirms out of band and is never automatic, because a match by URL alone would let any clone of that repository receive its secrets.
@@ -203,11 +205,15 @@ A project layer is identified by a random `id`, not by its path. Its `roots` map
 
 `remote history` lists the server's last 10 versions (version, writer device label, time). `remote restore --version N` (user-only) makes the vault equal to version N by writing the difference as new changes with fresh `hlc`, so it syncs to every device as an ordinary edit; the replaced state stays in local backups.
 
+The command first runs a round, so the difference is computed against the newest state; then it downloads version N and verifies it as in § 7.2 step 2: AEAD, and an AAD of this account, the **current** generation and version N. A version sealed under an older generation cannot be opened with the current key (the key it used is retired) and is refused with `restore_unavailable`, as is a version the server no longer keeps (it holds the last 10). Only the records are restored: the roster (a revoked device stays revoked), the kept conflicts and the grants keep their current state. A record that differs from N is written with N's content, a fresh `hlc` and a fresh record `id` (grants bind to the `id`, so a grant of the replaced record does not come back); a record N lacks is deleted and leaves a tombstone; an identical record is left alone, with its clock. Then the push is the normal one.
+
 ## 8. Audit anchor
 
 The local audit log is hash-chained and anchored by `audit.head`, but a local attacker who rewrites both files can make `audit --verify` pass (THREAT_MODEL R8). With sync enabled, each round uploads at most every 10 minutes an **anchor**: `{device_id, seq, line, at}` from `audit.head`, sealed with `AAK`. The server keeps the last 100 anchors per device and learns only how many there are and when they arrive.
 
-`audit --verify` with sync enabled also fetches this device's anchors (5 s budget; `--offline` skips; unreachable prints `remote anchor: unavailable` and does not fail the verification). For every anchor whose `seq` is within the log, the raw line at `seq` must hash to `line`; otherwise the result is `anchor_mismatch` at that line. A log shorter than the highest anchored `seq` is `truncated`. Human output adds `remote anchor ok (seq N, <time>)`. A rewrite is now detectable unless the attacker also controls the server and removed the anchors (R8, narrowed).
+The time of the last upload is kept in `state.json` under `remote_anchor_at` (beside the `remote` object, which `logout` and a revocation clear with it); `remote status` shows it.
+
+`audit --verify` with sync enabled also fetches this device's anchors (5 s budget; `--offline` skips; unreachable prints `remote anchor: unavailable` and does not fail the verification). For every anchor whose `seq` is within the log, the raw line at `seq` must hash to `line`; otherwise the result is `anchor_mismatch` at that line. A log shorter than the highest anchored `seq` is `truncated`. Human output adds `remote anchor ok (seq N, <time>)`. The check runs only when the local chain is valid, and only anchors this device's key opens count: one sealed before a key rotation, or altered by the server, is ignored (when none opens the output says `remote anchor: none uploaded`, or `remote anchor: missing (...)` when this device has uploaded anchors before: a key rotation since, or a server that removed or altered them; it does not fail the verification, but it no longer looks like a fresh account). A rewrite is now detectable unless the attacker also controls the server and removed the anchors (R8, narrowed).
 
 ## 9. What the server learns
 
@@ -241,6 +247,7 @@ The local audit log is hash-chained and anchored by `audit.head`, but a local at
 | `pairing_failed` | 1 | fingerprint or confirmation code mismatch, pairing expired |
 | `device_revoked` | 1 | this device was revoked; sync is now off |
 | `server_incompatible` | 1 | the server speaks another API major |
+| `restore_unavailable` | 1 | `remote restore`: the version is not on the server, or was sealed under an older account key |
 
 None of these messages contains a value, a key, a code or a token.
 

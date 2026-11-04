@@ -195,6 +195,7 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 			if applied || newer {
 				res = "synced"
 			}
+			g.uploadAnchor(ctx, s, st, c, deviceID)
 			return roundResult{Result: res, Version: rver}, nil
 		}
 
@@ -217,6 +218,7 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 		if err := saveRemoteState(s.home, st); err != nil {
 			return roundResult{}, err
 		}
+		g.uploadAnchor(ctx, s, st, c, deviceID)
 		return roundResult{Result: "synced", Version: ver}, nil
 	}
 	st.PendingPush = true
@@ -367,7 +369,7 @@ func newRemoteStatus(g *globals) *cobra.Command {
 			}
 			out := statusBody{OK: true, Server: st.Server, Account: short(st.AccountID), Device: short(id), Generation: st.Generation,
 				Version: st.LastVersion, LastSync: st.LastPullAt, PendingPush: st.PendingPush, Conflicts: conflicts, Devices: live,
-				RecoveryConfirmed: !st.RecoveryUnconfirmed, Anchor: "none uploaded", Warnings: []string{}}
+				RecoveryConfirmed: !st.RecoveryUnconfirmed, Anchor: anchorText(s.home), Warnings: []string{}}
 			if st.PendingPush {
 				out.Warnings = append(out.Warnings, "pending push")
 			}
@@ -406,6 +408,15 @@ func newRemoteStatus(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// anchorText is the anchor state `remote status` shows: when the last audit
+// anchor was uploaded, or none.
+func anchorText(home string) string {
+	if at, ok, err := vault.ReadAnchorAt(home); err == nil && ok {
+		return at.UTC().Format(time.RFC3339)
+	}
+	return "none uploaded"
 }
 
 // warningText is the stderr line of a status warning.

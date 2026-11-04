@@ -72,7 +72,8 @@ func newRemote(g *globals) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newRemoteRegister(g), newRemoteJoin(g), newRemoteApprove(g), newRemoteSync(g),
-		newRemoteStatus(g), newRemoteDevices(g), newRemoteLogout(g), newRemoteRevokeDevice(g), newRemoteRecoveryKey(g))
+		newRemoteStatus(g), newRemoteDevices(g), newRemoteLogout(g), newRemoteRevokeDevice(g), newRemoteRecoveryKey(g),
+		newRemoteConflicts(g), newRemoteResolve(g), newRemoteHistory(g), newRemoteRestore(g))
 	return cmd
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/QuBiit0/gentle-vault/internal/envelope"
 	"github.com/QuBiit0/gentle-vault/internal/merge"
@@ -108,6 +109,54 @@ func DisableRemote(home string) error {
 			return err
 		}
 		delete(st.extra, remoteStateKey)
+		delete(st.extra, anchorAtKey)
+		return (&store{home: home}).saveState(st)
+	})
+}
+
+// anchorAtKey is the key of state.json that holds the time of the last audit
+// anchor this device uploaded (REMOTE_SYNC § 8). It sits beside "remote"
+// because the Remote object has no field for it; DisableRemote and a zero
+// WriteAnchorAt remove it.
+const anchorAtKey = "remote_anchor_at"
+
+// ReadAnchorAt returns when the last audit anchor was uploaded; ok is false
+// when none was.
+func ReadAnchorAt(home string) (at time.Time, ok bool, err error) {
+	st, err := loadState(home)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	raw, found := st.extra[anchorAtKey]
+	if !found {
+		return time.Time{}, false, nil
+	}
+	var s string
+	if json.Unmarshal(raw, &s) != nil {
+		return time.Time{}, false, nil
+	}
+	at, perr := time.Parse(time.RFC3339, s)
+	return at, perr == nil, nil
+}
+
+// WriteAnchorAt records the time of an anchor upload under the vault lock,
+// keeping the rest of state.json. A zero time removes the record.
+func WriteAnchorAt(home string, at time.Time) error {
+	v := &Vault{st: &store{home: home}}
+	return v.locked(false, func() error {
+		st, err := loadState(home)
+		if err != nil {
+			return err
+		}
+		if at.IsZero() {
+			delete(st.extra, anchorAtKey)
+		} else {
+			b, err := json.Marshal(at.UTC().Format(time.RFC3339))
+			if err != nil {
+				return err
+			}
+			st.extra[anchorAtKey] = b
+		}
 		return (&store{home: home}).saveState(st)
 	})
 }

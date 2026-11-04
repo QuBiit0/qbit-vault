@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -81,15 +82,22 @@ type auditVerifyBody struct {
 	Valid   bool           `json:"valid"`
 	Records int            `json:"records"`
 	Problem *audit.Problem `json:"problem,omitempty"`
+	// Anchor is the state of the check against the server's anchors, only
+	// when the vault syncs and the check ran: ok, none, unavailable or
+	// mismatch (REMOTE_SYNC § 8).
+	Anchor    string `json:"anchor,omitempty"`
+	AnchorSeq int64  `json:"anchor_seq,omitempty"`
+	AnchorAt  string `json:"anchor_at,omitempty"`
 }
 
 func newAudit(g *globals) *cobra.Command {
 	var (
-		tail   int
-		since  string
-		name   string
-		event  string
-		verify bool
+		tail    int
+		since   string
+		name    string
+		event   string
+		verify  bool
+		offline bool
 	)
 	cmd := &cobra.Command{
 		Use:   "audit [--tail N] [--since DURATION] [--name NAME] [--event EVENT] | --verify",
@@ -100,6 +108,9 @@ func newAudit(g *globals) *cobra.Command {
 			filtered := f.Changed("tail") || f.Changed("since") || f.Changed("name") || f.Changed("event")
 			if verify && filtered {
 				return usageError{"--verify cannot be combined with filters"}
+			}
+			if offline && !verify {
+				return usageError{"--offline only applies to --verify"}
 			}
 			if tail <= 0 {
 				return usageError{"invalid --tail: must be a positive number"}
@@ -124,7 +135,7 @@ func newAudit(g *globals) *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if verify {
-				return runVerify(g, out, home)
+				return runVerify(cmd.Context(), g, out, home, offline)
 			}
 			recs, err := audit.Read(home, audit.Filter{Tail: tail, Since: from, Name: name, Event: event})
 			if err != nil {
@@ -155,16 +166,27 @@ func newAudit(g *globals) *cobra.Command {
 	fl.StringVar(&name, "name", "", "show only records naming this secret")
 	fl.StringVar(&event, "event", "", "show only records of this event")
 	fl.BoolVar(&verify, "verify", false, "validate the hash chain instead of listing")
+	fl.BoolVar(&offline, "offline", false, "with --verify, do not check the server's audit anchors")
 	return cmd
 }
 
-func runVerify(g *globals, out io.Writer, home string) error {
+func runVerify(ctx context.Context, g *globals, out io.Writer, home string, offline bool) error {
 	res, err := audit.Verify(home)
 	if err != nil {
 		return err
 	}
+	// With sync enabled the log is also compared with the anchors the server
+	// kept (§ 8); an unreachable server never fails the verification.
+	var anchor anchorState
+	if st, rerr := vault.ReadRemote(home); res.Valid && !offline && !g.remoteOff() && rerr == nil && st != nil {
+		anchor = g.verifyAnchors(ctx, home, st)
+		if anchor.State == anchorMismatch {
+			res.Valid, res.Problem = false, anchor.Problem
+		}
+	}
 	if g.JSON {
-		if err := writeJSON(out, auditVerifyBody{OK: true, Valid: res.Valid, Records: res.Records, Problem: res.Problem}); err != nil {
+		body := auditVerifyBody{OK: true, Valid: res.Valid, Records: res.Records, Problem: res.Problem, Anchor: anchor.State, AnchorSeq: anchor.Seq, AnchorAt: anchor.At}
+		if err := writeJSON(out, body); err != nil {
 			return err
 		}
 	} else if res.Valid {
@@ -175,6 +197,11 @@ func runVerify(g *globals, out io.Writer, home string) error {
 		if _, err := fmt.Fprintf(out, "audit log ok (%d %s)\n", res.Records, noun); err != nil {
 			return err
 		}
+		if line := anchorLine(anchor); line != "" {
+			if _, err := fmt.Fprintln(out, line); err != nil {
+				return err
+			}
+		}
 	} else if _, err := fmt.Fprintf(out, "audit log broken at line %d (seq %d): %s\n", res.Problem.Line, res.Problem.Seq, res.Problem.Reason); err != nil {
 		return err
 	}
@@ -182,6 +209,22 @@ func runVerify(g *globals, out io.Writer, home string) error {
 		return exitError{exitcode.Failure}
 	}
 	return nil
+}
+
+// anchorLine is the human line for the remote half of a verification; empty
+// when it did not run.
+func anchorLine(a anchorState) string {
+	switch a.State {
+	case anchorOK:
+		return fmt.Sprintf("remote anchor ok (seq %d, %s)", a.Seq, a.At)
+	case anchorUnavailable:
+		return "remote anchor: unavailable"
+	case anchorNone:
+		return "remote anchor: none uploaded"
+	case anchorMissing:
+		return "remote anchor: missing (this device uploaded anchors; the server returned none this key opens)"
+	}
+	return ""
 }
 
 // auditLine is the human form of one record:

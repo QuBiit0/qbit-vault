@@ -763,6 +763,9 @@ func newList(g *globals) *cobra.Command {
 			if _, err = io.WriteString(out, listTable(shown)); err != nil {
 				return err
 			}
+			if n, cerr := s.v.ConflictCount(); cerr == nil && n > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "%d sync conflicts; run 'gentle-vault remote conflicts'\n", n)
+			}
 			// A layer synced from another device that matches this
 			// repository is only suggested; the user links it (R-SYNC-11).
 			if label, ok, merr := s.v.UnlinkedMatch(cwd); merr == nil && ok {

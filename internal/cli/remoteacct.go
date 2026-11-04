@@ -672,6 +672,7 @@ func newRemoteLogout(g *globals) *cobra.Command {
 			if err := vault.WriteRemote(s.home, nil); err != nil {
 				return mapErr(err, "")
 			}
+			_ = vault.WriteAnchorAt(s.home, time.Time{})
 			g.auditRemote(cmd, "logged out")
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), struct {

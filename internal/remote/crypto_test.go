@@ -232,3 +232,25 @@ func decodedLen(b64 string) int { b, _ := base64.StdEncoding.DecodeString(b64); 
 
 // vaultKeyVector is HKDF-SHA256(0x01*32, salt "gentle-vault/v1", info "remote-vault"), first 8 bytes.
 const vaultKeyVector = "888fb20b8110087c"
+
+func TestEnvelopeEphPub(t *testing.T) {
+	issuer, recipient := DeviceFromSecret(key(1)), DeviceFromSecret(key(2))
+	raw, err := SealKeyEnvelope(issuer, recipient.BoxPub, EnvelopeAAD{AccountID: "acc1", DeviceID: "d2", Generation: 1, Issuer: "d1"}, key(9))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eph, err := EnvelopeEphPub(raw)
+	if err != nil || len(eph) != 32 {
+		t.Fatalf("eph_pub: %d bytes, %v", len(eph), err)
+	}
+	// It is the key the confirmation code binds: two envelopes differ.
+	raw2, _ := SealKeyEnvelope(issuer, recipient.BoxPub, EnvelopeAAD{AccountID: "acc1", DeviceID: "d2", Generation: 1, Issuer: "d1"}, key(9))
+	if eph2, _ := EnvelopeEphPub(raw2); bytes.Equal(eph, eph2) {
+		t.Fatal("two envelopes share an ephemeral key")
+	}
+	for _, bad := range [][]byte{nil, []byte(`{}`), []byte(`{"format":"gentle-vault-keyenv/1","eph_pub":"AAAA"}`), []byte(`not json`)} {
+		if _, err := EnvelopeEphPub(bad); !errors.Is(err, ErrEnvelope) {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+}

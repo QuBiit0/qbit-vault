@@ -48,12 +48,13 @@ const (
 	EventUninstall = "uninstall"
 	EventWarning   = "warning"
 	EventPrompt    = "prompt"
+	EventRemote    = "remote"
 )
 
 var events = []string{
 	EventInit, EventCapture, EventGrant, EventExec, EventManage, EventRefusal,
 	EventRevoke, EventRm, EventMv, EventEdit, EventRelink, EventLink, EventRekey,
-	EventRestore, EventUninstall, EventWarning, EventPrompt,
+	EventRestore, EventUninstall, EventWarning, EventPrompt, EventRemote,
 }
 
 // ValidEvent reports whether e is a known event name.

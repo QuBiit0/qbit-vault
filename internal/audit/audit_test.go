@@ -557,8 +557,11 @@ func TestUnknownEvent(t *testing.T) {
 	if !ValidEvent(EventPrompt) || !ValidEvent(EventLink) {
 		t.Error("prompt or link is not valid")
 	}
-	if len(events) != 17 {
-		t.Fatalf("%d events, want 17", len(events))
+	if !ValidEvent(EventRemote) || EventRemote != "remote" {
+		t.Error("remote is not valid")
+	}
+	if len(events) != 18 {
+		t.Fatalf("%d events, want 18", len(events))
 	}
 }
 

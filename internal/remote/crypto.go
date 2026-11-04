@@ -324,6 +324,24 @@ func signedBytes(ad, eph, ct []byte) []byte {
 	return out
 }
 
+// EnvelopeEphPub returns the ephemeral public key of a key envelope: the
+// part of the pairing confirmation code (§ 4.2) that ties it to this
+// envelope. It reads the key only; opening and verifying is OpenKeyEnvelope.
+func EnvelopeEphPub(raw []byte) ([]byte, error) {
+	var s sealed[EnvelopeAAD]
+	if json.Unmarshal(raw, &s) != nil || s.Format != formatKeyEnv {
+		return nil, ErrEnvelope
+	}
+	eph, err := unb64(s.EphPub)
+	if err != nil {
+		return nil, ErrEnvelope
+	}
+	if _, err := ecdh.X25519().NewPublicKey(eph); err != nil {
+		return nil, ErrEnvelope
+	}
+	return eph, nil
+}
+
 // OpenKeyEnvelope verifies the issuer's signature with issuerSignPub (from
 // the caller's own roster, never from the server), then opens the envelope
 // with the recipient's box key.

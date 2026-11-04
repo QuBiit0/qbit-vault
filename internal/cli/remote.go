@@ -266,8 +266,11 @@ func (g *globals) connect(ctx context.Context, st *vault.Remote, d thisDevice) (
 }
 
 // requireRemote returns the vault's remote state or errNotConfigured.
-func requireRemote(s *session) (*vault.Remote, error) {
-	st, err := vault.ReadRemote(s.home)
+func requireRemote(s *session) (*vault.Remote, error) { return requireRemoteAt(s.home) }
+
+// requireRemoteAt is requireRemote for a command that holds no session.
+func requireRemoteAt(home string) (*vault.Remote, error) {
+	st, err := vault.ReadRemote(home)
 	if err != nil {
 		return nil, mapErr(err, "")
 	}

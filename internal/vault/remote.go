@@ -36,6 +36,17 @@ type Remote struct {
 	PendingPush         bool   `json:"pending_push"`
 	LastPullAt          string `json:"last_pull_at,omitempty"`
 	RecoveryUnconfirmed bool   `json:"recovery_unconfirmed,omitempty"`
+	// Summary is what `remote status` shows when the vault cannot be opened
+	// without a prompt: counts only, never a name or a label.
+	Summary RemoteSummary `json:"summary,omitzero"`
+}
+
+// RemoteSummary holds the counts of the last sync round (At is when).
+type RemoteSummary struct {
+	At            string `json:"at"`
+	Conflicts     int    `json:"conflicts"`
+	Devices       int    `json:"devices"`
+	RecoveryAdded int    `json:"recovery_added"`
 }
 
 // ReadRemote returns the remote state, nil when the vault does not sync.

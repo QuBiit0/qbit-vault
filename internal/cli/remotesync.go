@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -83,6 +84,30 @@ func loadBase(v *vault.Vault) (*merge.Body, bool, error) {
 	defer clear(raw)
 	b, err := parseBody(raw)
 	return b, err == nil, err
+}
+
+// summaryOf counts what `remote status` shows, for a vault that later
+// cannot be opened without a prompt. A read failure leaves no summary.
+func summaryOf(s *session, deviceID string) vault.RemoteSummary {
+	roster, err := s.v.Roster()
+	if err != nil {
+		return vault.RemoteSummary{}
+	}
+	conflicts, err := s.v.ConflictCount()
+	if err != nil {
+		return vault.RemoteSummary{}
+	}
+	sum := vault.RemoteSummary{At: nowUTC(), Conflicts: conflicts}
+	for id, d := range roster {
+		if d.RevokedAt != nil {
+			continue
+		}
+		sum.Devices++
+		if id != deviceID && d.AddedBy == "recovery" {
+			sum.RecoveryAdded++
+		}
+	}
+	return sum
 }
 
 func saveRemoteState(home string, st *vault.Remote) error {
@@ -188,6 +213,7 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 				return roundResult{}, mapErr(err, "")
 			}
 			st.LastVersion, st.PendingPush = rver, false
+			st.Summary = summaryOf(s, deviceID)
 			if err := saveRemoteState(s.home, st); err != nil {
 				return roundResult{}, err
 			}
@@ -215,6 +241,7 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 			return roundResult{}, mapErr(err, "")
 		}
 		st.LastVersion, st.PendingPush = ver, false
+		st.Summary = summaryOf(s, deviceID)
 		if err := saveRemoteState(s.home, st); err != nil {
 			return roundResult{}, err
 		}
@@ -320,8 +347,10 @@ type statusBody struct {
 	Version           int64    `json:"version"`
 	LastSync          string   `json:"last_sync"`
 	PendingPush       bool     `json:"pending_push"`
-	Conflicts         int      `json:"conflicts"`
-	Devices           int      `json:"devices"`
+	Conflicts         *int     `json:"conflicts"` // null while locked
+	Devices           *int     `json:"devices"`   // null while locked
+	Locked            bool     `json:"locked"`
+	CountsFrom        string   `json:"counts_from,omitempty"` // "last_sync" while locked
 	RecoveryConfirmed bool     `json:"recovery_confirmed"`
 	Anchor            string   `json:"anchor"`
 	Warnings          []string `json:"warnings"`
@@ -340,24 +369,36 @@ func newRemoteStatus(g *globals) *cobra.Command {
 		Short: "Show the sync state of this device",
 		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, err := g.openSession()
+			// Read-only and never prompting: state.json needs no key; the
+			// roster and the conflict count do, so without a key that opens
+			// the vault as it is they read "locked".
+			home := g.Home()
+			if _, err := vault.ReadID(home); err != nil {
+				return mapErr(err, "")
+			}
+			st, err := requireRemoteAt(home)
 			if err != nil {
 				return err
 			}
-			defer s.close()
-			st, err := requireRemote(s)
-			if err != nil {
+			var (
+				roster    map[string]merge.Device
+				conflicts int
+			)
+			s, err := g.openSessionQuiet()
+			locked := errors.Is(err, errSessionLocked)
+			switch {
+			case err != nil && !locked:
 				return err
+			case err == nil:
+				defer s.close()
+				if roster, err = s.v.Roster(); err != nil {
+					return mapErr(err, "")
+				}
+				if conflicts, err = s.v.ConflictCount(); err != nil {
+					return mapErr(err, "")
+				}
 			}
-			roster, err := s.v.Roster()
-			if err != nil {
-				return mapErr(err, "")
-			}
-			conflicts, err := s.v.ConflictCount()
-			if err != nil {
-				return mapErr(err, "")
-			}
-			id, _ := vault.ReadDeviceID(s.home)
+			id, _ := vault.ReadDeviceID(home)
 			live, label := 0, ""
 			for did, d := range roster {
 				if d.RevokedAt == nil {
@@ -368,8 +409,19 @@ func newRemoteStatus(g *globals) *cobra.Command {
 				}
 			}
 			out := statusBody{OK: true, Server: st.Server, Account: short(st.AccountID), Device: short(id), Generation: st.Generation,
-				Version: st.LastVersion, LastSync: st.LastPullAt, PendingPush: st.PendingPush, Conflicts: conflicts, Devices: live,
-				RecoveryConfirmed: !st.RecoveryUnconfirmed, Anchor: anchorText(s.home), Warnings: []string{}}
+				Version: st.LastVersion, LastSync: st.LastPullAt, PendingPush: st.PendingPush, Locked: locked,
+				RecoveryConfirmed: !st.RecoveryUnconfirmed, Anchor: anchorText(home), Warnings: []string{}}
+			cached := locked && st.Summary.At != ""
+			switch {
+			case !locked:
+				out.Conflicts, out.Devices = &conflicts, &live
+			case cached:
+				conflicts, live = st.Summary.Conflicts, st.Summary.Devices
+				out.Conflicts, out.Devices, out.CountsFrom = &conflicts, &live, "last_sync"
+				if n := st.Summary.RecoveryAdded; n > 0 {
+					out.Warnings = append(out.Warnings, fmt.Sprintf("%d %s added by recovery", n, plural(n, "device", "devices")))
+				}
+			}
 			if st.PendingPush {
 				out.Warnings = append(out.Warnings, "pending push")
 			}
@@ -396,8 +448,15 @@ func newRemoteStatus(g *globals) *cobra.Command {
 				}
 				yn := map[bool]string{true: "yes", false: "no"}
 				w := cmd.OutOrStdout()
-				fmt.Fprintf(w, "server:        %s\naccount:       %s\ndevice:        %s (%s)\ngeneration:    %d\nversion:       %d\nlast sync:     %s\npending push:  %s\nconflicts:     %d\ndevices:       %d\nanchor:        %s\n",
-					st.Server, out.Account, out.Device, label, st.Generation, st.LastVersion, last, yn[st.PendingPush], conflicts, live, out.Anchor)
+				device, nConflicts, nDevices := fmt.Sprintf("%s (%s)", out.Device, label), strconv.Itoa(conflicts), strconv.Itoa(live)
+				switch {
+				case cached:
+					device, nConflicts, nDevices = out.Device, nConflicts+" (as of the last sync)", nDevices+" (as of the last sync)"
+				case locked:
+					device, nConflicts, nDevices = out.Device, lockedText, lockedText
+				}
+				fmt.Fprintf(w, "server:        %s\naccount:       %s\ndevice:        %s\ngeneration:    %d\nversion:       %d\nlast sync:     %s\npending push:  %s\nconflicts:     %s\ndevices:       %s\nanchor:        %s\n",
+					st.Server, out.Account, device, st.Generation, st.LastVersion, last, yn[st.PendingPush], nConflicts, nDevices, out.Anchor)
 				for _, w2 := range out.Warnings {
 					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warningText(w2))
 				}
@@ -409,6 +468,9 @@ func newRemoteStatus(g *globals) *cobra.Command {
 		},
 	}
 }
+
+// lockedText stands for what `remote status` cannot read without the key.
+const lockedText = "locked (run 'gentle-vault unlock')"
 
 // anchorText is the anchor state `remote status` shows: when the last audit
 // anchor was uploaded, or none.

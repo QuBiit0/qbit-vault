@@ -21,7 +21,10 @@ const (
 	pullInterval = 60 * time.Second
 )
 
-const warnUnreachable = "warning: not synced (server unreachable); will retry"
+const (
+	warnUnreachable = "warning: not synced (server unreachable); will retry"
+	warnConflict    = "warning: not synced (the server changed while syncing); will retry"
+)
 
 // Remote outcomes shown in the "remote" field of --json success objects.
 const (
@@ -101,8 +104,8 @@ func (g *globals) pushAfter(ctx context.Context, stderr io.Writer, s *session) s
 		warnRound(stderr, err)
 		return remotePending
 	}
-	if res.Result == remotePending {
-		fmt.Fprintln(stderr, warnUnreachable)
+	if res.Result == remotePending { // only after the retries lost to another device
+		fmt.Fprintln(stderr, warnConflict)
 		return remotePending
 	}
 	return remoteSynced

@@ -151,6 +151,12 @@ func newRemoteRestore(g *globals) *cobra.Command {
 			if err := askYes(ask, q); err != nil {
 				return err
 			}
+			// Only now does anything change: the round brings this device up
+			// to date (and pushes what it holds), then the difference is
+			// written against the newest state.
+			if err := g.syncBeforeRestore(cmd, s); err != nil {
+				return err
+			}
 			changed, err := s.v.RestoreRecords(body)
 			if err != nil {
 				return mapErr(err, "")
@@ -173,29 +179,23 @@ func newRemoteRestore(g *globals) *cobra.Command {
 	return cmd
 }
 
-// fetchVersion brings this device up to date, then downloads version n and
-// verifies it: AEAD, and an AAD whose account is this one, whose generation
-// is the current one and whose version is n. The server is not trusted to
-// have sent what was asked. It returns the plaintext body (the caller wipes
-// it), the writer's label and the write time.
+// fetchVersion downloads version n and verifies it: AEAD, and an AAD whose
+// account is this one, whose generation is the current one and whose version
+// is n. The server is not trusted to have sent what was asked. It changes
+// nothing, locally or on the server, so a cancelled restore leaves no trace;
+// a version sealed under a newer account key needs a sync first. It returns
+// the plaintext body (the caller wipes it), the writer's label and the write
+// time.
 func (g *globals) fetchVersion(cmd *cobra.Command, s *session, n int64) ([]byte, string, string, error) {
 	st, err := requireRemote(s)
 	if err != nil {
 		return nil, "", "", err
 	}
-	ctx, c, d, done, err := g.connectFor(cmd, s, st, 60*time.Second)
+	ctx, c, _, done, err := g.connectFor(cmd, s, st, 60*time.Second)
 	if err != nil {
 		return nil, "", "", err
 	}
 	defer done()
-	// The difference is written against the newest state, so records that
-	// arrived from other devices are replaced too.
-	if _, err := g.syncRound(ctx, s, c, d.id); err != nil {
-		return nil, "", "", err
-	}
-	if st, err = requireRemote(s); err != nil {
-		return nil, "", "", err
-	}
 	vv, err := c.GetVersion(ctx, n)
 	if errors.Is(err, remote.ErrNotFound) {
 		return nil, "", "", errVersionGone
@@ -204,6 +204,8 @@ func (g *globals) fetchVersion(cmd *cobra.Command, s *session, n int64) ([]byte,
 	}
 	if gen, ok := peekGeneration(vv.Blob); ok && gen < st.Generation {
 		return nil, "", "", errVersionOlderKey
+	} else if ok && gen > st.Generation {
+		return nil, "", "", errRecoveryStale
 	}
 	keys := remote.Subkeys(s.key)
 	defer keys.Vault.Wipe()
@@ -224,4 +226,20 @@ func (g *globals) fetchVersion(cmd *cobra.Command, s *session, n int64) ([]byte,
 		return nil, "", "", mapErr(err, "")
 	}
 	return body, writerLabel(roster, aad.Writer), oneLine(aad.CreatedAt), nil
+}
+
+// syncBeforeRestore is the round that precedes a confirmed restore, so the
+// records other devices wrote are replaced too.
+func (g *globals) syncBeforeRestore(cmd *cobra.Command, s *session) error {
+	st, err := requireRemote(s)
+	if err != nil {
+		return err
+	}
+	ctx, c, d, done, err := g.connectFor(cmd, s, st, 60*time.Second)
+	if err != nil {
+		return err
+	}
+	defer done()
+	_, err = g.syncRound(ctx, s, c, d.id)
+	return err
 }

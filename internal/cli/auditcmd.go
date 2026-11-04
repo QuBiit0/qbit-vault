@@ -178,10 +178,18 @@ func runVerify(ctx context.Context, g *globals, out io.Writer, home string, offl
 	// With sync enabled the log is also compared with the anchors the server
 	// kept (§ 8); an unreachable server never fails the verification.
 	var anchor anchorState
-	if st, rerr := vault.ReadRemote(home); res.Valid && !offline && !g.remoteOff() && rerr == nil && st != nil {
-		anchor = g.verifyAnchors(ctx, home, st)
-		if anchor.State == anchorMismatch {
-			res.Valid, res.Problem = false, anchor.Problem
+	if res.Valid && !offline && !g.remoteOff() {
+		st, rerr := vault.ReadRemote(home)
+		switch {
+		case rerr != nil && !errors.Is(rerr, os.ErrNotExist):
+			// The state that says whether this vault syncs cannot be read:
+			// say so instead of passing for a vault that does not sync.
+			anchor = anchorState{State: anchorUnavailable}
+		case rerr == nil && st != nil:
+			anchor = g.verifyAnchors(ctx, home, st)
+			if anchor.State == anchorMismatch {
+				res.Valid, res.Problem = false, anchor.Problem
+			}
 		}
 	}
 	if g.JSON {

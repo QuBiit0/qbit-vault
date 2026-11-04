@@ -59,16 +59,8 @@ var (
 	errRevokeAlready = usageError{"that device is already revoked"}
 )
 
-// rotateCrash is a test seam: it is called at named points of a rotation and
-// a non-nil result stops the command there, as a crash would.
-var rotateCrash func(step string) error
-
-func crashAt(step string) error {
-	if rotateCrash != nil {
-		return rotateCrash(step)
-	}
-	return nil
-}
+// crashAt is called at named points of a rotation; only a build with the
+// crashseam tag lets a test stop the command there (remotecrash_on.go).
 
 var deviceIDRE = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
 
@@ -128,21 +120,26 @@ func (g *globals) swapKey(s *session, mk secret.Secret) error {
 		}
 	}
 	// The vault keeps the key it is opened with: give it a copy of its own,
-	// so wiping the caller's mk cannot erase it.
+	// so wiping the caller's mk cannot erase it. The copy is wiped on every
+	// path that does not hand it to the session.
 	raw := mk.Reveal()
 	own := secret.New("master", raw)
 	clear(raw)
+	handed := false
+	defer func() {
+		if !handed {
+			own.Wipe()
+		}
+	}()
 	nv, err := vault.Open(s.home, own)
 	if err != nil {
-		own.Wipe()
 		return mapErr(err, "")
 	}
 	if err := nv.ResealRemoteFiles(); err != nil {
-		own.Wipe()
 		return mapErr(err, "")
 	}
 	s.key.Wipe()
-	s.key, s.v = own, nv
+	s.key, s.v, handed = own, nv, true
 	return nil
 }
 

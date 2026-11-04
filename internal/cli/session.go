@@ -73,6 +73,40 @@ func (g *globals) openSession() (*session, error) {
 	return &session{v: v, key: key, mode: mode, home: home}, nil
 }
 
+// errSessionLocked: the vault cannot be opened without a prompt or a repair.
+var errSessionLocked = errors.New("vault locked")
+
+// openSessionQuiet is openSession for the commands that must never prompt
+// and never change anything on their own (`remote status`, the anchor check
+// of `audit --verify`). It uses the OS keychain or an unexpired unlock cache
+// and nothing else: no passphrase prompt, and no finishing of an interrupted
+// rekey. A key it cannot get that way, or a vault that key does not open
+// (a rekey waits to be finished), is errSessionLocked; every other failure is
+// mapped as in openSession.
+func (g *globals) openSessionQuiet() (*session, error) {
+	home := g.Home()
+	id, err := vault.ReadID(home)
+	if err != nil {
+		return nil, mapErr(err, "")
+	}
+	key, mode, err := keychain.Unlock(home, id, keychain.Options{})
+	switch {
+	case errors.Is(err, keychain.ErrUnavailable), errors.Is(err, keychain.ErrNoKey), errors.Is(err, keychain.ErrBadPassphrase):
+		return nil, errSessionLocked
+	case err != nil:
+		return nil, mapErr(err, "")
+	}
+	v, err := vault.Open(home, key)
+	if err != nil {
+		key.Wipe()
+		if errors.Is(err, vault.ErrCorrupt) && !errors.Is(err, vault.ErrRollback) {
+			return nil, errSessionLocked
+		}
+		return nil, mapErr(err, "")
+	}
+	return &session{v: v, key: key, mode: mode, home: home}, nil
+}
+
 // openRecovering opens the vault with key. A vault the key cannot open (not a
 // rolled-back one) may have been re-sealed by a rekey that died before it
 // promoted the new key: that rekey is finished and the vault opened with the

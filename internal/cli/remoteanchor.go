@@ -70,13 +70,15 @@ type anchorState struct {
 }
 
 // verifyAnchors fetches this device's anchors and checks the log against
-// them. Anything that keeps it from asking (no key, no network, a refusing
+// them. Anything that keeps it from asking (no key without a prompt, no network, a refusing
 // server) is "unavailable": the local verification stands on its own.
 func (g *globals) verifyAnchors(ctx context.Context, home string, st *vault.Remote) anchorState {
 	unavailable := anchorState{State: anchorUnavailable}
 	ctx, cancel := context.WithTimeout(ctx, anchorBudget)
 	defer cancel()
-	s, err := g.openSession()
+	// Never prompts and never finishes a rekey: without a key that opens the
+	// vault as it is, the check is unavailable.
+	s, err := g.openSessionQuiet()
 	if err != nil {
 		return unavailable
 	}

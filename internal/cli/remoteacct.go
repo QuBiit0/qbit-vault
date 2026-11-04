@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/QuBiit0/gentle-vault/internal/audit"
+	"github.com/QuBiit0/gentle-vault/internal/exitcode"
 	"github.com/QuBiit0/gentle-vault/internal/keychain"
 	"github.com/QuBiit0/gentle-vault/internal/merge"
 	"github.com/QuBiit0/gentle-vault/internal/prompt"
@@ -31,6 +32,29 @@ const (
 
 	maxKeyChecks = 5
 )
+
+// Failures after the account or the key already changed: each says the state
+// the device is in and the command that finishes it (REMOTE_SYNC § 4.1, § 4.2).
+var (
+	errRegisterLocal = codedError{"internal", "the account was created on the server but this device could not save its sync state; run 'gentle-vault remote register' again with a new invite code", exitcode.Failure}
+	errJoinLocal     = codedError{"internal", "the vault now uses the account key but this device could not save its sync state; run 'gentle-vault remote join --recovery' to finish", exitcode.Failure}
+)
+
+const msgJoinHalf = "this device joined the account but the first sync did not finish; run 'gentle-vault remote sync'"
+
+// joinHalf is the error of a first round that failed after the join saved
+// its state: the typed code of the failure stays, the message names the way
+// out. A revoked device keeps its own message (sync is off, nothing to run).
+func joinHalf(err error) error {
+	var ce codedError
+	switch {
+	case errors.As(err, &ce) && ce.code == errRevoked.code:
+		return err
+	case errors.As(err, &ce):
+		return codedError{ce.code, msgJoinHalf, ce.exit}
+	}
+	return codedError{"internal", msgJoinHalf, exitcode.Failure}
+}
 
 func (g *globals) auditRemote(cmd *cobra.Command, detail string) {
 	g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRemote, Detail: detail})
@@ -150,18 +174,10 @@ func newRemoteRegister(g *globals) *cobra.Command {
 
 			// The account exists: keep what the device needs before showing
 			// the recovery key, so a cancel there loses nothing.
-			if err := s.v.SaveDeviceSecret(dk); err != nil {
-				return mapErr(err, "")
-			}
-			if err := s.v.SaveBase(plain); err != nil {
-				return mapErr(err, "")
-			}
-			if err := s.v.EditRoster(func(r map[string]merge.Device) { r[deviceID] = entry }); err != nil {
-				return mapErr(err, "")
-			}
 			st := &vault.Remote{Server: server, CAFile: caFile, AccountID: accountID, Generation: 1, LastVersion: 1, LastPullAt: nowUTC(), RecoveryUnconfirmed: true}
-			if err := vault.WriteRemote(s.home, st); err != nil {
-				return mapErr(err, "")
+			if err := saveRegistered(s.v, dk, plain, deviceID, entry, s.home, st); err != nil {
+				dropDevice(cmd, server, caFile, deviceID, dev)
+				return errRegisterLocal
 			}
 			g.auditRemote(cmd, "registered")
 
@@ -182,6 +198,21 @@ func newRemoteRegister(g *globals) *cobra.Command {
 	cmd.Flags().StringVar(&server, "server", "", "server URL (https://, or http:// to localhost)")
 	cmd.Flags().StringVar(&caFile, "ca-file", "", "trust this CA certificate file for TLS")
 	return cmd
+}
+
+// saveRegistered keeps what a registered device needs, state.json last: the
+// vault only counts as syncing once all of it is there.
+func saveRegistered(v *vault.Vault, dk secret.Secret, base []byte, deviceID string, entry merge.Device, home string, st *vault.Remote) error {
+	if err := v.SaveDeviceSecret(dk); err != nil {
+		return err
+	}
+	if err := v.SaveBase(base); err != nil {
+		return err
+	}
+	if err := v.EditRoster(func(r map[string]merge.Device) { r[deviceID] = entry }); err != nil {
+		return err
+	}
+	return vault.WriteRemote(home, st)
 }
 
 // clientErr maps NewClient failures; a bad CA file is a usage error.
@@ -318,14 +349,18 @@ type joining struct {
 
 // dropDevice removes this device from the server, best effort: it was
 // registered by an approval that this side then refused.
-func (j *joining) dropDevice() {
-	ctx, cancel := netCtx(j.cmd, 10*time.Second)
+func (j *joining) dropDevice() { dropDevice(j.cmd, j.server, j.caFile, j.deviceID, j.dev) }
+
+// dropDevice removes a device this side registered and cannot keep, best
+// effort, so its id can register again.
+func dropDevice(cmd *cobra.Command, server, caFile, deviceID string, dev remote.Device) {
+	ctx, cancel := netCtx(cmd, 10*time.Second)
 	defer cancel()
-	c, err := remote.NewClient(j.server, j.caFile)
+	c, err := remote.NewClient(server, caFile)
 	if err != nil {
 		return
 	}
-	if c.Login(ctx, j.deviceID, j.dev) == nil {
+	if c.Login(ctx, deviceID, dev) == nil {
 		_ = c.DeleteSelf(ctx)
 	}
 }
@@ -471,45 +506,56 @@ func (j *joining) finish(ctx context.Context) error {
 	if err != nil {
 		return mapErr(err, "")
 	}
-	opts := keychain.Options{Passphrase: j.g.askPassphrase}
-	if err := keychain.Stage(home, id, j.s.key, j.mk, opts); err != nil {
-		return promptFail(err, "")
-	}
-	if err := vault.Rekey(home, j.s.key, j.mk); err != nil {
-		if errors.Is(err, vault.ErrRekeyNotStarted) {
-			_ = keychain.Unstage(home, id, opts)
+	if !sameSecret(j.s.key, j.mk) { // a vault that already uses the account key (a join run again) skips the swap
+		opts := keychain.Options{Passphrase: j.g.askPassphrase}
+		if err := keychain.Stage(home, id, j.s.key, j.mk, opts); err != nil {
+			return promptFail(err, "")
 		}
-		return mapErr(err, "")
-	}
-	if err := keychain.Promote(home, id, j.mk, opts); err != nil {
-		return errNotPromoted
-	}
-	nv, err := vault.Open(home, j.mk)
-	if err != nil {
-		return mapErr(err, "")
-	}
-	if err := nv.SaveDeviceSecret(j.dk); err != nil {
-		return mapErr(err, "")
-	}
-	if j.entry != nil {
-		if err := nv.EditRoster(func(r map[string]merge.Device) { r[j.deviceID] = *j.entry }); err != nil {
+		if err := vault.Rekey(home, j.s.key, j.mk); err != nil {
+			if errors.Is(err, vault.ErrRekeyNotStarted) {
+				_ = keychain.Unstage(home, id, opts)
+			}
 			return mapErr(err, "")
 		}
+		if err := keychain.Promote(home, id, j.mk, opts); err != nil {
+			return errNotPromoted
+		}
 	}
-	st := &vault.Remote{Server: j.server, CAFile: j.caFile, AccountID: j.accountID, Generation: j.generation}
-	if err := vault.WriteRemote(home, st); err != nil {
-		return mapErr(err, "")
+	nv, err := j.saveJoined(home)
+	if err != nil {
+		// The account knows this device but the device cannot keep that:
+		// remove it from the server so the join can be run again.
+		j.dropDevice()
+		return errJoinLocal
 	}
 	j.g.auditRemote(j.cmd, "joined ("+j.how+")")
 	res, err := j.g.syncRound(ctx, &session{v: nv, key: j.mk, mode: j.s.mode, home: home}, j.c, j.deviceID)
 	if err != nil {
-		return err
+		return joinHalf(err)
 	}
 	if j.g.JSON {
 		return writeJSON(j.cmd.OutOrStdout(), accountBody{OK: true, Joined: true, Server: j.server, Account: short(j.accountID), Version: res.Version})
 	}
 	_, err = fmt.Fprintf(j.cmd.OutOrStdout(), "joined %s (account %s, version %d)\n", j.host, short(j.accountID), res.Version)
 	return err
+}
+
+// saveJoined keeps what a device that holds the account key needs, state.json
+// last, and returns the vault opened with that key.
+func (j *joining) saveJoined(home string) (*vault.Vault, error) {
+	nv, err := vault.Open(home, j.mk)
+	if err != nil {
+		return nil, err
+	}
+	if err := nv.SaveDeviceSecret(j.dk); err != nil {
+		return nil, err
+	}
+	if j.entry != nil {
+		if err := nv.EditRoster(func(r map[string]merge.Device) { r[j.deviceID] = *j.entry }); err != nil {
+			return nil, err
+		}
+	}
+	return nv, vault.WriteRemote(home, &vault.Remote{Server: j.server, CAFile: j.caFile, AccountID: j.accountID, Generation: j.generation})
 }
 
 // ---- approve (§ 4.2 steps 3-6) ----
@@ -520,6 +566,8 @@ type approveBody struct {
 	Device   string `json:"device"`
 	Label    string `json:"label"`
 }
+
+const warnApproveRoster = "warning: the new device was approved on the server but this vault could not record it in the roster; check 'gentle-vault remote devices'"
 
 func newRemoteApprove(g *globals) *cobra.Command {
 	return &cobra.Command{
@@ -609,11 +657,12 @@ func newRemoteApprove(g *globals) *cobra.Command {
 				return remoteErr(err, "")
 			}
 			entry := merge.Device{Label: label, SignPub: b64(keys.SignPub), BoxPub: b64(keys.BoxPub), AddedAt: nowUTC(), AddedBy: "pairing"}
-			if err := s.v.EditRoster(func(r map[string]merge.Device) { r[keys.DeviceID] = entry }); err != nil {
-				return mapErr(err, "")
-			}
+			// The server accepted: the new device can finish joining whatever
+			// happens here, so the code is shown either way.
 			g.auditRemote(cmd, "approved "+keys.DeviceID)
-			if _, err := g.syncRound(ctx, s, c, me.id); err != nil {
+			if err := s.v.EditRoster(func(r map[string]merge.Device) { r[keys.DeviceID] = entry }); err != nil {
+				fmt.Fprintln(cmd.ErrOrStderr(), warnApproveRoster)
+			} else if _, err := g.syncRound(ctx, s, c, me.id); err != nil {
 				var ce codedError
 				if !errors.As(err, &ce) || ce.code != "remote_unreachable" {
 					return err

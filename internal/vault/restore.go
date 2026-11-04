@@ -44,7 +44,7 @@ func ListBackups(home string) ([]Backup, error) {
 	}
 	var out []Backup
 	for _, e := range entries {
-		if !e.IsDir() || !ValidBackupID(e.Name()) {
+		if !e.IsDir() || !ValidBackupID(e.Name()) || !vaultBackup(filepath.Join(root, e.Name())) {
 			continue
 		}
 		files, err := os.ReadDir(filepath.Join(root, e.Name()))

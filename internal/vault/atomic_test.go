@@ -2,6 +2,7 @@ package vault
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -128,5 +129,53 @@ func TestWriteAtomicCrashSeamKeepsTarget(t *testing.T) {
 	matches, _ := filepath.Glob(filepath.Join(home, "*.tmp.*"))
 	if len(matches) != 0 {
 		t.Fatalf("temp files left behind: %v", matches)
+	}
+}
+
+// Config snapshots of host registration (internal/filemerge) share
+// backups/ but are not vault backups: pruning must never remove them, or an
+// uninstall could no longer restore a config file byte for byte.
+func TestPruneKeepsConfigSnapshots(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "00000000T000000Z", "C", "Users", "u", ".claude")
+	if err := os.MkdirAll(cfg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, "settings.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		d := filepath.Join(dir, fmt.Sprintf("2026010%dT000000Z", i+1))
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "vault.enc"), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := pruneBackups(dir, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg, "settings.json")); err != nil {
+		t.Fatal("pruning removed a config snapshot")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 3 { // the config snapshot + the 2 newest vault backups
+		t.Fatalf("%d entries left, want 3", len(entries))
+	}
+}
+
+func TestListBackupsSkipsConfigSnapshots(t *testing.T) {
+	home := t.TempDir()
+	cfg := filepath.Join(home, "backups", "20260101T000000.000000000Z", "C", "Users", "u", ".codex")
+	if err := os.MkdirAll(cfg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, "config.toml"), []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bs, err := ListBackups(home)
+	if err != nil || len(bs) != 0 {
+		t.Fatalf("backups = %+v, %v", bs, err)
 	}
 }

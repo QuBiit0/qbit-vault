@@ -233,6 +233,23 @@ func removeSnapshot(dir string) {
 // pruneBackups keeps the newest keep snapshot directories. Names sort
 // chronologically because the timestamp format is fixed-width UTC and the
 // same-tick suffix is fixed-width too.
+// vaultBackup reports whether a backups/ entry is one of the vault's own
+// snapshots: files only. A config snapshot of host registration
+// (internal/filemerge) mirrors an absolute path as a directory tree and is
+// never pruned here, so uninstall can still restore that file.
+func vaultBackup(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
 func pruneBackups(dir string, keep int) error {
 	if keep <= 0 {
 		keep = defaultBackupsKeep
@@ -246,7 +263,7 @@ func pruneBackups(dir string, keep int) error {
 	}
 	var names []string
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() && vaultBackup(filepath.Join(dir, e.Name())) {
 			names = append(names, e.Name())
 		}
 	}

@@ -107,11 +107,21 @@ Differences from what this document said before: the PostToolUse replacement fie
 
 ```toml
 [mcp_servers.qbit-vault]
-command = "qbit-vault"
+command = "/abs/path/to/qbit-vault"
 args = ["mcp"]
+
+# only when the vault home is not ~/.qbit-vault:
+[mcp_servers.qbit-vault.env]
+QBIT_VAULT_HOME = "/abs/path/to/vault"
 ```
 
-Sandbox note: Codex's sandbox may block the native dialog from spawning; `init` sets `env = { QBIT_VAULT_PROMPT = "tty" }` on Linux/macOS when it detects a seatbelt/landlock sandbox config, which makes `request` read from `/dev/tty` with echo off instead.
+Format checked against https://developers.openai.com/codex/mcp (§ Configure with config.toml) on 2026-11-04: `[mcp_servers.<name>]` tables with `command` (required), `args`, `env`, `startup_timeout_sec` (default 10) and `tool_timeout_sec` (default 60). `init` writes only `command`, `args` and, for a custom vault home, the `env` subtable; the timeouts keep Codex's defaults. `command` is the absolute path of the running binary, written as a TOML basic string (backslashes and quotes escaped).
+
+Only our table is edited, as text, through `internal/filemerge`: every other byte of `config.toml` (comments, other `[mcp_servers.*]` tables, line endings, a missing final newline) stays identical, the file is snapshotted first and written atomically, and `uninstall` removes just our table. A config that defines our table in a form the editor cannot edit safely (inline table, dotted keys, an array of tables, a table defined twice) is refused and left untouched. Detection: `~/.codex` is a directory or `codex` is on `PATH`.
+
+Sandbox note: `init` does **not** set `QBIT_VAULT_PROMPT`. The Codex docs (checked 2026-11-04) say nothing that requires it, and the sandbox they describe governs the shell commands the model runs; Codex spawns MCP servers itself, as ordinary child processes, so we expect the native dialog to open as it does from any other process (not yet verified end to end inside a Codex session). Forcing `tty` would be wrong by default: an MCP server's stdin and stdout are the protocol pipe, and the terminal prompt needs a controlling terminal, which the server may not have. The prompt already falls back to the terminal on its own when there is no desktop session (§ Native capture dialog). A user whose setup does block the dialog can add `QBIT_VAULT_PROMPT = "tty"` to the `env` subtable by hand; since that table is ours, `doctor` then reports drift and the next `init` rewrites it; there is no supported override in this release.
+
+Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.openai.com/codex/config-advanced, Config and state locations). The adapter does not read it and always uses `~/.codex/config.toml`, the same way the Claude adapter ignores `CLAUDE_CONFIG_DIR`.
 
 **OpenCode** (`~/.config/opencode/opencode.json`, merged):
 

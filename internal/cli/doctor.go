@@ -10,11 +10,12 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 	"github.com/QuBiit0/qbit-vault/internal/hosts"
 	"github.com/QuBiit0/qbit-vault/internal/hosts/claude"
+	"github.com/QuBiit0/qbit-vault/internal/hosts/codex"
 )
 
-// hostRegistry returns the host adapters of this build: Claude Code now, Codex
-// and Pi when they land (docs/ROADMAP.md 3.3, 3.5). Tests replace it.
-var hostRegistry = func(*globals) *hosts.Registry { return hosts.NewRegistry(claude.New()) }
+// hostRegistry returns the host adapters of this build: Claude Code and Codex
+// now, Pi when it lands (docs/ROADMAP.md 3.5). Tests replace it.
+var hostRegistry = func(*globals) *hosts.Registry { return hosts.NewRegistry(claude.New(), codex.New()) }
 
 // hostEnv is what host adapters need to know about this machine: the vault
 // home and the user's home directory (a path, never a value).

@@ -1,0 +1,17 @@
+# My Codex setup
+model = "gpt-5-codex"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+network_access = false # keep it off
+
+# Context7 docs server
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+
+[mcp_servers.context7.env]
+DEBUG = "1"
+
+[projects.'C:\work\app']
+trust_level = "trusted"

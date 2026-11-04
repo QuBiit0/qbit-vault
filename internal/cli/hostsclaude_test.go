@@ -52,13 +52,6 @@ func doctorStatus(out, check string) string {
 	return ""
 }
 
-func TestClaudeCodeIsInTheReleaseRegistry(t *testing.T) {
-	names := releaseHostRegistry(&globals{}).Names()
-	if len(names) != 1 || names[0] != "claude-code" {
-		t.Fatalf("release registry: %v", names)
-	}
-}
-
 func TestInitRegistersClaudeCodeAndDoctorIsHealthy(t *testing.T) {
 	uh := isolateUserHome(t)
 	w := newBareWorld(t)

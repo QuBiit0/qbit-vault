@@ -69,7 +69,7 @@ Vault       empty            (0 secrets)
 Hosts
   gentle-shell   ~/.gentle-shell/agent   extension qbit-vault-pi@0.1.0 ✔  mcp ✔
   claude-code    ~/.claude               mcp ✔  hooks ✔ (4)  deny-list ✔ (Gentle AI entries preserved: 11)
-  codex          ~/.codex                mcp ✔  prompt=tty (sandbox detected)
+  codex          ~/.codex                mcp ✔
   opencode       not found               skipped
 Backups     ~/.qbit-vault/backups/20261016T081500Z (4 files)
 Audit       chain ok (1 event)

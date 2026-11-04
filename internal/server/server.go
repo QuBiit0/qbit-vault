@@ -24,6 +24,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/QuBiit0/gentle-vault/internal/remote"
 )
 
 const (
@@ -96,11 +98,8 @@ func New(cfg Config) (*Server, error) {
 		recoveryLimit: newLimiter(5, time.Minute), recoveryDaily: newLimiter(20, 24*time.Hour)}, nil
 }
 
-// AuthMessage is what a device signs to get a token: the origin binds the
-// signature to this server, so it cannot be relayed to another.
-func AuthMessage(origin string, nonce []byte) []byte {
-	return append([]byte("gentle-vault/auth/v1"+origin), nonce...)
-}
+// AuthMessage is what a device signs to get a token (remote.AuthMessage).
+func AuthMessage(origin string, nonce []byte) []byte { return remote.AuthMessage(origin, nonce) }
 
 // Invite creates a single-use account invite valid for ttl; only its hash
 // is stored. The code is an operator credential, not a vault secret.

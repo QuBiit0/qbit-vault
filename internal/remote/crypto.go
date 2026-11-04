@@ -121,6 +121,12 @@ func groups(s string, n int) string {
 	return strings.Join(append(parts, s), "-")
 }
 
+// AuthMessage is what a device signs to get a token: the server's origin
+// binds the signature to that server, so it cannot be relayed to another.
+func AuthMessage(origin string, nonce []byte) []byte {
+	return append([]byte("gentle-vault/auth/v1"+origin), nonce...)
+}
+
 // ---- recovery key ----
 
 // NewRecoveryKey returns 20 random bytes and their text form

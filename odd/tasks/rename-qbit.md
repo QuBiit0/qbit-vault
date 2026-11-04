@@ -13,8 +13,8 @@ Branch `feat/cli-skeleton`.
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| R1 | S1-S3 | inline | mechanical rename (GENTLE_VAULT -> QBIT_VAULT, gentle-vault -> qbit-vault, GV_ -> QBV_, GVR1 -> QVR1, e2e `gv` -> `qbv`), moved cmd/ dirs and the proposal, branding titles, README independence note, crypto vector | (R commit) | done |
-| R2 | S1, S3 | inline | full suite, e2e battery, leftover grep | (R commit) | done |
+| R1 | S1-S3 | inline | mechanical rename (GENTLE_VAULT -> QBIT_VAULT, gentle-vault -> qbit-vault, GV_ -> QBV_, GVR1 -> QVR1, e2e `gv` -> `qbv`), moved cmd/ dirs and the proposal, branding titles, README independence note, crypto vector | a78c03d | done |
+| R2 | S1, S3 | inline | full suite, e2e battery, leftover grep | a78c03d | done |
 | R3 | S1, S3 | user | rename the folder D:\Proyectos\Propios\Gentle-Vault to QBit-Vault and reopen the session there | | pending |
 
 ## Log

@@ -19,8 +19,8 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 | T1 | S2, S3, S6 | inline | S.1a: body schema 2 codec and migration, `device_id`, origin, hlc and tombstones stamped on save, newer schema refused | fc7ebeb | done |
 | T2 | S2-S4 | inline | S.1b: `link`, unlinked layers in `list --layer all`, origin hint, broker `unlinked_match` | 0cab11d | done |
 | T3 | S5 | inline | S.2 merge engine | db370d8 | done |
-| T4 | S5 | inline | S.3 remote crypto | (S.3 commit) | done |
-| T5 | S5 | inline | S.4-S.5 server | | pending |
+| T4 | S5 | inline | S.3 remote crypto | ea50f5f | done |
+| T5 | S5 | inline | S.4 server core (S.5 pairing, recovery, rekey, anchors next) | (S.4 commit) | in progress |
 | T6 | S5 | inline | S.6 packaging | | pending |
 | T7 | S5 | inline | S.7-S.9 client | | pending |
 | T8 | S5 | inline | S.10 e2e | | pending |
@@ -34,3 +34,4 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 - L5. T2 notes: RED observed for vault and CLI. `link` errors are fixed strings (the label is user text and never echoed). The hint is printed by a human `list` only; `--json` never prints it, the broker reports `unlinked_match` instead. `vault.AddUnlinkedForTesting` is a test seam like `SetWalkStopForTesting`.
 - L6. T3 notes: RED observed (build). `internal/merge` is pure over schema-2 bodies; records are opaque except `hlc`. Every case of REMOTE_SYNC § 7.3 has a test; FuzzMerge (1.47M executions, 30 s) checks that no change that differs from the base on either side is lost and that the result is deterministic. Conflict ids are a hash of key and losing clock, so the same conflict seen on two devices dedupes.
 - L7. T4 notes: RED observed (build). Standard library only (crypto/hkdf, ed25519, ecdh X25519) plus x/crypto XChaCha20-Poly1305. The fixed vector was checked against an independent HKDF (Python, RFC 5869). The anchor AAD drops `generation`: the anchor key is derived from the master key, so a new generation already changes it. FuzzOpen: mutated objects never open, never panic.
+- L8. T5 S.4 notes: RED observed (build). Standard library net/http with Go 1.22 method patterns; the log line uses `r.Pattern` so it never holds a path value. Tokens and challenges live in memory (a restart ends sessions). The server cannot open a vault version but checks its cleartext AAD (`account_id`, `generation`, `version = base + 1`) so a client bug cannot store a mislabelled version.

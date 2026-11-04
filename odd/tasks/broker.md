@@ -19,7 +19,7 @@ Branch `feat/cli-skeleton`.
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| T1 | S1-S4, S7 | inline | `internal/broker`: envelope decode and validation, dispatch, capabilities, normative policy; `broker --op`; CLI backend for `list`, `exec`, `grant`, `revoke` | (T1 commit) | done |
+| T1 | S1-S4, S7 | inline | `internal/broker`: envelope decode and validation, dispatch, capabilities, normative policy; `broker --op`; CLI backend for `list`, `exec`, `grant`, `revoke` | 60ee2ac | done |
 | T2 | S5, S7 | inline | `request` (single name): reason heuristic, cooldown, non-disclosure, in-process prompt, store and grant | | pending |
 | T3 | S5 | inline | multi-field `request` (2.2b) and backend rendering (2.2c) | | pending |
 | T4 | S5 | inline | `manage` (2.2a) | | pending |
@@ -34,3 +34,5 @@ Branch `feat/cli-skeleton`.
 - L4. Decision: over `broker --op` a `grant` needs `prompt_token`; there is no terminal fallback there (the host is not a person at a keyboard). Without one it is `not_model_callable`.
 - L5. Decision: `list` reports the grant that applies to the envelope's session for each record (project over session over once), `kind` is `secret` until body schema 2 (Phase 2S) and `unlinked_match` is `null` until sync.
 - L6. T1 note: the broker package had an observed RED (build) before its code; the CLI broker tests were written first but first run after the backend existed, so no RED was observed for them. An exec child now gets an empty stdin under the broker (`globals.execStdin`), because the broker's stdin is the request or the MCP stream.
+- L7. T2 notes: RED observed for every request test and for the grants cooldown tests. `record` no longer forces `by: user`: it is the default, and a broker capture is audited `by: agent` (R-AUD-01). Cooldowns live in `grants.enc` (new `cooldowns` array; the empty-body encoding gained `"cooldowns":[]`). A blank value at the request prompt is `internal` (`empty value`) without a cooldown.
+- L8. Order change: T4 (`manage`) and T5 (MCP) before T3 (multi-field), so the model-facing surface is usable end to end before the larger prompt-rendering work.

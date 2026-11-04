@@ -87,8 +87,9 @@ type Grant struct {
 
 // Store is the decrypted body of grants.enc.
 type Store struct {
-	Grants []Grant `json:"grants"`
-	Tokens []Token `json:"tokens"`
+	Grants    []Grant    `json:"grants"`
+	Tokens    []Token    `json:"tokens"`
+	Cooldowns []Cooldown `json:"cooldowns"`
 }
 
 // Decode parses a grants body; nil or empty is an empty store.
@@ -105,7 +106,10 @@ func Decode(body []byte) (*Store, error) {
 
 // Encode renders the store as a grants body.
 func Encode(s *Store) ([]byte, error) {
-	out := Store{Grants: s.Grants, Tokens: s.Tokens}
+	out := Store{Grants: s.Grants, Tokens: s.Tokens, Cooldowns: s.Cooldowns}
+	if out.Cooldowns == nil {
+		out.Cooldowns = []Cooldown{}
+	}
 	if out.Grants == nil {
 		out.Grants = []Grant{}
 	}
@@ -232,6 +236,15 @@ func purge(s *Store, now time.Time) bool {
 		keptTokens = append(keptTokens, t)
 	}
 	s.Tokens = keptTokens
+	keptCool := s.Cooldowns[:0]
+	for _, c := range s.Cooldowns {
+		if !now.Before(c.Until) {
+			changed = true
+			continue
+		}
+		keptCool = append(keptCool, c)
+	}
+	s.Cooldowns = keptCool
 	return changed
 }
 

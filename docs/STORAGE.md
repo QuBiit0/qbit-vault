@@ -137,6 +137,9 @@ Metadata only; losing it loses permissions, never secrets. Stored in the same AE
   ],
   "tokens": [
     { "hash": "sha256:…", "name": "GITHUB_TOKEN", "layer": "global", "scope": "session", "session": "pi:2f1c…", "expires_at": "…" }
+  ],
+  "cooldowns": [
+    { "name": "AWS_SECRET_ACCESS_KEY", "session": "pi:2f1c…", "until": "…" }
   ]
 }
 ```
@@ -146,6 +149,8 @@ Metadata only; losing it loses permissions, never secrets. Stored in the same AE
 **File.** `grants.enc` is managed by `internal/vault` under the same `vault.lock` as `vault.enc`; the vault never interprets the body (`internal/grants` does). The envelope is the one of `vault.enc` (`internal/envelope`) with `format: "gentle-vault-grants/1"` in the header and in the AAD, so a `vault.enc` can never be opened as grants or the reverse. It has its own write counter, `grants_writes`, in `state.json` (unknown keys of `state.json` are preserved). A grants write seals the next body with `writes` = counter + 1, replaces `grants.enc` atomically (temp file, `fsync`, rename, owner-only like the other files), then records the counter in `state.json`. There are **no snapshots** of `grants.enc`: losing it loses permissions, never secrets, and restoring an old copy would revive revoked grants.
 
 **Fail closed (L3).** A `grants.enc` that is missing is an empty store. One that cannot be trusted (malformed, altered, wrong key or wrong format) or whose `writes` is **behind** `grants_writes` (a rollback that would revive revoked grants) is also treated as an empty store, and the operation reports a `reset` to the CLI, which prints `warning: grants were reset (store unreadable or rolled back)` on stderr and appends an audit `warning` record with `detail: "grants reset"`. The next grants write replaces the bad file (`grants` and `describe` do it on first read). One that is **ahead** of the counter (a crash between the two writes, or a counter missing from `state.json`) is accepted and the counter repaired. The counter is not authenticated (THREAT_MODEL R8).
+
+**Cooldowns.** `cooldowns` holds the names a session may not request again yet: a `request` the user denied, cancelled or let time out starts a 60 s cooldown for that `(name, session)` (R-CAP-05), purged when it ends. They live here because a broker call is a fresh process; like grants, losing them only lifts a restriction early.
 
 **Tokens.** `tokens` holds the pending prompt tokens (see below): only the SHA-256 of a random 32-byte value, never the value. They expire after 2 minutes, are removed when redeemed (also when presented for the wrong request) and purged with expired grants.
 

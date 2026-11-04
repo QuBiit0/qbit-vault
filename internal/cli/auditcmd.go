@@ -51,7 +51,9 @@ func (g *globals) record(stderr io.Writer, r audit.Record) {
 	if r.Session == "" {
 		r.Session = cliSession
 	}
-	r.By = "user"
+	if r.By == "" {
+		r.By = "user" // the default actor; a broker capture says "agent"
+	}
 	err := audit.Append(g.Home(), r)
 	if err == nil || errors.Is(err, os.ErrNotExist) {
 		return

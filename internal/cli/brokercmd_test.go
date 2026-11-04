@@ -176,11 +176,10 @@ func TestBrokerRevoke(t *testing.T) {
 	}
 }
 
-func TestBrokerRequestAndManageNotYet(t *testing.T) {
+func TestBrokerManageNotYet(t *testing.T) {
 	w := newWorld(t)
 	for op, extra := range map[string]string{
-		"request": `"name":"A","reason":"deploy the shop api now"`,
-		"manage":  `"action":"remove","name":"A","layer":"global","reason":"this token is no longer used"`,
+		"manage": `"action":"remove","name":"A","layer":"global","reason":"this token is no longer used"`,
 	} {
 		code, m, _ := w.broker(op, envelope(op, w.outside, extra))
 		if code != exitcode.Refusal || refusalType(m) != "internal" || !strings.HasSuffix(m["refusal"].(map[string]any)["message"].(string), "is not available yet") {

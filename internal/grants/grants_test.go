@@ -562,7 +562,7 @@ func TestDecodeEmptyAndBad(t *testing.T) {
 		t.Fatal("garbage accepted")
 	}
 	b, err := Encode(&Store{})
-	if err != nil || string(b) != `{"grants":[],"tokens":[]}` {
+	if err != nil || string(b) != `{"grants":[],"tokens":[],"cooldowns":[]}` {
 		t.Fatalf("empty encode = %s, %v", b, err)
 	}
 }

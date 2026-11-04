@@ -150,6 +150,9 @@ func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResu
 		res.Project = &broker.Project{Root: proj.Root, Label: proj.Label}
 	}
 	now := clock()
+	for _, c := range grants.Cooldowns(st, e.Session, now) {
+		res.Cooldowns = append(res.Cooldowns, broker.Cooldown{Name: c.Name, Until: c.Until.UTC().Format(time.RFC3339)})
+	}
 	for _, en := range entries {
 		meta := broker.SecretMeta{
 			Name: en.Name, Layer: layerName(en.Layer), OverridesGlobal: en.OverridesGlobal, Kind: "secret",
@@ -271,10 +274,6 @@ func (b *cliBackend) Revoke(_ context.Context, e broker.Envelope, r broker.Revok
 		return broker.RevokeResponse{}, asRefusal(err)
 	}
 	return broker.RevokeResponse{OK: true, Revoked: n}, nil
-}
-
-func (b *cliBackend) Request(context.Context, broker.Envelope, broker.RequestRequest) (broker.RequestResponse, error) {
-	return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage("request is not available yet")
 }
 
 func (b *cliBackend) Manage(context.Context, broker.Envelope, broker.ManageRequest) (broker.ManageResponse, error) {

@@ -61,6 +61,17 @@ func MergeJSON(doc []byte, edits []JSONEdit) ([]byte, error) {
 // as {} or [] unless prune is set, which also removes parents emptied by the
 // removal (never the root). Same refusals as MergeJSON.
 func UnmergeJSON(doc []byte, edits []JSONEdit, prune bool) ([]byte, error) {
+	var rule func([]string) bool
+	if prune {
+		rule = func([]string) bool { return true }
+	}
+	return unmergeJSON(doc, edits, rule)
+}
+
+// unmergeJSON is UnmergeJSON with a per-container rule: prune(path) reports
+// whether the empty container at that key path may be removed. nil prunes
+// nothing.
+func unmergeJSON(doc []byte, edits []JSONEdit, prune func([]string) bool) ([]byte, error) {
 	for _, e := range edits {
 		if len(e.Path) == 0 {
 			return nil, ErrInvalidEdit
@@ -485,7 +496,7 @@ func colonOf(doc []byte, c *jval, l layout) []byte {
 	return []byte(": ")
 }
 
-func (e JSONEdit) remove(doc []byte, prune bool) ([]byte, error) {
+func (e JSONEdit) remove(doc []byte, prune func([]string) bool) ([]byte, error) {
 	if len(bytes.TrimSpace(doc)) == 0 {
 		return doc, nil
 	}
@@ -528,12 +539,12 @@ func (e JSONEdit) remove(doc []byte, prune bool) ([]byte, error) {
 			}
 			out = removeItem(out, c, owned[k])
 		}
-		if !prune {
+		if prune == nil || !prune(e.Path) {
 			return out, nil
 		}
 		if r, err := parseJSON(out); err == nil {
 			if c, _, _, err := walk(r, e.Path); err == nil && len(c.items) == 0 {
-				return pruneUp(out, e.Path)
+				return pruneUp(out, e.Path, prune)
 			}
 		}
 		return out, nil
@@ -541,9 +552,9 @@ func (e JSONEdit) remove(doc []byte, prune bool) ([]byte, error) {
 	return removeMember(doc, e.Path, prune)
 }
 
-// removeMember deletes the member at path; with prune it also deletes
-// ancestors (except the root) that the removal left empty.
-func removeMember(doc []byte, path []string, prune bool) ([]byte, error) {
+// removeMember deletes the member at path; it also deletes ancestors (except
+// the root) that the removal left empty and that prune(ancestor path) allows.
+func removeMember(doc []byte, path []string, prune func([]string) bool) ([]byte, error) {
 	for len(path) > 0 {
 		root, err := parseJSON(doc)
 		if err != nil {
@@ -571,7 +582,7 @@ func removeMember(doc []byte, path []string, prune bool) ([]byte, error) {
 		}
 		wasOnly := len(parent.items) == 1
 		doc = removeItem(doc, parent, idx)
-		if !prune || !wasOnly || len(path) == 1 {
+		if prune == nil || !wasOnly || len(path) == 1 || !prune(path[:len(path)-1]) {
 			return doc, nil
 		}
 		path = path[:len(path)-1]
@@ -580,7 +591,9 @@ func removeMember(doc []byte, path []string, prune bool) ([]byte, error) {
 }
 
 // pruneUp removes the (now empty) member at path and any ancestors it empties.
-func pruneUp(doc []byte, path []string) ([]byte, error) { return removeMember(doc, path, true) }
+func pruneUp(doc []byte, path []string, prune func([]string) bool) ([]byte, error) {
+	return removeMember(doc, path, prune)
+}
 
 // jsonIsEmptyObject reports whether doc is a JSON object with no members.
 func jsonIsEmptyObject(doc []byte) bool {

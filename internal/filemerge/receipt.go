@@ -25,9 +25,27 @@ type Receipt struct {
 	// byte. A re-apply over an existing receipt clears it (the snapshot then
 	// holds our earlier entries, or a user edit made between the two writes).
 	Exact bool `json:"exact"`
+	// Original is the copy taken before our first change to this file, kept
+	// unchanged by every re-apply. Revert reads it to tell containers we
+	// created from ones the user had. Zero (Path empty) when unknown: a
+	// receipt written before this field existed.
+	Original Snapshot `json:"original"`
 	// Changed is set on the result of a merge that wrote the file. It is not
 	// stored.
 	Changed bool `json:"-"`
+}
+
+// original returns the snapshot of the file as it was before our first
+// change. An Exact receipt has not been re-applied, so its Snapshot is that
+// state.
+func (r Receipt) original() (Snapshot, bool) {
+	if r.Original.Path != "" {
+		return r.Original, true
+	}
+	if r.Exact && r.Snapshot.Path != "" {
+		return r.Snapshot, true
+	}
+	return Snapshot{}, false
 }
 
 // Outcome says what Revert did.
@@ -110,6 +128,9 @@ func mergeFile(home, path string, prev *Receipt, merge func([]byte) ([]byte, err
 	if prev != nil && prev.Path == path {
 		r.Created = prev.Created
 		r.Exact = false
+		if orig, ok := prev.original(); ok {
+			r.Original = orig
+		}
 	}
 	return r, nil
 }
@@ -117,12 +138,14 @@ func mergeFile(home, path string, prev *Receipt, merge func([]byte) ([]byte, err
 // RevertJSONFile undoes a MergeJSONFile (see revert for the rule); edits are
 // the ones that were merged, only Path and Marker are used.
 func RevertJSONFile(home string, r Receipt, edits []JSONEdit) (Outcome, error) {
-	return revert(home, r, func(doc []byte, prune bool) ([]byte, error) { return UnmergeJSON(doc, edits, prune) }, jsonIsEmptyObject)
+	return revert(home, r, func(doc []byte, prune func([]string) bool) ([]byte, error) {
+		return unmergeJSON(doc, edits, prune)
+	}, jsonIsEmptyObject)
 }
 
 // RevertTOMLFile undoes a MergeTOMLFile (see revert for the rule).
 func RevertTOMLFile(home string, r Receipt, table string) (Outcome, error) {
-	return revert(home, r, func(doc []byte, _ bool) ([]byte, error) { return UnmergeTOML(doc, table) },
+	return revert(home, r, func(doc []byte, _ func([]string) bool) ([]byte, error) { return UnmergeTOML(doc, table) },
 		func(b []byte) bool { return len(bytes.TrimSpace(b)) == 0 })
 }
 
@@ -137,12 +160,17 @@ func RevertTOMLFile(home string, r Receipt, table string) (Outcome, error) {
 //     Exact): remove only our entries and keep everything else (Stripped).
 //     Empty parents we may have created are pruned only when the file was
 //     Created by us; if what is left is empty, the file is deleted (Deleted).
+//     Otherwise an object or array that removing our entries left empty is
+//     pruned only when it was absent from the original file (the receipt's
+//     original copy, see Receipt.original); a container the user had, or any
+//     container when the original is unknown or pruned, is kept. The result
+//     is still reported as Stripped even when it equals the original bytes.
 //     If none of our entries are present nothing is written (Unchanged).
 //
 // The current file is snapshotted before any write or delete. A file that
 // became ambiguous or invalid since is refused with the usual typed error and
 // left alone.
-func revert(home string, r Receipt, strip func([]byte, bool) ([]byte, error), isEmpty func([]byte) bool) (Outcome, error) {
+func revert(home string, r Receipt, strip func([]byte, func([]string) bool) ([]byte, error), isEmpty func([]byte) bool) (Outcome, error) {
 	if r.Path == "" {
 		return "", fail(ErrNotOurChange, "")
 	}
@@ -173,7 +201,7 @@ func revert(home string, r Receipt, strip func([]byte, bool) ([]byte, error), is
 			return Restored, nil
 		}
 	}
-	out, err := strip(doc, r.Created)
+	out, err := strip(doc, pruneRule(r))
 	if err != nil {
 		return "", wrapRefusal(err, r.Path)
 	}
@@ -193,6 +221,32 @@ func revert(home string, r Receipt, strip func([]byte, bool) ([]byte, error), is
 		return "", err
 	}
 	return Stripped, nil
+}
+
+// pruneRule says which emptied containers (by key path) revert may remove.
+// A file we created is ours entirely: everything goes. Otherwise a container
+// goes only when the original file had no such key; with no readable original
+// (old receipt, pruned copy, unparsable file) nothing is pruned.
+func pruneRule(r Receipt) func([]string) bool {
+	if r.Created {
+		return func([]string) bool { return true }
+	}
+	orig, ok := r.original()
+	if !ok || !orig.Existed {
+		return nil
+	}
+	b, err := os.ReadFile(orig.Backup)
+	if err != nil {
+		return nil
+	}
+	root, err := parseJSON(b)
+	if err != nil || root.kind != 'o' {
+		return nil
+	}
+	return func(path []string) bool {
+		_, n, _, err := walk(root, path)
+		return err == nil && n < len(path)
+	}
 }
 
 // wrapRefusal attaches the path to a typed refusal.

@@ -200,24 +200,29 @@ func TestAnchor(t *testing.T) {
 	}
 }
 
-// FuzzOpen: mutated objects are always refused and never panic.
+// FuzzOpen: arbitrary input never panics, and whatever does not open is
+// ErrEnvelope. (That an altered object never opens is pinned by the tamper
+// tests above: a fuzz seed sealed in one process is a valid object in
+// another, so "it opened" is not a failure here.)
 func FuzzOpen(f *testing.F) {
 	rvk := Subkeys(key(1)).Vault
 	obj, _ := SealObject(rvk, ObjectAAD{AccountID: "acc1", Generation: 1, Version: 1}, []byte(`{"schema":2}`))
 	f.Add(obj)
+	f.Add([]byte(`{"format":"gentle-vault-remote/1","aad":{},"nonce":"","ct":""}`))
 	f.Fuzz(func(t *testing.T, in []byte) {
-		if bytes.Equal(in, obj) {
-			return
+		for _, err := range []error{
+			func() error { _, _, err := OpenObject(rvk, "acc1", in); return err }(),
+			func() error {
+				_, _, err := OpenKeyEnvelope(DeviceFromSecret(key(2)), DeviceFromSecret(key(1)).SignPub, in)
+				return err
+			}(),
+			func() error { _, _, err := OpenRecovery(rvk, "acc1", in); return err }(),
+			func() error { _, err := OpenAnchor(rvk, "acc1", in); return err }(),
+		} {
+			if err != nil && !errors.Is(err, ErrEnvelope) {
+				t.Fatalf("untyped error: %v", err)
+			}
 		}
-		if _, _, err := OpenObject(rvk, "acc1", in); err == nil {
-			// Only a valid sealing opens; a random mutation must not.
-			var probe ObjectAAD
-			_ = json.Unmarshal(in, &probe)
-			t.Fatalf("a mutated object opened")
-		}
-		_, _, _ = OpenKeyEnvelope(DeviceFromSecret(key(2)), DeviceFromSecret(key(1)).SignPub, in)
-		_, _, _ = OpenRecovery(rvk, "acc1", in)
-		_, _ = OpenAnchor(rvk, "acc1", in)
 	})
 }
 

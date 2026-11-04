@@ -231,13 +231,22 @@ In keychain mode the key never sits in the directory; it lives in the OS keychai
   "vault_id": "uuid", "writes": 42, "keychain": "secret-service",
   "version": "0.1.0",
   "hosts": {
-    "claude-code": { "registered_at": "…", "receipts": [ { "path": "/home/ana/.claude/settings.json", "snapshot": { "path": "/home/ana/.claude/settings.json", "existed": true, "backup": "/home/ana/.qbit-vault/backups/20261016T081500.000000000Z/home/ana/.claude/settings.json" }, "sha256": "…", "created": false, "exact": true } ] },
+    "claude-code": {
+      "registered_at": "2026-10-16T08:15:00Z",
+      "registered": ["mcp", "hooks"],
+      "receipts": {
+        "mcp": { "path": "/home/ana/.claude/settings.json", "snapshot": { "path": "/home/ana/.claude/settings.json", "existed": true, "backup": "/home/ana/.qbit-vault/backups/20261016T081500.000000000Z/home/ana/.claude/settings.json" }, "sha256": "…", "created": false, "exact": true },
+        "hooks": { "path": "/home/ana/.claude/settings.json", "snapshot": { "…": "…" }, "sha256": "…", "created": false, "exact": false }
+      }
+    },
     "gentle-shell": { "extension": "qbit-vault-pi@0.1.0", "home": "~/.gentle-shell/agent" }
   }
 }
 ```
 
-Receipts are what `sync` re-applies and `uninstall` reverts. A receipt is the `internal/filemerge` `Receipt` of one edited file: absolute paths only (no `~`, Windows-portable), the snapshot handle taken before the change, the SHA-256 of the bytes written, `created` (the file did not exist before) and `exact` (the snapshot is the state immediately before our only change); `ARCHITECTURE.md` § Config file editing gives the revert rule. With remote sync, `state.json` also holds `device_id` and `remote` (`REMOTE_SYNC.md` § 11); `remote` is absent when the vault does not sync.
+**`hosts`** maps a host name (`[a-z0-9-]`, at most 32 characters) to its record: `registered_at` (first registration), `registered` (the step names that have a receipt, in adapter order) and `receipts`, one per **step** of the host adapter, keyed by the stable step name (`mcp`, `hooks`, `deny-list`, …; `internal/hosts`). `init` saves a host's record after every step that changed a receipt, so a failing step leaves the earlier steps recorded; a run that changes nothing does not write `state.json` at all. The section is read and written by `internal/vault` (`ReadHosts`, `WriteHost`) under the vault lock, like `remote`, and every other key of `state.json` is carried through untouched. A record holding a relative path is refused before anything is written; a `hosts` value that is not an object of records is `vault_corrupt`. Per-host extras such as the Pi extension version arrive with their adapter.
+
+Receipts are what `sync` re-applies, `doctor` compares and `uninstall` reverts. A receipt is the `internal/filemerge` `Receipt` of one edited file: absolute paths only (no `~`, Windows-portable), the snapshot handle taken before the change, the SHA-256 of the bytes written, `created` (the file did not exist before) and `exact` (the snapshot is the state immediately before our only change); `ARCHITECTURE.md` § Config file editing gives the revert rule. With remote sync, `state.json` also holds `device_id` and `remote` (`REMOTE_SYNC.md` § 11); `remote` is absent when the vault does not sync.
 
 ## Remote files
 

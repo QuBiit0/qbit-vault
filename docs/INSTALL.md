@@ -42,7 +42,7 @@ The Go releases themselves are produced by goreleaser with Minisign-signed `chec
 
 ## `init` step by step
 
-Everything is idempotent; re-running repairs. Every file write goes through snapshot + atomic merge (`STORAGE.md`).
+Everything is idempotent; re-running repairs. Every file write goes through snapshot + atomic merge (`STORAGE.md`). Steps 5–7 and 9 run on **every** `init`, also when the vault already exists; `--agents <names>` selects hosts and `--agents none` skips steps 5–8 (`CLI.md`). A step that fails stops its own host only: the file it was editing is untouched, the earlier steps stay in `state.json`, the other hosts still run and `init` exits 1. A second run with nothing to change writes no config file, takes no snapshot and leaves `state.json` as it was.
 
 | # | Step | Details | Asks the user? |
 | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 6 | Register hosts | Per `AGENT_INTEGRATIONS.md`: MCP entries, hooks, plugin, deny-list; receipts to `state.json` | no |
 | 7 | Deny-list check | Confirm Gentle AI entries survived (R-INS-05); abort + restore on failure | no |
 | 8 | Extension | `gentle-shell install npm:qbit-vault-pi@<pinned>` and/or `pi install npm:qbit-vault-pi@<pinned>` (pinned version, `--ignore-scripts`) | no |
-| 9 | Doctor | Run and print the report | no |
+| 9 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 | 10 | Next steps | Print: "Restart your agent. In the chat, ask it to do something that needs a credential; you'll get a masked prompt here." | no |
 
 Total questions on a machine with a keychain: **zero**.

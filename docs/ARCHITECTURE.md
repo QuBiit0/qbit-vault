@@ -28,7 +28,8 @@
 │  internal/redact      streaming multi-encoding replacer                       │
 │  internal/prompt      tty / osascript / powershell / zenity capture           │
 │  internal/audit       hash-chained JSONL                                      │
-│  internal/adapters    claude / codex / opencode / pi config writers           │
+│  internal/hosts       Adapter interface, step runner, receipts (fake: tests)  │
+│  internal/adapters    claude / codex / pi adapters (implement hosts.Adapter)  │
 │  internal/filemerge   snapshot + atomic JSON/TOML merge                       │
 │  internal/doctor      read-only report                                        │
 │  internal/merge       pure three-way per-record merge (hlc, tombstones)       │
@@ -171,6 +172,14 @@ anthropic: [ANTHROPIC_API_KEY]
 ```
 
 A binding only *proposes* names: if the vault has one of them and the session has a grant, it is injected; if the vault has it but no grant, the grant prompt opens; if the vault does not have it, nothing happens (the command runs without it and fails naturally, which is the right signal for the agent to call `secret_request`). The user can edit the file; `doctor` validates it.
+
+## Host registration (`internal/hosts`) and `doctor` (`internal/doctor`)
+
+A host adapter implements `hosts.Adapter`: `Name()` (stable, `[a-z0-9-]`), `Detect(env)` (does the host look installed; read-only) and `Steps(env)`, an ordered list of `hosts.Step`. A step is one reversible edit of one config file with three functions: `Apply(env, prev)` (a `filemerge` merge returning its receipt; it writes nothing when the file already holds our entry), `Revert(env, receipt)` (the `filemerge` 3-way revert) and `Check(env, receipt)` (read-only; `hosts.CheckJSON` and `hosts.CheckTOML` re-run the merge in memory and report `ErrDrift` when it would change the file). `hosts.Env` carries the vault home and the user's home directory.
+
+`hosts.Apply(env, adapters)` is the step runner behind `init` (and later `sync`): per host it applies the steps in order, saving the host's receipts to `state.json` after each step that changed one. A failing step stops that host (its file is left as it was, because `filemerge` refuses before writing) and the next host still runs; the earlier steps stay recorded and the next run applies only what is missing. A run that changes nothing writes neither a config file, a snapshot nor `state.json`. `hosts.Verify` compares the receipts with the files for `doctor`, and `hosts.Revert` undoes a host for `uninstall`. The release registry is filled by the Claude Code, Codex and Pi adapters (empty until they land); `internal/hosts/fake` is a test-only adapter.
+
+`internal/doctor` builds the report from `state.json`, `internal/perm` and the host configs and writes nothing. The vault is opened the way `remote status` opens it (`openSessionQuiet`): the OS keychain or an unexpired unlock cache, never a passphrase prompt and never a rekey completion; a vault that cannot be opened that way is reported as `locked`, which is not a problem. The sync line comes from `state.json.remote` and its last-round summary; doctor never contacts the server.
 
 ## Config file editing (`internal/filemerge`)
 

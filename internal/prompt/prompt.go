@@ -156,6 +156,9 @@ func SelectWith(e Env) (Backend, error) {
 		}
 		return newNative(t, path, run, timeout), nil
 	default:
+		if b, ok := testBackend(name, e); ok {
+			return b, nil
+		}
 		return nil, fmt.Errorf("%w: %s=%q", ErrUnknownBackend, EnvBackend, name)
 	}
 }

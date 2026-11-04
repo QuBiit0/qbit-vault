@@ -168,12 +168,13 @@ func applyChanges(rec *vault.Record, c *broker.ManageChanges) string {
 		if f.next == nil {
 			continue
 		}
-		p := fmt.Sprintf("%s: %s -> %s", f.label, list(*f.cur), list(*f.next))
-		if len(*f.cur) > 0 && len(*f.next) == 0 {
+		next := cleanList(*f.next) // what is stored, so what the user is told
+		p := fmt.Sprintf("%s: %s -> %s", f.label, list(*f.cur), list(next))
+		if len(*f.cur) > 0 && len(next) == 0 {
 			p += " (widening)"
 		}
 		parts = append(parts, p)
-		*f.cur = cleanList(*f.next)
+		*f.cur = next
 	}
 	return strings.Join(parts, "; ")
 }

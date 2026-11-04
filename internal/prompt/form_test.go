@@ -35,7 +35,7 @@ func TestFormDialog(t *testing.T) {
 func TestZenityForm(t *testing.T) {
 	d := formDialog(formReqs)
 	got := zenityTool{}.buildForm("/usr/bin/zenity", d).Args
-	want := []string{"--forms", "--title=" + d.title, "--text=" + d.text, "--separator=" + formSep, "--add-entry=Host", "--add-password=Password"}
+	want := []string{"--forms", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--separator=" + formSep, "--add-entry=Host", "--add-password=Password"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
@@ -136,5 +136,29 @@ func TestPowerShellFormParses(t *testing.T) {
 		if !strings.HasSuffix(strings.TrimSpace(l), " 0") {
 			t.Errorf("parse errors: %s", l)
 		}
+	}
+}
+
+// W2: zenity renders Pango markup unless told not to.
+func TestZenityFormHasNoMarkup(t *testing.T) {
+	if args := (zenityTool{}).buildForm("/usr/bin/zenity", formDialog(formReqs)).Args; args[1] != "--no-markup" {
+		t.Fatalf("args=%q", args)
+	}
+}
+
+// W5: a blank last field is a blank value, not a failed dialog.
+func TestPowerShellFormBlankLastField(t *testing.T) {
+	out := base64.StdEncoding.EncodeToString([]byte("db.internal")) + "\n" + "\n"
+	vals, ok := powershellTool{}.parseForm([]byte(out), 2)
+	if !ok || len(vals) != 2 || string(vals[0]) != "db.internal" || len(vals[1]) != 0 {
+		t.Fatalf("vals=%q ok=%v", vals, ok)
+	}
+}
+
+// W3, W4 in the header.
+func TestHeaderShowsDescriptionAndStored(t *testing.T) {
+	h := Header(SecretRequest{Name: "A", Reason: "x y z", Description: "staging \x1b[31mdb", Stored: []string{"B", "C"}})
+	if !strings.Contains(h, `  about:   staging \x1b[31mdb`+"\n") || !strings.Contains(h, "  stored:  B, C (already stored, not asked)\n") {
+		t.Fatalf("header=%q", h)
 	}
 }

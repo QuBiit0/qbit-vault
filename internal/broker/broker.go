@@ -342,7 +342,7 @@ func requestRequest(m fields) (RequestRequest, error) {
 			if !in(r.Fields[i].Kind, FieldKinds) {
 				return r, invalid("fields")
 			}
-			if _, ok := labelOK(f.Label); !ok || len(f.Description) > maxDescription {
+			if _, ok := labelOK(f.Label); !ok || utf8.RuneCountInString(f.Description) > maxDescription {
 				return r, invalid("fields")
 			}
 		}
@@ -399,8 +399,19 @@ func manageRequest(m fields) (ManageRequest, error) {
 		if strict(raw, c) != nil || (c.Description == nil && c.Binaries == nil && c.Hosts == nil && c.Sensitive == nil) {
 			return r, invalid("changes")
 		}
-		if c.Description != nil && len(*c.Description) > maxDescription {
+		if c.Description != nil && utf8.RuneCountInString(*c.Description) > maxDescription {
 			return r, invalid("changes")
+		}
+		// A blank entry would vanish when stored and silently widen the list.
+		for _, l := range []*[]string{c.Binaries, c.Hosts} {
+			if l == nil {
+				continue
+			}
+			for _, x := range *l {
+				if strings.TrimSpace(x) == "" {
+					return r, invalid("changes")
+				}
+			}
 		}
 		r.Changes = c
 	}
@@ -408,7 +419,7 @@ func manageRequest(m fields) (ManageRequest, error) {
 }
 
 func reason(m fields, dst *string) error {
-	if str(m, "reason", dst) != nil || len(*dst) < minReason || len(*dst) > maxReason || !utf8.ValidString(*dst) {
+	if str(m, "reason", dst) != nil || !utf8.ValidString(*dst) || utf8.RuneCountInString(*dst) < minReason || utf8.RuneCountInString(*dst) > maxReason {
 		return invalid("reason")
 	}
 	if len(strings.Fields(*dst)) < minReasonWords {

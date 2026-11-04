@@ -526,3 +526,12 @@ func TestRmRejectsBadInputWithoutChange(t *testing.T) {
 		})
 	}
 }
+
+// A description shown in list cannot move the cursor or reorder the line:
+// C0, C1 and format characters (bidi overrides) become spaces.
+func TestOneLineNeutralizesControlAndFormat(t *testing.T) {
+	in := "a\x1b[31mb\u009bc\u202ed\u200be\nf"
+	if got := oneLine(in); got != "a [31mb c d e f" {
+		t.Fatalf("oneLine=%q", got)
+	}
+}

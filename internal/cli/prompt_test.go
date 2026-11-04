@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -63,7 +64,7 @@ func TestSetInteractiveOutsideRepo(t *testing.T) {
 		t.Fatalf("calls = %+v, want one secret prompt and no layer question", f.Calls)
 	}
 	want := prompt.SecretRequest{Name: "A_KEY", Reason: "manual entry", Host: "cli"}
-	if f.Calls[0].Request != want {
+	if !reflect.DeepEqual(f.Calls[0].Request, want) {
 		t.Fatalf("request = %+v, want %+v", f.Calls[0].Request, want)
 	}
 	noFixtures(t, "stdout/stderr/audit", out+errs+w.auditText())

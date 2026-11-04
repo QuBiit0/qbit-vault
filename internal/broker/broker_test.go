@@ -315,3 +315,12 @@ func FuzzHandle(f *testing.F) {
 		}
 	})
 }
+
+// Reason and description limits count characters, not bytes (CONTRACT.md).
+func TestLimitsCountCharacters(t *testing.T) {
+	reason := strings.Repeat("ñ", 150) + " a b" // 154 characters, 304 bytes
+	m := call(t, &fake{}, TransportModel, env("manage", `"action":"remove","name":"A","layer":"global","reason":"`+reason+`"`))
+	if typ, msg := refusalOf(t, m); typ != "internal" || msg != "manage is not available yet" {
+		t.Fatalf("a 154-character reason was refused: %s %q", typ, msg)
+	}
+}

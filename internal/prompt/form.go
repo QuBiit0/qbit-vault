@@ -44,10 +44,13 @@ func formDialog(reqs []SecretRequest) dialog {
 		if label == "" {
 			label = r.Name
 		}
+		if r.Description != "" {
+			label += " (" + r.Description + ")"
+		}
 		fields[i] = formField{label: escape(label), visible: r.Visible}
 	}
 	head := reqs[0]
-	head.Name, head.Label, head.Visible, head.Field, head.Fields = strings.Join(names, ", "), "", false, 0, 0
+	head.Name, head.Label, head.Visible, head.Field, head.Fields, head.Description = strings.Join(names, ", "), "", false, 0, 0, ""
 	_, body, _ := strings.Cut(Header(head), "\n")
 	return dialog{
 		kind:   dialogForm,
@@ -95,7 +98,7 @@ func (n *native) Form(reqs []SecretRequest) ([]secret.Secret, error) {
 // ---- zenity: --forms ----
 
 func (zenityTool) buildForm(path string, d dialog) command {
-	args := []string{"--forms", "--title=" + d.title, "--text=" + d.text, "--separator=" + formSep}
+	args := []string{"--forms", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--separator=" + formSep}
 	for _, f := range d.fields {
 		if f.visible {
 			args = append(args, "--add-entry="+f.label)
@@ -162,7 +165,10 @@ $out.Flush()
 `
 
 func (powershellTool) parseForm(out []byte, n int) ([][]byte, bool) {
-	lines := bytes.Split(bytes.TrimRight(out, "\r\n"), []byte("\n"))
+	// One line per value, each ended by "\n": only that last terminator is
+	// dropped, so a blank last value stays a (blank) value.
+	out = bytes.TrimSuffix(bytes.TrimSuffix(out, []byte("\n")), []byte("\r"))
+	lines := bytes.Split(out, []byte("\n"))
 	if len(lines) != n {
 		return nil, false
 	}

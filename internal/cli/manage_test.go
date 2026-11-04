@@ -115,3 +115,19 @@ func TestManageRefusals(t *testing.T) {
 		t.Fatalf("no prompt: code=%d m=%v", code, m)
 	}
 }
+
+// B1: a blank allowlist entry empties the list once cleaned: the user must
+// be told it widens.
+func TestManageEditBlankEntriesAreWidening(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_b1\n", "set", "A", "--stdin", "--binaries", "gh")
+	code, m, _ := w.broker("manage", manageReq(w.outside, `"action":"edit","name":"A","layer":"global","changes":{"binaries":[""]}`))
+	if code != exitcode.Refusal || refusalType(m) != "internal" || m["refusal"].(map[string]any)["message"] != "invalid request: changes" {
+		t.Fatalf("blank entry: code=%d m=%v", code, m)
+	}
+	f := withBackend(t, answers(yes()))
+	w.broker("manage", manageReq(w.outside, `"action":"edit","name":"A","layer":"global","changes":{"binaries":[" gh "]}`))
+	if q := f.Calls[0].Q; !strings.Contains(q, "binaries: gh -> gh;") && !strings.HasSuffix(strings.Split(q, ". Reason")[0], "binaries: gh -> gh") {
+		t.Fatalf("question=%q", q)
+	}
+}

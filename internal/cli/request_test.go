@@ -175,7 +175,7 @@ func TestRequestSeveralFieldsInOnePrompt(t *testing.T) {
 	if !host.Visible || host.Label != "Host" || host.Field != 1 || host.Fields != 2 || pass.Visible || pass.Field != 2 || pass.Label != "Password" {
 		t.Fatalf("boxes: %+v / %+v", host, pass)
 	}
-	if q := f.Calls[2].Q; q != "Allow DB_HOST (global), DB_USER (global), DB_PASSWORD (global) for: run the shop-api migrations" {
+	if q := f.Calls[2].Q; q != "Allow DB_HOST (global), DB_USER (global, already stored), DB_PASSWORD (global) for: run the shop-api migrations" {
 		t.Fatalf("scope question=%q", q)
 	}
 	w.outRepo()
@@ -257,4 +257,37 @@ func withFormBackend(t *testing.T, f *prompttest.FormFake) {
 	old := newPrompt
 	newPrompt = func(*globals) (prompt.Backend, error) { return f, nil }
 	t.Cleanup(func() { newPrompt = old })
+}
+
+// W1: suggesting the project layer outside a repository is refused the same
+// way whether the name exists, so the refusal cannot probe the vault.
+func TestRequestNoProjectDoesNotDiscloseExistence(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_w1\n", "set", "HAVE", "--stdin")
+	f := withBackend(t, answers())
+	for _, n := range []string{"HAVE", "MISSING"} {
+		code, m, _ := w.broker("request", envelope("request", w.outside, `"name":"`+n+`","reason":"deploy the shop api now","suggested_layer":"project"`))
+		if code != exitcode.Refusal || refusalType(m) != "no_project" {
+			t.Fatalf("%s: code=%d m=%v", n, code, m)
+		}
+	}
+	if len(f.Calls) != 0 {
+		t.Fatalf("asked the user: %+v", f.Calls)
+	}
+}
+
+// W3, W4: the user sees each field's description, and which fields are
+// already stored.
+func TestRequestShowsDescriptionsAndStoredFields(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_user\n", "set", "DB_USER", "--stdin")
+	f := withBackend(t, answers(val("db.internal"), val("TESTSECRET_pw"), pick(0)))
+	w.broker("request", envelope("request", w.outside, dbFields+`,"reason":"run the shop-api migrations"`))
+	pass := f.Calls[1].Request
+	if pass.Description != "staging db" || len(pass.Stored) != 1 || pass.Stored[0] != "DB_USER" {
+		t.Fatalf("box request=%+v", pass)
+	}
+	if q := f.Calls[2].Q; !strings.Contains(q, "DB_USER (global, already stored)") {
+		t.Fatalf("scope question=%q", q)
+	}
 }

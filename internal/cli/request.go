@@ -53,6 +53,17 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	defer s.close()
 	cmd := quiet()
 
+	// Refused before any name is resolved, so the answer cannot tell whether
+	// a name exists (R-API-02).
+	proj, perr := vault.ProjectLayer(e.Cwd)
+	inProject := perr == nil
+	if perr != nil && !errors.Is(perr, vault.ErrNoProject) {
+		return broker.RequestResponse{}, asRefusal(mapErr(perr, ""))
+	}
+	if r.SuggestedLayer == "project" && !inProject {
+		return broker.RequestResponse{}, refusal.New(refusal.NoProject, "")
+	}
+
 	fields := make([]*asked, len(r.Fields))
 	var fresh []*asked
 	for i, f := range r.Fields {
@@ -81,15 +92,6 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 			clear(a.value)
 		}
 	}()
-	proj, perr := vault.ProjectLayer(e.Cwd)
-	inProject := perr == nil
-	if perr != nil && !errors.Is(perr, vault.ErrNoProject) {
-		return broker.RequestResponse{}, asRefusal(mapErr(perr, ""))
-	}
-	if len(fresh) > 0 && r.SuggestedLayer == "project" && !inProject {
-		return broker.RequestResponse{}, refusal.New(refusal.NoProject, "")
-	}
-
 	ask, err := g.backend()
 	if err != nil {
 		return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
@@ -130,11 +132,18 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 			layer = proj
 		}
 	}
+	var stored []string
+	for _, a := range fields {
+		if a.exists {
+			stored = append(stored, a.f.Name)
+		}
+	}
 	reqs := make([]prompt.SecretRequest, len(fresh))
 	for i, a := range fresh {
 		a.layer = layer
 		reqs[i] = prompt.SecretRequest{Name: a.f.Name, Reason: r.Reason, Host: hostOf(e.Session), Session: e.Session,
-			Project: layerRequest(layer), Label: a.f.Label, Visible: a.f.Kind == "text"}
+			Project: layerRequest(layer), Label: a.f.Label, Visible: a.f.Kind == "text",
+			Description: a.f.Description, Stored: stored}
 		if len(fresh) > 1 {
 			reqs[i].Field, reqs[i].Fields = i+1, len(fresh)
 		}
@@ -186,7 +195,11 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	opts, def := scopeLabels(e.Session, scopes, proposed)
 	var who []string
 	for _, a := range fields {
-		who = append(who, fmt.Sprintf("%s (%s)", a.f.Name, layerText(a.layer)))
+		if a.exists && len(fields) > 1 {
+			who = append(who, fmt.Sprintf("%s (%s, already stored)", a.f.Name, layerText(a.layer)))
+		} else {
+			who = append(who, fmt.Sprintf("%s (%s)", a.f.Name, layerText(a.layer)))
+		}
 	}
 	i, err := ask.Choose("Allow "+strings.Join(who, ", ")+" for: "+r.Reason, append(opts, "deny"), def)
 	if err != nil {

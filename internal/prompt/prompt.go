@@ -85,6 +85,12 @@ type SecretRequest struct {
 	// Field and Fields place this box in a capture of several: "Field of
 	// Fields". Fields <= 1 is a single capture.
 	Field, Fields int
+	// Description is the requester's description of the field (escaped
+	// when shown).
+	Description string
+	// Stored names the other fields of the request that are already stored
+	// and get no box (R-CAP-08).
+	Stored []string
 }
 
 // Backend asks the user. Every method blocks until the user answers.
@@ -336,6 +342,16 @@ func Header(req SecretRequest) string {
 	fmt.Fprintf(&b, "  reason:  %s\n", escape(req.Reason))
 	fmt.Fprintf(&b, "  from:    host %s, session %s\n", orDash(req.Host), orDash(req.Session))
 	fmt.Fprintf(&b, "  layer:   %s\n", layer)
+	if req.Description != "" {
+		fmt.Fprintf(&b, "  about:   %s\n", escape(req.Description))
+	}
+	if len(req.Stored) > 0 {
+		names := make([]string, len(req.Stored))
+		for i, n := range req.Stored {
+			names[i] = escape(n)
+		}
+		fmt.Fprintf(&b, "  stored:  %s (already stored, not asked)\n", strings.Join(names, ", "))
+	}
 	if req.Fields > 1 {
 		label := req.Label
 		if label == "" {

@@ -130,16 +130,37 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 			layer = proj
 		}
 	}
+	reqs := make([]prompt.SecretRequest, len(fresh))
 	for i, a := range fresh {
 		a.layer = layer
-		req := prompt.SecretRequest{Name: a.f.Name, Reason: r.Reason, Host: hostOf(e.Session), Session: e.Session,
+		reqs[i] = prompt.SecretRequest{Name: a.f.Name, Reason: r.Reason, Host: hostOf(e.Session), Session: e.Session,
 			Project: layerRequest(layer), Label: a.f.Label, Visible: a.f.Kind == "text"}
 		if len(fresh) > 1 {
-			req.Field, req.Fields = i+1, len(fresh)
+			reqs[i].Field, reqs[i].Fields = i+1, len(fresh)
 		}
-		sec, err := ask.Secret(req)
-		if err != nil {
-			return broker.RequestResponse{}, fail(err)
+	}
+	// One form where the backend has one (R-CAP-08), else one box per field.
+	var secs []secret.Secret
+	if fm, ok := ask.(prompt.Former); ok && len(fresh) > 1 {
+		var ferr error
+		if secs, ferr = fm.Form(reqs); ferr != nil && !errors.Is(ferr, prompt.ErrNoForm) {
+			return broker.RequestResponse{}, fail(ferr)
+		}
+		defer func() {
+			for _, s := range secs {
+				s.Wipe()
+			}
+		}()
+	}
+	for i, a := range fresh {
+		var sec secret.Secret
+		if secs != nil {
+			sec = secs[i]
+		} else {
+			var err error
+			if sec, err = ask.Secret(reqs[i]); err != nil {
+				return broker.RequestResponse{}, fail(err)
+			}
 		}
 		raw := sec.Reveal()
 		sec.Wipe()

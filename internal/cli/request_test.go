@@ -225,3 +225,36 @@ func TestRequestSeveralFieldsAllOrNothing(t *testing.T) {
 		t.Fatalf("nine fields: code=%d m=%v", code, m)
 	}
 }
+
+func TestRequestSeveralFieldsUsesOneFormWhereThereIsOne(t *testing.T) {
+	w := newWorld(t)
+	f := &prompttest.FormFake{Fake: prompttest.Fake{Script: []prompttest.Answer{val("db.internal|TESTSECRET_user|TESTSECRET_pw"), pick(0)}}}
+	withFormBackend(t, f)
+	code, _, out := w.broker("request", envelope("request", w.outside, dbFields+`,"reason":"run the shop-api migrations"`))
+	if code != exitcode.OK {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	if len(f.Calls) != 2 || f.Calls[0].Kind != "form" || len(f.Calls[0].Requests) != 3 {
+		t.Fatalf("calls=%+v", f.Calls)
+	}
+	if rs := f.Calls[0].Requests; !rs[0].Visible || rs[2].Visible || rs[0].Label != "Host" {
+		t.Fatalf("form requests=%+v", rs)
+	}
+	if w.value("DB_PASSWORD") != "TESTSECRET_pw" || w.value("DB_HOST") != "db.internal" {
+		t.Fatal("form values not stored")
+	}
+	// One new field does not need a form.
+	f = &prompttest.FormFake{Fake: prompttest.Fake{Script: []prompttest.Answer{val("TESTSECRET_one"), pick(0)}}}
+	withFormBackend(t, f)
+	w.broker("request", envelope("request", w.outside, `"name":"SOLO","reason":"run the shop-api migrations"`))
+	if f.Calls[0].Kind != "secret" {
+		t.Fatalf("single field used %s", f.Calls[0].Kind)
+	}
+}
+
+func withFormBackend(t *testing.T, f *prompttest.FormFake) {
+	t.Helper()
+	old := newPrompt
+	newPrompt = func(*globals) (prompt.Backend, error) { return f, nil }
+	t.Cleanup(func() { newPrompt = old })
+}

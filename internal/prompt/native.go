@@ -44,7 +44,8 @@ type dialog struct {
 	text    string // lines separated by \n
 	options []string
 	def     int
-	visible bool // a secret dialog for a text field: no masking
+	visible bool        // a secret dialog for a text field: no masking
+	fields  []formField // a form dialog's boxes
 }
 
 // command is a helper invocation. Stdin holds the script, when the helper
@@ -248,9 +249,14 @@ func (n *native) failed() error {
 // ask runs one dialog. The caller wipes r.Stdout. A "no" to a question comes
 // back as statusNo with a nil error.
 func (n *native) ask(d dialog) (result, status, error) {
+	return n.askWith(n.t.build(n.path, d), d)
+}
+
+// askWith runs a built helper command for dialog d.
+func (n *native) askWith(c command, d dialog) (result, status, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), n.timeout)
 	defer cancel()
-	r, err := n.run(ctx, n.t.build(n.path, d))
+	r, err := n.run(ctx, c)
 	if err != nil {
 		clear(r.Stdout)
 		if errors.Is(err, context.DeadlineExceeded) {

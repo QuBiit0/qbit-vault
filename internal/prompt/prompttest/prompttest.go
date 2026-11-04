@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 
 	"github.com/QuBiit0/gentle-vault/internal/prompt"
 	"github.com/QuBiit0/gentle-vault/internal/secret"
@@ -22,12 +23,13 @@ type Answer struct {
 
 // Call records one prompt the Fake was asked, never an answer.
 type Call struct {
-	Kind    string // secret, choose, confirm or passphrase
-	Request prompt.SecretRequest
-	Q       string
-	Options []string
-	Default int
-	Confirm bool // Passphrase: asked twice
+	Kind     string // secret, choose, confirm, passphrase or form
+	Request  prompt.SecretRequest
+	Requests []prompt.SecretRequest // form
+	Q        string
+	Options  []string
+	Default  int
+	Confirm  bool // Passphrase: asked twice
 }
 
 // ErrScriptExhausted is returned when the Fake is asked more than scripted.
@@ -131,3 +133,25 @@ func (s *stream) ReadLine(context.Context) ([]byte, error) {
 }
 
 func (s *stream) ReadHidden(ctx context.Context) ([]byte, error) { return s.ReadLine(ctx) }
+
+// FormFake is a Fake whose backend has a multi-field form: Form answers all
+// the boxes at once from one scripted Answer, whose Value holds the values
+// joined by "|".
+type FormFake struct{ Fake }
+
+// Form implements prompt.Former.
+func (f *FormFake) Form(reqs []prompt.SecretRequest) ([]secret.Secret, error) {
+	a, err := f.pop(Call{Kind: "form", Requests: append([]prompt.SecretRequest(nil), reqs...)})
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(a.Value, "|")
+	if len(parts) != len(reqs) {
+		return nil, errors.New("prompttest: form answer does not match the fields")
+	}
+	out := make([]secret.Secret, len(reqs))
+	for i, r := range reqs {
+		out[i] = secret.New(r.Name, []byte(parts[i]))
+	}
+	return out, nil
+}

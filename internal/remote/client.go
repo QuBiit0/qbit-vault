@@ -17,6 +17,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -51,6 +52,36 @@ var (
 	deviceRE  = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
 )
 
+// transports holds one transport per CA file ("" for the system roots), so
+// every client of the process reuses its connections: a transport per
+// client leaks idle sockets in a long-lived process (the MCP server).
+var (
+	transportsMu sync.Mutex
+	transports   = map[string]*http.Transport{}
+)
+
+func transportFor(caFile string) (*http.Transport, error) {
+	transportsMu.Lock()
+	defer transportsMu.Unlock()
+	if tr, ok := transports[caFile]; ok {
+		return tr, nil
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	if caFile != "" {
+		pem, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, errors.New("remote: cannot read the CA file")
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, errors.New("remote: the CA file holds no certificate")
+		}
+		tr.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	}
+	transports[caFile] = tr
+	return tr, nil
+}
+
 // Client talks to one server.
 type Client struct {
 	base   string
@@ -75,17 +106,9 @@ func NewClient(server, caFile string) (*Client, error) {
 	default:
 		return nil, ErrInsecureURL
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	if caFile != "" {
-		pem, err := os.ReadFile(caFile)
-		if err != nil {
-			return nil, errors.New("remote: cannot read the CA file")
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, errors.New("remote: the CA file holds no certificate")
-		}
-		tr.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	tr, err := transportFor(caFile)
+	if err != nil {
+		return nil, err
 	}
 	origin := u.Scheme + "://" + u.Host
 	return &Client{base: origin, origin: origin, http: &http.Client{Transport: tr, Timeout: 30 * time.Second}}, nil

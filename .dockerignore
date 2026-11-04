@@ -1,0 +1,13 @@
+.git
+.github
+.atl
+.worktrees
+odd
+docs
+design
+dist
+bin
+**/*_test.go
+**/testdata
+*.md
+!README.md

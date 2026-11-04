@@ -20,8 +20,8 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 | T2 | S2-S4 | inline | S.1b: `link`, unlinked layers in `list --layer all`, origin hint, broker `unlinked_match` | 0cab11d | done |
 | T3 | S5 | inline | S.2 merge engine | db370d8 | done |
 | T4 | S5 | inline | S.3 remote crypto | ea50f5f | done |
-| T5 | S5 | inline | S.4 server core, S.5 pairing, recovery, rekey, anchors | fdca3e7 (S.4), (S.5 commit) | done |
-| T6 | S5 | inline | S.6 packaging | | pending |
+| T5 | S5 | inline | S.4 server core, S.5 pairing, recovery, rekey, anchors | fdca3e7 (S.4), 4c3f05e | done |
+| T6 | S5 | inline | S.6 packaging: `gentle-vault-server` serve/invite/health, Dockerfile, compose | (S.6 commit) | done |
 | T7 | S5 | inline | S.7-S.9 client | | pending |
 | T8 | S5 | inline | S.10 e2e | | pending |
 
@@ -36,3 +36,4 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 - L7. T4 notes: RED observed (build). Standard library only (crypto/hkdf, ed25519, ecdh X25519) plus x/crypto XChaCha20-Poly1305. The fixed vector was checked against an independent HKDF (Python, RFC 5869). The anchor AAD drops `generation`: the anchor key is derived from the master key, so a new generation already changes it. FuzzOpen: mutated objects never open, never panic.
 - L8. T5 S.4 notes: RED observed (build). Standard library net/http with Go 1.22 method patterns; the log line uses `r.Pattern` so it never holds a path value. Tokens and challenges live in memory (a restart ends sessions). The server cannot open a vault version but checks its cleartext AAD (`account_id`, `generation`, `version = base + 1`) so a client bug cannot store a mislabelled version.
 - L9. T5 S.5 notes: RED observed. The server checks that a pairing code fingerprints the keys it carries (`remote.PairingCode`), so a pairing can only carry the keys its code names; a poll answers `approved` once. A recovery token reads only the recovery envelope and registers one device. `rekey` is one transaction: new version under generation+1, one envelope per remaining device (exactly), new recovery envelope (the old lookup stops working), revoked devices unindexed and their tokens dropped; a device cannot revoke itself.
+- L10. T6 notes: RED observed for the server commands. Validated with Docker 29.9.2: `buildx build --check` without warnings, image 16.8 MB, user 65532, `--read-only` container healthy, invite stored, bad `--ttl` exits 2, SIGTERM stops with 0; `compose up` with the named volume healthy. The validation found a real bug, fixed: the `/data` volume was created root-owned, so the non-root server could not write; `/data` is now created in the build stage and copied with owner 65532. Release jobs (goreleaser, GHCR push) are not part of this slice: there is no remote yet.

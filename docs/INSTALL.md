@@ -89,7 +89,7 @@ Re-applies steps 6–8 from receipts. Run after upgrading gentle-vault, Gentle S
 **1. Run the server** (once, on your VPS or Dokploy). Deploy `deploy/compose.yaml` (image `ghcr.io/<owner>/gentle-vault-server`, one volume `/data`, `GV_SERVER_PUBLIC_URL=https://vault.example.com`) behind the proxy's TLS, then create an invite:
 
 ```bash
-docker exec <container> gentle-vault-server invite --ttl 24h
+docker compose -f deploy/compose.yaml exec server /gentle-vault-server invite --ttl 24h
 ```
 
 **2. First machine** (the one that already has your secrets):

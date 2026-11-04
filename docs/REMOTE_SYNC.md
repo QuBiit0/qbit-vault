@@ -218,10 +218,10 @@ The local audit log is hash-chained and anchored by `audit.head`, but a local at
 `gentle-vault-server` is a Go binary in the same module (`cmd/gentle-vault-server`), standard library only.
 
 - **Run:** `gentle-vault-server serve`. Env: `GV_SERVER_DATA` (default `/data`), `GV_SERVER_LISTEN` (default `:8080`), `GV_SERVER_PUBLIC_URL` (required; the origin clients sign, § 5), `GV_SERVER_TLS_CERT` / `GV_SERVER_TLS_KEY` (optional; otherwise TLS terminates at the reverse proxy), `GV_SERVER_TRUST_PROXY=1` (take the client IP for rate limits from `X-Forwarded-For`).
-- **Admin:** `gentle-vault-server invite [--ttl 24h]` prints one invite code; it is an operator credential, not a vault secret.
+- **Admin:** `gentle-vault-server invite [--ttl 24h]` (1 s to 720 h) prints one invite code; it is an operator credential, not a vault secret. `gentle-vault-server health` exits 0 when `/healthz` answers on `GV_SERVER_LISTEN` (the image's health check; the image has no shell). Exit codes: 0 ok, 1 failure, 2 usage. `serve` stops gracefully on SIGTERM.
 - **Storage:** files under `GV_SERVER_DATA` (`accounts/<id>/…`, `pairings/`, `invites/`, `recovery/`), every write atomic (temp file, `fsync`, rename) and serialized per account. One instance per data directory.
 - **Logs:** method, path template, status, duration and the first 8 hex of the account id. Never bodies, tokens, codes or IPs beyond the rate limiter's memory.
-- **Image:** `ghcr.io/<owner>/gentle-vault-server`, static binary on a distroless base, non-root user 65532, read-only root filesystem, one volume `/data`, health check on `/healthz`. `deploy/compose.yaml` runs it behind the Dokploy (Traefik) proxy with TLS on the public domain.
+- **Image:** `deploy/Dockerfile` (build from the repository root: `docker build -f deploy/Dockerfile .`), published as `ghcr.io/<owner>/gentle-vault-server`: a static binary on `gcr.io/distroless/static-debian12:nonroot`, user 65532, one volume `/data`, `HEALTHCHECK` through `gentle-vault-server health`. `deploy/compose.yaml` runs it read-only with all capabilities dropped and `no-new-privileges`, behind the Dokploy (Traefik) proxy that terminates TLS on the public domain (`GV_SERVER_PUBLIC_URL` is required, `GV_SERVER_TRUST_PROXY=1`).
 
 ## 11. Client state and errors
 

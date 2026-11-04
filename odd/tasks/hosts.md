@@ -23,7 +23,7 @@ Branch `feat/cli-skeleton`. Spec authority: docs/ROADMAP.md § Phase 3, docs/PRD
 | P2 | S2, S3, S7 | worker | 3.6a `state.json` hosts receipts, `init` step runner (idempotent, re-runs host steps on an existing vault), minimal read-only `doctor` | 4373016 | done |
 | P3 | S2, S6, S7 | worker | hooks: `hook pre-bash/post-bash/post-read/user-prompt`, bindings, refusal of mutating/remote/link subcommands, fail-open | c20b0d0 | done |
 | P4 | S2, S3, S7 | worker | 3.2 Claude Code adapter (MCP, hooks, deny-list, Gentle AI preservation) | 720fb0c | done |
-| P5 | S2, S4 | worker | 3.3 Codex adapter (TOML, sandbox -> tty) | | pending |
+| P5 | S2, S4 | worker | 3.3 Codex adapter (TOML, sandbox -> tty) | d00da6e | done |
 | P6 | S2, S8 | - | 3.4 OpenCode adapter (MCP; plugin when available) | | dropped |
 | P7 | S2, S5 | worker | 3.5 Pi adapter (MCP entry, printed install command) | | pending |
 | P8 | S2, S3 | worker | 3.6b `sync`, `uninstall` (+ `--purge`), full `doctor` (incl. sync conflicts) | | pending |

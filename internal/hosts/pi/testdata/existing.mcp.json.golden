@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "filesystem": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+        },
+        "docs": { "url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"}, "enabled": false },
+        "qbit-vault": {
+            "command": "/opt/qbit/bin/qbit-vault",
+            "args": [
+                "mcp"
+            ]
+        }
+    },
+    "other": [1,   2]
+}

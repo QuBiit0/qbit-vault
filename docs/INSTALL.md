@@ -51,9 +51,9 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 3 | Master key | Try keychain. On success: generate key, store, `keychain: <backend>`. On failure (headless Linux, WSL without Secret Service): **passphrase prompt** (masked, twice) → `key.enc` | only without keychain |
 | 4 | Empty vault | Write `vault.enc` with `{secrets:{}}`. **Never** reads `process.env` or any `.env` | no |
 | 5 | Detect hosts | Presence of `~/.claude/`, `~/.codex/`, OpenCode config dir, `~/.pi/agent/`, `~/.gentle-shell/agent/`; honor `--agents` | no |
-| 6 | Register hosts | Per `AGENT_INTEGRATIONS.md`: MCP entries, hooks, plugin, deny-list; receipts to `state.json`. Claude Code (implemented): `mcpServers.qbit-vault` in `~/.claude.json`, four hooks and the `//<vault home>/**` Read/Edit deny rules in `~/.claude/settings.json` | no |
+| 6 | Register hosts | Per `AGENT_INTEGRATIONS.md`: MCP entries, hooks, plugin, deny-list; receipts to `state.json`. Pi (implemented): `mcpServers.qbit-vault` in `<Pi agent dir>/mcp.json` (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`). Claude Code (implemented): `mcpServers.qbit-vault` in `~/.claude.json`, four hooks and the `//<vault home>/**` Read/Edit deny rules in `~/.claude/settings.json` | no |
 | 7 | Deny-list check | Confirm Gentle AI entries survived (R-INS-05); abort + restore on failure | no |
-| 8 | Extension | `gentle-shell install npm:qbit-vault-pi@<pinned>` and/or `pi install npm:qbit-vault-pi@<pinned>` (pinned version, `--ignore-scripts`) | no |
+| 8 | Extension | Pi: `init` registers the MCP entry (step 6) and **prints** `pi install npm:qbit-vault-pi` for you to run; it never runs it, because installing needs the network (AGENTS.md invariant 8). The pinned-version install through `gentle-shell` arrives with the extension (Phase 4) | no |
 | 9 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 | 10 | Next steps | Print: "Restart your agent. In the chat, ask it to do something that needs a credential; you'll get a masked prompt here." | no |
 

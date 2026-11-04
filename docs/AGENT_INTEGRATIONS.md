@@ -133,6 +133,16 @@ plus, when the OpenCode plugin API is present, a plugin file `~/.config/opencode
 
 **Pi (plain, without Gentle Shell)**: `pi install npm:qbit-vault-pi` for the extension (rich path) and, for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the tools exist even if the extension is disabled.
 
+**Pi / Gentle Shell registration written by `init`** (adapter `pi`, `internal/hosts/pi`): one step, `mcp`, merged into `<Pi agent dir>/mcp.json` after a snapshot, owning only `mcpServers.qbit-vault`:
+
+```json
+{ "mcpServers": { "qbit-vault": { "command": "/abs/path/to/qbit-vault", "args": ["mcp"] } } }
+```
+
+`env` with `QBIT_VAULT_HOME` appears only when the vault home is not `~/.qbit-vault` (a path containing `${` or starting with `!` is refused, because Pi expands both in `env` values). `type` is omitted: Pi picks stdio from `command`. Format checked 2026-11-04 against the Pi docs (<https://github.com/badlogic/pi-mono>, `packages/coding-agent/docs/mcp.md`): Pi connects MCP servers natively since 0.99, reads user servers from `<agent dir>/mcp.json` (top-level `mcpServers`; stdio entries use `command`, `args`, `env`) and project servers from `.pi/mcp.json` (only after project trust; not touched). The `pi-mcp-adapter` extension reads the same file. The agent directory is `$PI_CODING_AGENT_DIR` when set (`docs/environment-variables.md`: "Override the config directory; default is `~/.pi/agent`"), else `<user home>/.pi/agent`; a leading `~` is expanded against the user home and a relative path is refused. Gentle Shell is detected by a `gentle-shell` binary on `PATH` and uses the same file when it runs on Pi; a Gentle Shell with its own agent directory (`~/.gentle-shell/agent`) is reached through `PI_CODING_AGENT_DIR`. Detection is read-only: the agent directory or `~/.pi` exists, or `pi` or `gentle-shell` is on `PATH`.
+
+The extension is **not** installed by `init` (it needs the network, invariant 8). After a successful registration `init` prints `host pi: to add the extension, run: pi install npm:qbit-vault-pi` (JSON: `install_command` on the host) and the user runs it. Not honored: `.pi/mcp.json`, and an agent directory passed with a Pi command-line option.
+
 **Gentle Shell**: `gentle-shell install npm:qbit-vault-pi` into `~/.gentle-shell/agent` (or `--link` home). See `GENTLE_SHELL_EXTENSION.md`.
 
 ## Native capture dialog (non-Pi hosts)

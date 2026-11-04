@@ -22,3 +22,14 @@ func TestUserHomeIsAThrowawayDirectory(t *testing.T) {
 		t.Fatalf("tests run with the user home %q, not a throwaway directory under %q", got, tmp)
 	}
 }
+
+// Variables that relocate a host's config dir would point an adapter at the
+// developer's real config even with a throwaway home (Pi sets
+// PI_CODING_AGENT_DIR for the processes it starts). TestMain clears them.
+func TestHostConfigDirOverridesAreCleared(t *testing.T) {
+	for _, k := range hostDirVars {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Fatalf("%s is set to %q in the test process", k, v)
+		}
+	}
+}

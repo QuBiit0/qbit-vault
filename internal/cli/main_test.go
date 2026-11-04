@@ -11,6 +11,9 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
+// hostDirVars relocate a host's config dir away from the user home.
+var hostDirVars = []string{"PI_CODING_AGENT_DIR", "CLAUDE_CONFIG_DIR", "CODEX_HOME"}
+
 // TestMain swaps the OS keychain for go-keyring's in-memory mock so no test
 // can reach the real one. When envChild is set the test binary is the child
 // process of an exec test instead (see exechelper_test.go).
@@ -28,6 +31,12 @@ func TestMain(m *testing.M) {
 	for _, k := range []string{"USERPROFILE", "HOME"} {
 		if err := os.Setenv(k, home); err != nil {
 			panic("cannot isolate the user home")
+		}
+	}
+	// A host config dir override would bypass the throwaway home.
+	for _, k := range hostDirVars {
+		if err := os.Unsetenv(k); err != nil {
+			panic("cannot clear a host config override")
 		}
 	}
 	// No test may reach a real terminal: by default there is none. Tests that

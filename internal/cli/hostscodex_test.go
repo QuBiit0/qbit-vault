@@ -14,9 +14,9 @@ func codexHost(uh string) *codex.Adapter {
 	return codex.NewWithExe(filepath.Join(uh, "bin", "qbit-vault")).WithLookPath(noClaudeBinary)
 }
 
-func TestReleaseRegistryIsClaudeCodeAndCodex(t *testing.T) {
+func TestReleaseRegistryIsClaudeCodeCodexAndPi(t *testing.T) {
 	names := releaseHostRegistry(&globals{}).Names()
-	if strings.Join(names, ",") != "claude-code,codex" {
+	if strings.Join(names, ",") != "claude-code,codex,pi" {
 		t.Fatalf("release registry: %v", names)
 	}
 }

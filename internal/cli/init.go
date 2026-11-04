@@ -16,6 +16,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/doctor"
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 	"github.com/QuBiit0/qbit-vault/internal/hosts"
+	"github.com/QuBiit0/qbit-vault/internal/hosts/pi"
 	"github.com/QuBiit0/qbit-vault/internal/keychain"
 	"github.com/QuBiit0/qbit-vault/internal/refusal"
 	"github.com/QuBiit0/qbit-vault/internal/secret"
@@ -37,11 +38,13 @@ type initBody struct {
 }
 
 // initHostBody is one host of the init report: the steps that wrote a config
-// file in this run (empty when nothing changed).
+// file in this run (empty when nothing changed). InstallCommand is a command
+// the user still has to run themselves; init only shows it (Pi's extension).
 type initHostBody struct {
-	Name    string   `json:"name"`
-	Changed bool     `json:"changed"`
-	Steps   []string `json:"steps"`
+	Name           string   `json:"name"`
+	Changed        bool     `json:"changed"`
+	Steps          []string `json:"steps"`
+	InstallCommand string   `json:"install_command,omitempty"`
 }
 
 const agentsNone = "none"
@@ -128,6 +131,9 @@ func newInit(g *globals) *cobra.Command {
 						hb.Steps = append(hb.Steps, s.Name)
 					}
 				}
+				if r.Host == pi.Name && r.Err() == nil {
+					hb.InstallCommand = pi.ExtensionInstallCommand
+				}
 				body.Hosts = append(body.Hosts, hb)
 				if r.Err() != nil {
 					step := r.FailedStep()
@@ -159,6 +165,11 @@ func newInit(g *globals) *cobra.Command {
 				for i, r := range results {
 					if _, err := fmt.Fprintln(out, hostLine(r, body.Hosts[i])); err != nil {
 						return err
+					}
+					if c := body.Hosts[i].InstallCommand; c != "" {
+						if _, err := fmt.Fprintf(out, "host %s: to add the extension, run: %s\n", r.Host, c); err != nil {
+							return err
+						}
 					}
 				}
 				if show {

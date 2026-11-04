@@ -93,6 +93,12 @@ func aadBytes(p kdfParams) ([]byte, error) {
 // writeKeyFile wraps key with a key derived from pass and writes key.enc
 // atomically into home.
 func writeKeyFile(home string, key, pass secret.Secret) error {
+	return writeKeyFileAs(home, keyFileName, key, pass)
+}
+
+// writeKeyFileAs is writeKeyFile for another file name in home (the staged
+// key of a rekey).
+func writeKeyFileAs(home, name string, key, pass secret.Secret) error {
 	if key.Len() != keySize {
 		return errors.New("keychain: master key must be 32 bytes")
 	}
@@ -135,14 +141,19 @@ func writeKeyFile(home string, key, pass secret.Secret) error {
 	if err := perm.EnsureDir(home); err != nil {
 		return fmt.Errorf("keychain: secure home: %w", bare(err))
 	}
-	return writeAtomic(home, keyFileName, out)
+	return writeAtomic(home, name, out)
 }
 
 // readKeyFile decrypts key.enc with pass. Malformed or out-of-bounds files
 // are ErrCorrupt, rejected before Argon2 runs; a failed authentication is
 // ErrBadPassphrase.
 func readKeyFile(home string, pass secret.Secret) (secret.Secret, error) {
-	data, err := os.ReadFile(keyFilePath(home))
+	return readKeyFileAt(keyFilePath(home), pass)
+}
+
+// readKeyFileAt is readKeyFile for the key file at path.
+func readKeyFileAt(path string, pass secret.Secret) (secret.Secret, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return secret.Secret{}, fmt.Errorf("keychain: read key file: %w", bare(err))
 	}

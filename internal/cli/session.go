@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/exitcode"
 	"github.com/QuBiit0/gentle-vault/internal/keychain"
 	"github.com/QuBiit0/gentle-vault/internal/prompt"
@@ -65,11 +66,48 @@ func (g *globals) openSession() (*session, error) {
 		return nil, mapErr(err, "")
 	}
 	v, err := vault.Open(home, key)
+	if err != nil && errors.Is(err, vault.ErrCorrupt) && !errors.Is(err, vault.ErrRollback) {
+		// A vault the main key cannot open may be one a rekey re-sealed
+		// before it could promote the new key: finish that rekey.
+		if next, ok := g.finishRekey(home, id, key); ok {
+			key.Wipe()
+			key = next
+			v, err = vault.Open(home, key)
+		}
+	}
 	if err != nil {
 		key.Wipe()
 		return nil, mapErr(err, "")
 	}
 	return &session{v: v, key: key, mode: mode, home: home}, nil
+}
+
+// finishRekey completes a rekey interrupted after its new key was staged
+// (docs/STORAGE.md § Master key): re-seal whatever is left, promote the key.
+// It reports false, changing nothing, when no key is staged or the staged key
+// cannot be read. The caller owns the returned key.
+func (g *globals) finishRekey(home, id string, cur secret.Secret) (secret.Secret, bool) {
+	opts := keychain.Options{Passphrase: g.unlockPassphrase}
+	if has, err := keychain.HasStaged(home, id, opts); err != nil || !has {
+		return secret.Secret{}, false
+	}
+	next, err := keychain.Staged(home, id, opts)
+	if err != nil {
+		return secret.Secret{}, false
+	}
+	if err := vault.Rekey(home, cur, next); err != nil {
+		next.Wipe()
+		return secret.Secret{}, false
+	}
+	// A failed promotion leaves the key staged; the next command retries.
+	_ = keychain.Promote(home, id, next, opts)
+	stderr := g.stderr
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	fmt.Fprintln(stderr, "warning: an interrupted rekey was finished")
+	g.record(stderr, audit.Record{Event: audit.EventWarning, Detail: "interrupted rekey finished"})
+	return next, true
 }
 
 // mapErr turns a vault or keychain error into a typed refusal or coded error.

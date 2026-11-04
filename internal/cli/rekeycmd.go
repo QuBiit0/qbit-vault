@@ -16,6 +16,7 @@ type rekeyBody struct {
 	OK       bool   `json:"ok"`
 	Rekeyed  bool   `json:"rekeyed"`
 	Keychain string `json:"keychain"`
+	Remote   string `json:"remote,omitempty"`
 }
 
 var errNotPromoted = codedError{"internal", "the new master key is staged but not yet active; the next command finishes the rekey", exitcode.Failure}
@@ -32,14 +33,16 @@ func newRekey(g *globals) *cobra.Command {
 		Short: "Rotate the master key",
 		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := g.refuseRekeyWhileSyncing(); err != nil {
-				return err
-			}
 			s, err := g.openSession()
 			if err != nil {
 				return err
 			}
 			defer s.close()
+			if st, err := vault.ReadRemote(s.home); err != nil {
+				return mapErr(err, "")
+			} else if st != nil {
+				return g.rekeySynced(cmd, s, st)
+			}
 			id, err := vault.ReadID(s.home)
 			if err != nil {
 				return mapErr(err, "")
@@ -72,4 +75,29 @@ func newRekey(g *globals) *cobra.Command {
 			return err
 		},
 	}
+}
+
+// rekeySynced is rekey on a vault that syncs: the account key is rotated for
+// every device and nobody is revoked (REMOTE_SYNC § 4.5, last paragraph). It
+// is user-only because it shows the new recovery key out of band.
+func (g *globals) rekeySynced(cmd *cobra.Command, s *session, st *vault.Remote) error {
+	ask, show, err := g.userBackend(true)
+	if err != nil {
+		return err
+	}
+	if g.remoteOff() {
+		return errRemoteOff
+	}
+	if err := askYes(ask, "Rotate the master key of your vault on "+serverHost(st.Server)+"? Every device switches to the new key, and the recovery key is replaced."); err != nil {
+		return err
+	}
+	res, err := g.rotateAccount(cmd, s, ask, show, "")
+	if err != nil {
+		return err
+	}
+	if g.JSON {
+		return writeJSON(cmd.OutOrStdout(), rekeyBody{OK: true, Rekeyed: true, Keychain: string(s.mode), Remote: remoteSynced})
+	}
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "master key rotated (keychain: %s); the account is now generation %d\n", s.mode, res.generation)
+	return err
 }

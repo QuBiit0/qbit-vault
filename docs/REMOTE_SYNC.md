@@ -108,13 +108,17 @@ A revoked device still knows the current `MK`, so revocation always **rotates th
 5. Re-seal `vault.enc`, `grants.enc`, `device.enc`, `base.enc` with `MK'`; replace the keychain entry; move the old key to `keys/retired.enc`.
 6. Show `RK'` out of band as in § 4.1 step 5; the old recovery key no longer works.
 
-Other devices see generation `g+1` on their next pull, fetch their envelope (`GET /v1/keys/self`), and accept it only if its issuer is a device of their **local** roster that is not revoked and its signature, AAD and the decrypted remote vault all verify; then they swap keys the same way. The revoked device gets `device_revoked` from the server, turns sync off and keeps its local copy: revocation cannot wipe a machine, so credentials that device held must be rotated at their provider (THREAT_MODEL R11).
+Other devices see generation `g+1` on their next pull (the generation in the cleartext AAD of the version is only a hint to try the swap), fetch their envelope (`GET /v1/keys/self`), and accept it only if its issuer is a device of their **local** roster that is not revoked and its signature, AAD (account, this device, generation, issuer) and the decrypted remote vault all verify (otherwise `remote_auth` and the device keeps its key); then they swap keys the same way. The revoked device gets `device_revoked` from the server, turns sync off and keeps its local copy: revocation cannot wipe a machine, so credentials that device held must be rotated at their provider (THREAT_MODEL R11).
 
 `gentle-vault rekey` with sync enabled runs steps 3–6 without revoking anyone.
 
+**A device that missed a rotation.** The issuer check uses the local roster on purpose, so a server cannot vouch for a device of its own. The cost: a device that was offline while the roster gained a device which then issued the next rotation does not know that issuer and refuses the envelope (`remote_auth`). It keeps its local vault and key; add it again with `remote join` (pairing or recovery).
+
+**Order and crash safety.** After step 2 (a round that pushes everything this device has) the order is: build `MK'`, `RK'` and every object in memory; set `recovery_unconfirmed` in `state.json` (pessimistic, put back if the call fails); `POST /v1/rekey` (step 4, the only step that changes the account); the local swap of step 5 through the staged path of `rekey` (stage, `vault.Rekey`, promote), then `device.enc` and `base.enc`; then step 6. A failure or 409 before the call changes nothing on this device. A crash after the call leaves the server on `g+1` while this device is still on `g`, but the server holds this device's own key envelope for `g+1` (issuer = itself), so the next round runs the swap below with the envelope from `GET /v1/keys/self`; a crash inside the local swap is finished by the next command that opens the vault (the staged key) and by the same swap, which skips the re-seal when the key already is the new one, while `device.enc` and `base.enc` are re-sealed from `keys/retired.enc`. The new recovery key is lost only if the process dies before step 6 shows it: `remote status` keeps warning and `remote recovery-key --rotate` replaces it. The local swap is never done first, because a failed call would then leave this device on a key the account never had.
+
 ### 4.6 Other commands
 
-- `remote recovery-key --rotate`: new `RK`, new recovery envelope, old one deleted on the server. For a lost or exposed recovery key while a device still works.
+- `remote recovery-key --rotate`: new `RK`, new recovery envelope, old one deleted on the server. For a lost or exposed recovery key while a device still works. It is `PUT /v1/recovery {generation, lookup_id, auth, envelope}` at the current generation (409 when the account key changed meanwhile); the master key and the vault do not change. When the master key may be exposed too, run `rekey`, which replaces both.
 - `remote logout`: confirm, delete this device on the server (best effort), remove `remote/` and `state.json.remote`. The local vault and key stay.
 - `remote status`: server, account (first 8 hex), device, generation, version, last sync, pending push, conflicts, devices, anchor state. Read-only, never prompts.
 - `remote devices`: the roster (labels from the encrypted body, last sync per device, revoked ones marked).
@@ -139,6 +143,7 @@ JSON over HTTPS; blobs are base64url inside the JSON. Every response carries `{"
 | `GET /v1/vault/versions`, `GET /v1/vault?version=N` | device | the last 10 versions |
 | `PUT /v1/vault {base_version, blob}` | device | compare-and-swap: 200 `{version}` or 409 `{version}` |
 | `POST /v1/rekey` | device | atomic rekey and revocation (§ 4.5) |
+| `PUT /v1/recovery` | device | replace the recovery key at the current generation (§ 4.6) |
 | `GET /v1/keys/self` | device | this device's latest key envelope |
 | `GET /v1/devices`, `DELETE /v1/devices/{id}` | device | list, revoke (only through `rekey`), self-delete (`logout`) |
 | `POST /v1/pairings` | none | new device announces its public keys |
@@ -219,7 +224,7 @@ The local audit log is hash-chained and anchored by `audit.head`, but a local at
 
 - **Run:** `gentle-vault-server serve`. Env: `GV_SERVER_DATA` (default `/data`), `GV_SERVER_LISTEN` (default `:8080`), `GV_SERVER_PUBLIC_URL` (required; the origin clients sign, § 5), `GV_SERVER_TLS_CERT` / `GV_SERVER_TLS_KEY` (optional; otherwise TLS terminates at the reverse proxy), `GV_SERVER_TRUST_PROXY=1` (take the client IP for rate limits from `X-Forwarded-For`).
 - **Admin:** `gentle-vault-server invite [--ttl 24h]` (1 s to 720 h) prints one invite code; it is an operator credential, not a vault secret. `gentle-vault-server health` exits 0 when `/healthz` answers on `GV_SERVER_LISTEN` (the image's health check; the image has no shell). Exit codes: 0 ok, 1 failure, 2 usage. `serve` stops gracefully on SIGTERM.
-- **Storage:** files under `GV_SERVER_DATA` (`accounts/<id>/…`, `pairings/`, `invites/`, `recovery/`), every write atomic (temp file, `fsync`, rename) and serialized per account. One instance per data directory.
+- **Storage:** files under `GV_SERVER_DATA` (`accounts/<id>/…`, `pairings/`, `invites/`, `recovery/`, `revoked/`), every write atomic (temp file, `fsync`, rename) and serialized per account. One instance per data directory.
 - **Logs:** method, path template, status, duration and the first 8 hex of the account id. Never bodies, tokens, codes or IPs beyond the rate limiter's memory.
 - **Image:** `deploy/Dockerfile` (build from the repository root: `docker build -f deploy/Dockerfile .`), published as `ghcr.io/<owner>/gentle-vault-server`: a static binary on `gcr.io/distroless/static-debian12:nonroot`, user 65532, one volume `/data`, `HEALTHCHECK` through `gentle-vault-server health`. `deploy/compose.yaml` runs it read-only with all capabilities dropped and `no-new-privileges`, behind the Dokploy (Traefik) proxy that terminates TLS on the public domain (`GV_SERVER_PUBLIC_URL` is required, `GV_SERVER_TRUST_PROXY=1`).
 
@@ -236,6 +241,7 @@ The local audit log is hash-chained and anchored by `audit.head`, but a local at
 | `pairing_failed` | 1 | fingerprint or confirmation code mismatch, pairing expired |
 | `device_revoked` | 1 | this device was revoked; sync is now off |
 | `server_incompatible` | 1 | the server speaks another API major |
-| `remote_rekey_unavailable` | 1 | `rekey` on a vault that syncs, until the remote rekey of § 4.5 is implemented (a local rekey would leave the account on the old key) |
 
 None of these messages contains a value, a key, a code or a token.
+
+`device_revoked` is read from the `error.code` of any error response (never from its message). The server keeps the SHA-256 of every revoked device id (`revoked/` under its data directory) and answers that device's challenge with 403 `device_revoked`; a device it never knew gets 401 `unauthorized`. Its tokens are dropped at the revocation, so the next request fails and the re-login learns `device_revoked`.

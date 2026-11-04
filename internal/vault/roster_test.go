@@ -2,12 +2,14 @@ package vault
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/QuBiit0/gentle-vault/internal/merge"
+	"github.com/QuBiit0/gentle-vault/internal/secret"
 )
 
 func TestRosterRoundTrip(t *testing.T) {
@@ -96,5 +98,81 @@ func TestConflictCountIsReadOnly(t *testing.T) {
 	after, _ := os.ReadFile(filepath.Join(home, "vault.enc"))
 	if !bytes.Equal(before, after) {
 		t.Fatal("counting conflicts wrote the vault")
+	}
+}
+
+func TestDisableRemoteKeepsVaultAndKey(t *testing.T) {
+	v, home := newVault(t)
+	mustPut(t, v, Global(), "A_KEY", rec("TESTSECRET_disable"))
+	if err := v.SaveDeviceSecret(secret.New("dk", bytes.Repeat([]byte{5}, 32))); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteRemote(home, &Remote{Server: "http://x", AccountID: strings.Repeat("a", 32), Generation: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := DisableRemote(home); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := ReadRemote(home); r != nil {
+		t.Fatalf("remote state left: %+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(home, "remote")); !os.IsNotExist(err) {
+		t.Fatal("remote files left")
+	}
+	again, err := Open(home, testKey(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := again.Resolve("A_KEY", ""); err != nil || !sameValue(got, "TESTSECRET_disable") {
+		t.Fatalf("vault changed: %v", err)
+	}
+	if err := DisableRemote(home); err != nil { // idempotent
+		t.Fatal(err)
+	}
+}
+
+// ResealRemoteFiles moves device.enc and base.enc to the current key from a
+// retired one, and is a no-op when they already open (REMOTE_SYNC § 4.5).
+func TestResealRemoteFilesFollowsARekey(t *testing.T) {
+	v, home := newVault(t)
+	dk := secret.New("dk", bytes.Repeat([]byte{5}, 32))
+	if err := v.SaveDeviceSecret(dk); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.SaveBase([]byte(`{"schema":2}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.ResealRemoteFiles(); err != nil { // nothing to do
+		t.Fatal(err)
+	}
+	if err := Rekey(home, testKey(1), testKey(2)); err != nil {
+		t.Fatal(err)
+	}
+	nv, err := Open(home, testKey(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := nv.DeviceSecret(); err == nil {
+		t.Fatal("device.enc should still be sealed with the old key")
+	}
+	if err := nv.ResealRemoteFiles(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := nv.DeviceSecret()
+	if err != nil || string(got.Reveal()) != string(dk.Reveal()) {
+		t.Fatalf("device secret after reseal: %v", err)
+	}
+	if b, err := nv.Base(); err != nil || string(b) != `{"schema":2}` {
+		t.Fatalf("base after reseal: %q %v", b, err)
+	}
+	if err := nv.ResealRemoteFiles(); err != nil { // idempotent
+		t.Fatal(err)
+	}
+	// A file no retired key opens is reported, not replaced.
+	if err := os.WriteFile(filepath.Join(home, "remote", "device.enc"), []byte("junk"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := nv.ResealRemoteFiles(); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("junk device.enc: %v", err)
 	}
 }

@@ -23,8 +23,6 @@ const (
 
 const warnUnreachable = "warning: not synced (server unreachable); will retry"
 
-var errRekeyWhileSyncing = codedError{"remote_rekey_unavailable", "rekey is not available while the vault syncs: the account key would no longer match this device's", 1}
-
 // Remote outcomes shown in the "remote" field of --json success objects.
 const (
 	remoteSynced  = "synced"
@@ -76,6 +74,10 @@ func warnRound(w io.Writer, err error) {
 	code := "internal"
 	if errors.As(err, &ce) {
 		code = ce.code
+	}
+	if code == errRevoked.code {
+		fmt.Fprintln(w, "warning: "+errRevoked.msg)
+		return
 	}
 	fmt.Fprintf(w, "warning: not synced (%s); the change is kept on this device; run 'gentle-vault remote status'\n", code)
 }
@@ -181,15 +183,4 @@ func (g *globals) pullFirst(ctx context.Context) {
 	}
 	defer s.close()
 	g.pullBefore(ctx, stderrOf(g), s)
-}
-
-// refuseRekeyWhileSyncing stops a local rekey on a vault that syncs: it would
-// replace the master key the account's sealed objects derive from, so every
-// later round would fail to open the server's vault. The remote rekey of
-// REMOTE_SYNC § 4.5 is not implemented yet.
-func (g *globals) refuseRekeyWhileSyncing() error {
-	if st, err := vault.ReadRemote(g.Home()); err == nil && st != nil {
-		return errRekeyWhileSyncing
-	}
-	return nil
 }

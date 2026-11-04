@@ -238,3 +238,33 @@ func TestNewClientRefusesCredentialsInTheURL(t *testing.T) {
 		t.Fatalf("userinfo accepted: %v", err)
 	}
 }
+
+// A server that answers device_revoked is told apart from any other 401/403,
+// and its text never reaches the error.
+func TestClientDistinguishesDeviceRevoked(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		code   string
+		want   error
+	}{
+		{"revoked 403", 403, "device_revoked", remote.ErrRevoked},
+		{"revoked 401", 401, "device_revoked", remote.ErrRevoked},
+		{"unauthorized", 401, "unauthorized", remote.ErrAuth},
+		{"forbidden", 403, "forbidden", remote.ErrAuth},
+		{"unknown code", 403, "something_else", remote.ErrAuth},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(`{"api":1,"error":{"code":"` + tc.code + `","message":"SERVER-TEXT-TESTSECRET_x"}}`))
+			}))
+			defer ts.Close()
+			c, _ := remote.NewClient(ts.URL, "")
+			_, err := c.GetVault(ctx, 0)
+			if !errors.Is(err, tc.want) || (tc.want == remote.ErrRevoked && errors.Is(err, remote.ErrAuth)) || strings.Contains(err.Error(), "SERVER-TEXT") {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}

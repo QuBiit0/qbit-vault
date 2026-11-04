@@ -594,6 +594,10 @@ func newRemoteApprove(g *globals) *cobra.Command {
 			if _, err := g.syncRound(ctx, s, c, me.id); err != nil {
 				return err
 			}
+			// The round may have adopted a new generation: seal for that one.
+			if st, err = requireRemote(s); err != nil {
+				return err
+			}
 			env, err := remote.SealKeyEnvelope(me.key, keys.BoxPub, remote.EnvelopeAAD{AccountID: st.AccountID, DeviceID: keys.DeviceID, Generation: st.Generation, Issuer: me.id}, s.key)
 			if err != nil {
 				return err

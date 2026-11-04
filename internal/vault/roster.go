@@ -2,7 +2,12 @@ package vault
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/QuBiit0/gentle-vault/internal/envelope"
 	"github.com/QuBiit0/gentle-vault/internal/merge"
 )
 
@@ -86,4 +91,73 @@ func (v *Vault) ConflictCount() (int, error) {
 	n := 0
 	err := v.read(func(b *body) error { n = len(b.conflicts); return nil })
 	return n, err
+}
+
+// DisableRemote turns sync off for the vault in home: remote/ and the remote
+// object of state.json are removed under the vault lock; the vault, the key
+// and the backups stay (a revoked device keeps its copy, REMOTE_SYNC § 4.5).
+func DisableRemote(home string) error {
+	v := &Vault{st: &store{home: home}}
+	return v.locked(false, func() error {
+		err := os.RemoveAll(filepath.Join(home, remoteDir))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("vault: remove remote files: %w", bare(err))
+		}
+		st, err := loadState(home)
+		if err != nil {
+			return err
+		}
+		delete(st.extra, remoteStateKey)
+		return (&store{home: home}).saveState(st)
+	})
+}
+
+// ResealRemoteFiles moves remote/device.enc and remote/base.enc to this
+// vault's key. A file this key opens is left alone; one it does not open is
+// opened with each retired key and sealed again. It is what finishes a key
+// swap that died after the local files changed key and before these two did,
+// and it is idempotent. A file no key opens is ErrCorrupt and is not touched;
+// a missing file is skipped.
+func (v *Vault) ResealRemoteFiles() error {
+	retired, err := retiredKeys(v.st.home, v.st.key)
+	if err != nil {
+		retired = nil // an unreadable list only means no older key to try
+	}
+	defer func() {
+		for _, k := range retired {
+			k.Wipe()
+		}
+	}()
+	for _, f := range []struct{ name, format string }{{deviceFile, formatDevice}, {baseFile, formatBase}} {
+		err := v.locked(true, func() error {
+			data, err := os.ReadFile(filepath.Join(v.st.home, remoteDir, f.name))
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("vault: read remote file: %w", bare(err))
+			}
+			if pt, _, err := envelope.Open(f.format, v.st.key, data); err == nil {
+				clear(pt)
+				return nil
+			}
+			for _, k := range retired {
+				pt, aad, err := envelope.Open(f.format, k, data)
+				if err != nil {
+					continue
+				}
+				defer clear(pt)
+				sealed, err := envelope.Seal(f.format, v.st.key, aad, pt)
+				if err != nil {
+					return err
+				}
+				return replaceFile(filepath.Join(v.st.home, remoteDir), f.name, sealed)
+			}
+			return corrupt("remote file cannot be opened with the current or a retired key")
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

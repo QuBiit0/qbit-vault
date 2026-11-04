@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/QuBiit0/gentle-vault/internal/audit"
 	"github.com/QuBiit0/gentle-vault/internal/exitcode"
 	"github.com/QuBiit0/gentle-vault/internal/merge"
 	"github.com/QuBiit0/gentle-vault/internal/remote"
@@ -28,8 +29,6 @@ type roundResult struct {
 	Version int64
 	Reason  string
 }
-
-var errRekeyed = codedError{"internal", "the vault was rekeyed on another device; this version of gentle-vault cannot adopt the new key yet", 1}
 
 // canon is the comparable form of a body: nil collections are empty, so two
 // bodies that mean the same compare equal.
@@ -72,6 +71,9 @@ func parseBody(raw []byte) (*merge.Body, error) {
 // is false when there is none (a device that has never synced).
 func loadBase(v *vault.Vault) (*merge.Body, bool, error) {
 	raw, err := v.Base()
+	if err != nil && !errors.Is(err, os.ErrNotExist) && v.ResealRemoteFiles() == nil {
+		raw, err = v.Base() // a key swap died before base.enc followed the key
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return &merge.Body{Schema: 2}, false, nil
 	}
@@ -93,14 +95,15 @@ func saveRemoteState(home string, st *vault.Remote) error {
 // syncRound runs one round for the vault in s with an authenticated client.
 // Network calls happen outside the vault lock; only the merge holds it. A
 // failure to reach the server leaves the local change committed and the push
-// pending. Rekeys from another device (a higher generation) belong to S.9.
+// pending. A higher generation on the server first runs the key swap of
+// REMOTE_SYNC § 4.5 (adoptGeneration); a lower one is a rollback.
 func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, deviceID string) (roundResult, error) {
 	st, err := requireRemote(s)
 	if err != nil {
 		return roundResult{}, err
 	}
-	keys := remote.Subkeys(s.key)
 	for try := 0; try < maxRoundTries; try++ {
+		keys := remote.Subkeys(s.key) // changes when a key swap runs
 		base, haveBase, err := loadBase(s.v)
 		if err != nil {
 			return roundResult{}, err
@@ -115,15 +118,21 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 		}
 		rver, remoteBody, newer := st.LastVersion, base, false
 		if !vv.NotModified {
+			if gen, ok := peekGeneration(vv.Blob); ok && gen < st.Generation {
+				return roundResult{}, errRollback
+			} else if ok && gen > st.Generation {
+				// Sealed under a key this device does not have yet.
+				if err := g.adoptGeneration(ctx, s, st, c, vv, gen); err != nil {
+					return roundResult{}, err
+				}
+				continue
+			}
 			body, aad, err := remote.OpenObject(keys.Vault, st.AccountID, vv.Blob)
 			if err != nil {
 				return roundResult{}, codedError{"remote_auth", "the server's vault could not be verified", 1}
 			}
 			switch {
-			case aad.Generation > st.Generation:
-				clear(body)
-				return roundResult{}, errRekeyed
-			case aad.Generation < st.Generation, aad.Version != vv.Version, aad.Version < st.LastVersion:
+			case aad.Generation != st.Generation, aad.Version != vv.Version, aad.Version < st.LastVersion:
 				clear(body)
 				return roundResult{}, errRollback
 			}
@@ -139,6 +148,7 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 			merged  []byte
 			push    bool
 			applied bool
+			added   []merge.Device
 		)
 		err = s.v.ApplyBody(func(local []byte) ([]byte, error) {
 			l, err := parseBody(local)
@@ -146,6 +156,11 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 				return nil, err
 			}
 			m := merge.Merge(base, l, remoteBody, deviceID, time.Now())
+			for id, d := range m.Devices {
+				if _, had := l.Devices[id]; !had && id != deviceID && d.RevokedAt == nil {
+					added = append(added, d)
+				}
+			}
 			push = st.PendingPush || !bytes.Equal(canon(m), canon(remoteBody))
 			if push {
 				if d, ok := m.Devices[deviceID]; ok {
@@ -164,6 +179,9 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 			return roundResult{}, mapErr(err, "")
 		}
 
+		if haveBase {
+			g.warnNewDevices(added)
+		}
 		st.LastPullAt = nowUTC()
 		if !push {
 			if err := s.v.SaveBase(merged); err != nil {
@@ -215,7 +233,7 @@ func (g *globals) roundFailed(s *session, st *vault.Remote, err error) (roundRes
 		st.PendingPush = true
 		_ = vault.WriteRemote(s.home, st)
 	}
-	return roundResult{}, remoteErr(err, "this device was refused by the server")
+	return roundResult{}, g.remoteFail(err, "this device was refused by the server")
 }
 
 type syncBody struct {
@@ -471,5 +489,16 @@ func newRemoteDevices(g *globals) *cobra.Command {
 			}
 			return nil
 		},
+	}
+}
+
+// warnNewDevices audits a device this device did not know that joined by
+// pairing or recovery (REMOTE_SYNC § 4.3), so an unexpected one is visible.
+func (g *globals) warnNewDevices(added []merge.Device) {
+	sort.Slice(added, func(i, j int) bool { return added[i].AddedAt < added[j].AddedAt })
+	for _, d := range added {
+		if d.AddedBy == "pairing" || d.AddedBy == "recovery" {
+			g.record(stderrOf(g), audit.Record{Event: audit.EventWarning, Detail: "device added: " + oneLine(d.Label) + " via " + d.AddedBy})
+		}
 	}
 }

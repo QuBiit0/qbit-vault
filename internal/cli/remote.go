@@ -72,7 +72,7 @@ func newRemote(g *globals) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newRemoteRegister(g), newRemoteJoin(g), newRemoteApprove(g), newRemoteSync(g),
-		newRemoteStatus(g), newRemoteDevices(g), newRemoteLogout(g))
+		newRemoteStatus(g), newRemoteDevices(g), newRemoteLogout(g), newRemoteRevokeDevice(g), newRemoteRecoveryKey(g))
 	return cmd
 }
 
@@ -84,6 +84,8 @@ func remoteErr(err error, auth string) error {
 		return nil
 	case errors.Is(err, remote.ErrForged):
 		return errPairingFailed
+	case errors.Is(err, remote.ErrRevoked):
+		return errRevoked
 	case errors.Is(err, remote.ErrInsecureURL):
 		return usageError{"the server URL must be https:// (http:// only to localhost), without credentials"}
 	case errors.Is(err, remote.ErrUnreachable):
@@ -236,6 +238,11 @@ func (s *session) device() (thisDevice, error) {
 		return thisDevice{}, errors.New("this vault has no device id")
 	}
 	dk, err := s.v.DeviceSecret()
+	if err != nil && s.v.ResealRemoteFiles() == nil {
+		// A key swap that died after the vault changed key and before this
+		// file did: bring it to the current key and read it again.
+		dk, err = s.v.DeviceSecret()
+	}
 	if err != nil {
 		return thisDevice{}, mapErr(err, "")
 	}
@@ -252,7 +259,7 @@ func (g *globals) connect(ctx context.Context, st *vault.Remote, d thisDevice) (
 		return nil, remoteErr(err, "")
 	}
 	if err := c.Login(ctx, d.id, d.key); err != nil {
-		return nil, remoteErr(err, "this device was refused by the server")
+		return nil, g.remoteFail(err, "this device was refused by the server")
 	}
 	return c, nil
 }

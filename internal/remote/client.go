@@ -25,9 +25,12 @@ import (
 // errors are typed and never carry a response body, a token or a code.
 
 var (
-	ErrInsecureURL  = errors.New("remote: the server URL must be https:// (http:// only to localhost)")
-	ErrUnreachable  = errors.New("remote: server unreachable")
-	ErrAuth         = errors.New("remote: not authorized")
+	ErrInsecureURL = errors.New("remote: the server URL must be https:// (http:// only to localhost)")
+	ErrUnreachable = errors.New("remote: server unreachable")
+	ErrAuth        = errors.New("remote: not authorized")
+	// ErrRevoked is the server's device_revoked: this device was removed by
+	// a revocation. It is not an ErrAuth.
+	ErrRevoked      = errors.New("remote: this device was revoked")
 	ErrConflict     = errors.New("remote: a newer version exists")
 	ErrNotFound     = errors.New("remote: not found")
 	ErrInvalid      = errors.New("remote: request refused as invalid")
@@ -118,10 +121,17 @@ func (c *Client) call(ctx context.Context, method, path string, in any, out any,
 		return res.StatusCode, nil
 	}
 	var head struct {
-		API int `json:"api"`
+		API   int `json:"api"`
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
 	}
 	if json.Unmarshal(raw, &head) != nil || head.API != 1 {
 		return res.StatusCode, ErrIncompatible
+	}
+	// Only the code is read; the server's message is never kept.
+	if res.StatusCode >= 400 && head.Error.Code == "device_revoked" {
+		return res.StatusCode, ErrRevoked
 	}
 	switch res.StatusCode {
 	case 200:
@@ -413,6 +423,14 @@ func (c *Client) Rekey(ctx context.Context, r RekeyRequest) (int64, error) {
 		"envelopes": envs, "revoke": r.Revoke,
 		"recovery": map[string]string{"lookup_id": hex.EncodeToString(r.Recovery.LookupID), "auth": recoveryAuth(r.Recovery), "envelope": string(r.RecoveryEnvelope)}}, &out)
 	return out.Version, err
+}
+
+// RotateRecovery replaces the recovery key at the current generation; the
+// old one stops working. ErrConflict when the account key changed.
+func (c *Client) RotateRecovery(ctx context.Context, generation int, r Recovery, envelope []byte) error {
+	_, err := c.call(ctx, "PUT", "/v1/recovery", map[string]any{"generation": generation,
+		"lookup_id": hex.EncodeToString(r.LookupID), "auth": recoveryAuth(r), "envelope": string(envelope)}, nil)
+	return err
 }
 
 // DeviceInfo is a server-side device record (not trusted for keys: the

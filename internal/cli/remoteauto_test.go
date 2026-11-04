@@ -364,21 +364,3 @@ func TestSyncRefusedRoundIsWarnedNotSwallowed(t *testing.T) {
 		t.Fatalf("list: code=%d err=%q", code, errs)
 	}
 }
-
-func TestRekeyIsRefusedWhileTheVaultSyncs(t *testing.T) {
-	_, tp, a, _ := syncPair(t)
-	key := a.masterKey()
-	tp.n.Store(0)
-
-	code, id := jsonErrCode(t, a, "rekey")
-	if code != exitcode.Failure || id != "remote_rekey_unavailable" {
-		t.Fatalf("code=%d id=%q", code, id)
-	}
-	code, out, errs := a.run("", "rekey")
-	if code != exitcode.Failure || out != "" || !strings.HasPrefix(errs, "error: rekey is not available while the vault syncs") {
-		t.Fatalf("human: code=%d out=%q err=%q", code, out, errs)
-	}
-	if a.masterKey() != key || tp.n.Load() != 0 {
-		t.Fatal("a refused rekey changed the key or used the network")
-	}
-}

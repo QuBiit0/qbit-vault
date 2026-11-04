@@ -34,15 +34,36 @@ Exit criterion: a human can `set`, `grant` and `exec` end-to-end on all three OS
 | 2.1 | `broker` package implementing all ops + refusals; `broker --op` CLI; schema validation | CONTRACT.md |
 | 2.2 | `request` with existence non-disclosure, layer choice, reason heuristic, rate limit; `list` with `policy` | R-API-02,03,06, R-CAP-02,03a,05 |
 | 2.2a | `manage` op: remove/edit/move/replace, prompt token, widening labels, cooldown | R-API-07,08 |
+| 2.2b | Multi-field `request`: `fields` with `kind`/`label`, `refs` response, tokens bound to several names, `set --stdin --fields`, `prompt --field`; record `kind` | R-API-02, R-CAP-08,09, R-VAULT-06 |
+| 2.2c | Multi-field rendering in every prompt backend (PowerShell form, zenity `--forms`, consecutive boxes for osascript, kdialog and tty) | R-CAP-08, AGENT_INTEGRATIONS |
 | 2.3 | `mcp` stdio server, four tools, normative descriptions, `policy` as server `instructions`, `grant` refusal | R-API-01,05,06 |
 | 2.4 | Contract conformance test harness | TESTING.md |
+
+## Phase 2S — remote sync (`REMOTE_SYNC.md`)
+
+Runs after Phase 2 so the contract is settled; S.1 can land earlier because it only changes the local body.
+
+| Slice | Content | Req |
+| --- | --- | --- |
+| S.1 | Body schema 2 and migration: project ids, per-device `roots`, `device_id`, `kind`, `hlc`, tombstones; `link`; `list --layer all` marks unlinked layers; `keys/retired.enc` with `rekey`/`restore` | R-SYNC-11, STORAGE |
+| S.2 | `internal/merge`: pure three-way merge, conflicts, roster rules, fuzz and property tests | R-SYNC-07 |
+| S.3 | `internal/remote` crypto: key derivations, device keys, recovery key format, key and recovery envelopes, remote vault object with padding, anchors, pairing and confirmation codes (pure, test vectors) | R-SYNC-02,04 |
+| S.4 | `internal/server` core: file store, accounts and invites, device auth (challenge, token), vault CAS and last 10 versions, limits and rate limits, logging rules | R-SYNC-02,03 |
+| S.5 | Server pairing, recovery, atomic `rekey`/revoke, anchors endpoints | R-SYNC-04,06,10 |
+| S.6 | Packaging: `cmd/gentle-vault-server` (`serve`, `invite`), Dockerfile (static, non-root, read-only), `deploy/compose.yaml` for Dokploy, release jobs | R-SYNC-12 |
+| S.7 | Client transport and `remote register` / `join` (pairing and `--recovery`) / `approve` / `logout`, all user-only through the prompt backend | R-SYNC-01,03,04,05 |
+| S.8 | Sync rounds wired into mutating and reading commands, pending pushes, `remote sync` / `status` / `devices`, `--json` `remote` field, `doctor` | R-SYNC-07,09 |
+| S.9 | `remote revoke-device`, `recovery-key --rotate`, rekey with sync, `conflicts` / `resolve`, `history` / `restore`, `audit --verify` anchors | R-SYNC-06,10 |
+| S.10 | E2E sync battery in Docker (three clients, rollback server, leak grep of `/data` and HTTP bodies) | TESTING.md |
+
+Exit criterion: TESTING.md Tier 2 step 7 green; a secret set on one OS is usable on another after `join`; the server volume holds no fixture value, name or path.
 
 ## Phase 3 — hosts
 
 | Slice | Content | Req |
 | --- | --- | --- |
 | 3.1 | `filemerge`: snapshot + atomic JSON/TOML merge + 3-way revert | R-INS-04 |
-| 3.2 | Claude Code adapter: MCP entry, hooks (`pre-bash`, `post`, `user-prompt`), deny-list, Gentle AI preservation check | R-HOST-02, R-INS-05 |
+| 3.2 | Claude Code adapter: MCP entry, hooks (`pre-bash`, `post`, `user-prompt`; `pre-bash` refuses `gentle-vault` mutating, `remote` and `link` subcommands in the agent's shell), deny-list, Gentle AI preservation check | R-HOST-02, R-INS-05, R-SYNC-05 |
 | 3.3 | Codex adapter (MCP, sandbox → tty prompt) | R-HOST-03 |
 | 3.4 | OpenCode adapter (MCP + plugin when available) | R-HOST-04 |
 | 3.5 | Pi (plain) adapter: MCP entry + extension install | R-HOST-01 |
@@ -65,6 +86,7 @@ Exit criterion: a human can `set`, `grant` and `exec` end-to-end on all three OS
 ## Phase 5 — hardening and release 0.1.0
 
 - Cross-agent battery green on macOS/Linux/Windows.
+- Sync battery green; `gentle-vault-server` image published and deployed once on Dokploy from `deploy/compose.yaml`.
 - Security review checklist (THREAT_MODEL.md) walked for every package.
 - Docs pass; `README` quickstart verified on a clean VM per OS in < 3 min.
 - Tag `v0.1.0`, publish npm with provenance, Homebrew tap formula, `install.sh`/`install.ps1`.
@@ -72,7 +94,10 @@ Exit criterion: a human can `set`, `grant` and `exec` end-to-end on all three OS
 ## v2 candidates (not scheduled)
 
 - Egress control for exec children (per-command network namespace / proxy) to close R1.
-- Pluggable backends: `op://`, `pass`, Infisical, HashiCorp Vault; team sharing.
+- Pluggable backends: `op://`, `pass`, Infisical, HashiCorp Vault; team sharing (several users on one sync server sharing selected secrets).
+- File injection for secrets that tools read from a path (SSH keys, kubeconfig) without plaintext on disk (pipe or memory-backed file).
+- Enforced host allowlist through a brokered `secret_http` call (today `hosts` is advisory).
+- Biometric or OS-level confirmation (Touch ID, Windows Hello) for grants, against same-user UI automation (THREAT_MODEL R9).
 - Project grants and project layers keyed by git remote.
 - Keyed-hash secret names in the audit log (THREAT_MODEL R6).
 - `gentle-ai install --components vault` native integration; contract moved under gentle-ai `contracts/`.

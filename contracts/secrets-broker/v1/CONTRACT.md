@@ -1,6 +1,6 @@
 # Contract: `gentle-ai.secrets-broker/v1`
 
-Status: **draft 1.0.0-draft.1**. Frozen on the first stable release; afterwards only additive changes under the same major, published as capability rows (`capabilities: 1.1`, `1.2`, ...). Consumers MUST refuse envelopes whose `contract` major they do not implement.
+Status: **draft 1.0.0-draft.2** (draft.2: `request` takes several typed fields; `list` reports `kind` and `unlinked_match`; `capabilities` reports field kinds and sync). Frozen on the first stable release; afterwards only additive changes under the same major, published as capability rows (`capabilities: 1.1`, `1.2`, ...). Consumers MUST refuse envelopes whose `contract` major they do not implement.
 
 This contract defines the only surface through which a host (an agent runtime, its hooks or its extension) talks to the broker. It is transport-independent: the same JSON objects travel over MCP tool calls, over the CLI with `--json`, and over host hooks.
 
@@ -29,28 +29,42 @@ Every secret lives in one **layer**: `global`, or `project` (the repository that
 
 ## Operations
 
-### `request` — ask for a secret handle (model-callable)
+### `request` — ask for one or several secret handles (model-callable)
 
-Request:
+Request, one secret:
 ```json
 { "op": "request", "name": "GITHUB_TOKEN", "reason": "gh release create v1.2.0", "suggested_scope": "session", "suggested_layer": "global" }
 ```
 
+Request, several fields in one prompt:
+```json
+{ "op": "request", "reason": "run the shop-api migrations against staging",
+  "fields": [ { "name": "DB_HOST", "kind": "text", "label": "Host" },
+              { "name": "DB_USER", "kind": "text", "label": "User" },
+              { "name": "DB_PASSWORD", "label": "Password", "description": "staging db password" } ],
+  "suggested_scope": "session", "suggested_layer": "project" }
+```
+
 | Field | Req | Rules |
 | --- | --- | --- |
-| `name` | yes | `^[A-Z][A-Z0-9_]{0,63}$` |
+| `name` | one of `name`, `fields` | `^[A-Z][A-Z0-9_]{0,63}$`; shorthand for `fields: [{name}]` |
+| `fields[]` | one of `name`, `fields` | 1–8 entries, names unique (a duplicate is `invalid_name`). Each `{name, kind?, label?, description?}`: `kind` `secret` (default; masked) or `text` (visible while typed); `label` ≤ 40 chars shown next to the box (default the name); `description` ≤ 200 chars, stored on a new record. Labels and descriptions are shown escaped, like `reason` |
 | `reason` | yes | 8–200 chars, shown verbatim to the user; MUST NOT be empty or generic (`"needed"` is refused with `reason_too_vague` by a minimal heuristic: < 3 words) |
 | `suggested_scope` | no | `once` \| `session` \| `project`; a hint only, the user chooses |
 | `suggested_layer` | no | `global` \| `project`; a hint only, the user chooses. `project` outside a repository → `no_project` |
 
-Behavior: the broker opens the **user-facing prompt** (host UI or native). If `name` resolves for `cwd`, the prompt asks only for a grant; otherwise it asks for the value, the layer (when `cwd` is in a repository) and a grant. The model is not told which of the two happened.
+Behavior: the broker opens **one user-facing prompt** (host UI or native) for all fields. A field whose name resolves for `cwd` is shown as *already stored* and gets no box; every other field gets a box (masked for `secret`, visible for `text`). The prompt asks the layer once for the new values (when `cwd` is in a repository) and one scope for all fields, offering only scopes every field allows (a `sensitive` one limits all to `once`). It is all-or-nothing: a blank box, a cancel or a timeout stores nothing and grants nothing. On confirmation every new value is stored and every field's record is granted with the chosen scope. The model is not told which fields were already stored. A name in its cooldown makes the whole request `rate_limited` (naming it); a decline starts the cooldown for every name in the request. With sync enabled the broker pulls first (bounded, `REMOTE_SYNC.md` § 7.1), so a secret stored on another machine is found.
 
 Response:
 ```json
-{ "ok": true, "ref": "secret://GITHUB_TOKEN", "layer": "global", "grant": { "scope": "session", "expires_at": "2026-10-16T09:12:00Z" } }
+{ "ok": true,
+  "refs": [ { "name": "DB_HOST", "ref": "secret://DB_HOST", "layer": "project" },
+            { "name": "DB_USER", "ref": "secret://DB_USER", "layer": "project" },
+            { "name": "DB_PASSWORD", "ref": "secret://DB_PASSWORD", "layer": "project" } ],
+  "grant": { "scope": "session", "expires_at": "2026-10-16T09:12:00Z" } }
 ```
 
-`expires_at` is `null` for `project`. For `once`, the grant is consumed by the next `exec` in the same session that references the name.
+A single-`name` request also carries `ref` and `layer` of that one field, so draft.1 callers keep working. `layer` is per field because a field already stored keeps its own layer. `expires_at` is `null` for `project`. For `once`, each field's grant is consumed by the next `exec` in the same session that references that name.
 
 ### `list` — enumerate handles (model-callable)
 
@@ -61,23 +75,24 @@ Response:
 { "ok": true,
   "project": { "root": "/home/me/shop-api", "label": "shop-api" },
   "secrets": [
-  { "name": "GITHUB_TOKEN", "layer": "global", "overrides_global": false,
+  { "name": "GITHUB_TOKEN", "layer": "global", "overrides_global": false, "kind": "secret",
     "description": "GitHub PAT, repo scope", "sensitive": false,
     "binaries": ["gh", "git"], "hosts": ["api.github.com"],
     "created_at": "…", "updated_at": "…",
     "grant": { "scope": "session", "expires_at": "…" } },
   { "name": "DATABASE_URL", "layer": "project", "overrides_global": true, "…": "…", "grant": null } ],
+  "unlinked_match": null,
   "policy": { "…": "see below" } }
 ```
 
-Returns the secrets that resolve from `cwd`: every secret of the current project layer, plus every global secret not overridden by it. `project` is `null` outside a repository. Other projects' secrets are never listed. Never values.
+Returns the secrets that resolve from `cwd`: every secret of the current project layer, plus every global secret not overridden by it. `project` is `null` outside a repository. Other projects' secrets are never listed. Never values. `unlinked_match` is `{ "label": "shop-api" }` when sync brought a project layer from another device whose origin URL matches this repository but the user has not linked it here (`REMOTE_SYNC.md` § 7.5): the agent may suggest that the user run `gentle-vault link shop-api`; it cannot link it itself. Otherwise `null`.
 
 `policy` tells the agent everything it may and may not do. Its strings are normative (hosts ship them verbatim) and the same text is the MCP server's `instructions`:
 
 ```json
 { "can": [
     "List secret names and metadata visible from this directory with secret_list.",
-    "Ask the user for a secret by name with a concrete reason using secret_request; the user types it outside the chat.",
+    "Ask the user for one or several secrets (up to 8 fields, each secret or plain text) with a concrete reason using secret_request; the user types them outside the chat.",
     "Run commands with granted secrets using secret_exec or the shell tool; output comes back redacted.",
     "Propose removing, editing, moving (global <-> this project) or replacing a secret using secret_manage; the user confirms or declines." ],
   "cannot": [
@@ -87,7 +102,8 @@ Returns the secrets that resolve from `cwd`: every secret of the current project
     "Reach the secrets of another project.",
     "Print the environment (env, printenv, set, /proc/*/environ, ...) while secrets are injected.",
     "Use a secret with a binary outside its allowlist.",
-    "Re-ask for a name the user declined during its cooldown." ],
+    "Re-ask for a name the user declined during its cooldown.",
+    "Configure sync, pair or revoke devices, or link a project layer; only the user can." ],
   "layers": ["global", "project"],
   "scopes": ["once", "session", "project"],
   "cooldowns": [ { "name": "AWS_SECRET_ACCESS_KEY", "until": "…" } ] }
@@ -174,8 +190,9 @@ Response:
 { "ok": true, "contract": "gentle-ai.secrets-broker/v1", "capabilities": "1.0",
   "ops": ["request","list","exec","manage","grant","revoke","capabilities"],
   "layers": ["global","project"],
-  "prompt_backends": ["pi-ui","osascript","powershell","zenity","tty"],
-  "keychain": "secret-service", "streaming": true }
+  "prompt_backends": ["pi-ui","osascript","powershell","zenity","kdialog","tty"],
+  "field_kinds": ["secret","text"], "max_fields": 8,
+  "keychain": "secret-service", "streaming": true, "sync": false }
 ```
 
 ## Refusals
@@ -189,7 +206,7 @@ A refusal is `{ "ok": false, "refusal": { "type": "<type>", "name": "<secret nam
 | `user_declined` | User cancelled the prompt | no (60 s cooldown) | Tell the model the user declined; do not re-ask |
 | `rate_limited` | Re-request inside the cooldown | no | Back off |
 | `reason_too_vague` | `request.reason` fails the heuristic | yes | Model rephrases with a concrete reason |
-| `invalid_name` | Name fails the regex | no | Fix the name |
+| `invalid_name` | Name fails the regex, or appears twice in `fields` | no | Fix the name |
 | `scope_not_allowed` | `project`/`session` asked for a `sensitive` secret | no | Offer `once` |
 | `scope_binary` | Command's binary not in the secret's `binaries` | no | Tell the user; user may edit the allowlist |
 | `no_project` | `layer: "project"` or `suggested_layer: "project"` while `cwd` is not inside a repository | no | Use `global`, or run from the repository |
@@ -207,7 +224,7 @@ Messages MUST be built from the secret **name** and fixed strings only.
 
 These descriptions are shipped verbatim to every host so models see the same contract.
 
-**`secret_request`** — "Ask the user for permission to use a named secret (e.g. GITHUB_TOKEN) in a later command. The user will type or approve it outside the chat. You NEVER receive the value; you receive a reference and a grant. Give a concrete reason (what command, what for). Do not request secrets you do not need for the current task. If the user declines, do not ask again."
+**`secret_request`** — "Ask the user for permission to use one or several named secrets (e.g. GITHUB_TOKEN, or DB_HOST, DB_USER and DB_PASSWORD together) in later commands. Ask for everything one task needs in a single call: up to 8 fields, each 'secret' (masked) or 'text' (visible, for non-secret values such as a hostname). The user will type or approve them outside the chat. You NEVER receive the values; you receive references and a grant. Give a concrete reason (what command, what for). Do not request secrets you do not need for the current task. If the user declines, do not ask again."
 
 **`secret_list`** — "List the secrets available from this directory (global ones and this project's), and the rules for what you can and cannot do with them. Values are never returned. Call this first when you need a credential."
 

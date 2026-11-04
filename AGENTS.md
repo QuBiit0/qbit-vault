@@ -1,6 +1,6 @@
 # AGENTS.md — instructions for the coding agent building gentle-vault
 
-You are implementing gentle-vault from the specification in this repository. Read this file first, then `docs/PRD.md`, `docs/THREAT_MODEL.md`, `docs/ARCHITECTURE.md` and `contracts/secrets-broker/v1/CONTRACT.md` before writing code. The spec is the authority; when code and spec disagree, fix the code or open a spec change, never silently diverge.
+You are implementing gentle-vault from the specification in this repository. Read this file first, then `docs/PRD.md`, `docs/THREAT_MODEL.md`, `docs/ARCHITECTURE.md` and `contracts/secrets-broker/v1/CONTRACT.md` before writing code (and `docs/REMOTE_SYNC.md` before touching sync or the server). The spec is the authority; when code and spec disagree, fix the code or open a spec change, never silently diverge.
 
 ## Non-negotiables (security invariants)
 
@@ -8,18 +8,21 @@ These are tested, not just documented. A PR that breaks one is rejected regardle
 
 1. **No secret value ever crosses the model boundary.** No tool result, MCP response, hook stdout, log line, error message, panic, or debug output may contain a secret value. Errors mention the secret **name** only.
 2. **No secret value ever touches disk unencrypted.** Not in temp files, not in shell history, not in crash dumps you control, not in the audit log.
-3. **Install and sync never ask for, read, or store a secret.** `init` creates an empty vault. It never reads `process.env` or the shell environment for values.
+3. **Install and host registration (`init`, `sync`) never ask for, read, or store a secret.** `init` creates an empty vault. It never reads `process.env` or the shell environment for values. Remote sync is a separate, explicit user action (`gentle-vault remote …`).
 4. **Injection is per child process.** Values go into the environment of exactly one `exec` child (or a pipe/file descriptor when the tool supports it). Never into the agent process, never exported to the parent shell, never inherited by subagents without their own grant.
 5. **All output is redacted before return.** stdout, stderr, and any file content the agent reads while a grant is active, for every active value and its common encodings.
 6. **Every capture and every grant is an explicit user action.** No auto-approval paths in v1. No "remember forever" without the user choosing it in the prompt.
 7. **Every mutation of a user config file is snapshotted first and written atomically.**
-8. **No postinstall scripts. No network calls except downloading the signed binary during install and the optional update check (opt-out).**
+8. **No postinstall scripts. No network calls except downloading the signed binary during install, the optional update check (opt-out), and the sync server the user configured (opt-in), which only ever receives data sealed on the device and public keys.** No key that decrypts a vault object ever leaves the device; `exec` never uses the network.
+9. **The sync server is untrusted.** Every object downloaded from it is verified (AEAD, AAD account/generation/version, signatures) before use; it never stores or logs anything but ciphertext, public keys, counters and timestamps. Recovery keys and pairing confirmation codes are shown and read only through the prompt backend, never on stdout, stderr, `--json`, logs or arguments.
 
 ## Repository layout (target)
 
 ```
 gentle-vault/
 ├── cmd/gentle-vault/           Go main: CLI entry
+├── cmd/gentle-vault-server/    Go main: optional self-hosted sync server
+├── deploy/                     server Dockerfile and compose.yaml (Dokploy)
 ├── internal/
 │   ├── vault/                  encrypted store, envelope format, atomic writes
 │   ├── keychain/               OS keychain + passphrase fallback
@@ -32,6 +35,9 @@ gentle-vault/
 │   ├── mcp/                    stdio MCP server exposing the broker
 │   ├── adapters/               per-agent config writers (claude, codex, opencode, pi)
 │   ├── filemerge/              snapshot + atomic merge (mirror gentle-ai semantics)
+│   ├── merge/                  three-way per-record merge for sync (pure)
+│   ├── remote/                 sync client: keys, pairing, envelopes, rounds, anchors
+│   ├── server/                 gentle-vault-server: zero-knowledge store and HTTP API
 │   └── doctor/                 read-only health report
 ├── contracts/secrets-broker/v1/ CONTRACT.md + schema (byte-pinned once released)
 ├── packages/
@@ -62,4 +68,4 @@ gentle-vault/
 
 ## What not to build in v1
 
-Team sharing, remote backends (1Password, Infisical, Vault), browser-based capture, a daemon, secret rotation, auto-approval policies. Keep the `Backend` interface so these can come later. See `docs/PRD.md` § Non-goals.
+Team sharing, third-party backends (1Password, Infisical, Vault), browser-based capture, a client daemon, secret rotation, auto-approval policies. gentle-vault's own sync server (`docs/REMOTE_SYNC.md`) **is** in v1. Keep the `Backend` interface so these can come later. See `docs/PRD.md` § Non-goals.

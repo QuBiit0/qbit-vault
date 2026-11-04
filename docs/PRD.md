@@ -21,13 +21,15 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - G5. Pi / Gentle Shell gets the richest experience (inline masked input, shell-tool override, sidebar audit); Claude Code, Codex and OpenCode get a functionally equivalent one through MCP and hooks.
 - G6. Secrets are organized in a **global** layer (used everywhere) and **project** layers (bound to one repository), managed with the same few commands by the user and, with user confirmation, by the agent.
 - G7. The agent can always learn, in one call, exactly what it may and may not do with the vault.
+- G8. The same vault works on several machines and is backed up off the machine through a self-hosted, zero-knowledge sync server (`gentle-vault-server`), with no scripts and no plaintext leaving a device. See `REMOTE_SYNC.md`.
+- G9. When a task needs several values (host, user and password of a database), the agent asks once and the user fills every box in one prompt; fields that are not secret (a hostname) are visible while typed, secret ones are masked.
 
 ## 3. Non-goals (v1)
 
 - Team or multi-user sharing of secrets.
-- Remote or third-party backends (1Password, Bitwarden, Infisical, HashiCorp Vault, cloud secret managers). The backend interface is defined so these can be added in v2.
+- Third-party backends (1Password, Bitwarden, Infisical, HashiCorp Vault, cloud secret managers). The backend interface is defined so these can be added in v2. gentle-vault's own sync server (G8) is in v1; it stores ciphertext only and is not a backend in this sense.
 - Secret rotation, expiry of the values themselves, or leak detection in external services.
-- A long-running daemon. v1 is a stateless CLI plus a stdio MCP server started by the host.
+- A long-running daemon on the user's machine. v1 is a stateless CLI plus a stdio MCP server started by the host; sync runs inside the commands that change or read the vault (`REMOTE_SYNC.md` § 7.1). The sync server is a separate, optional deployment.
 - Browser-based capture page.
 - Auto-approval policies ("always allow X without asking"). Grants are explicit; the broadest v1 grant is "this repository until revoked", chosen by the user in the prompt.
 - Protecting against a fully compromised user account or kernel. See `THREAT_MODEL.md` § Out of scope.
@@ -45,6 +47,10 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - F9 *Project override*: `DATABASE_URL` exists globally and in repo A; commands in repo A use A's value, everywhere else the global one.
 - F5 *Revocation*: user runs `gentle-vault revoke GITHUB_TOKEN` (grant) or `gentle-vault rm GITHUB_TOKEN` (value).
 - F6 *Uninstall*: `gentle-vault uninstall` restores every agent config from its snapshot and optionally deletes the vault.
+- F10 *Several fields*: agent needs a database; it calls `secret_request` once with `DB_HOST` (text), `DB_USER` (text) and `DB_PASSWORD` (secret); the user fills three boxes in one dialog and picks one scope; the agent gets three references.
+- F11 *First sync*: user runs `gentle-vault remote register --server https://vault.example.com`, types the invite code, writes down the recovery key; every later change syncs on its own.
+- F12 *Second machine*: user runs `gentle-vault init` and `gentle-vault remote join --server …` on the new machine, then `gentle-vault remote approve` on the old one and types the codes each one shows; the new machine has every secret. In a repository it already had, `gentle-vault link <label>` binds the project layer to the local checkout.
+- F13 *Lost machine*: from another device, `gentle-vault remote revoke-device <id>` removes it and rotates the master key and the recovery key; with no device left, `remote join --recovery` and the recovery key restore the vault.
 
 ## 5. Functional requirements
 
@@ -55,7 +61,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - R-VAULT-03. The vault file, key file, grants file and audit log MUST be created with mode `0600` (owner-only ACL on Windows).
 - R-VAULT-04. Every write MUST be atomic (write temp file in the same directory, fsync, rename) and MUST be preceded by an encrypted snapshot to `$GENTLE_VAULT_HOME/backups/`.
 - R-VAULT-05. Secret names MUST match `^[A-Z][A-Z0-9_]{0,63}$` so that a name is always a valid environment variable name on every platform.
-- R-VAULT-06. Each secret record MUST carry: name, layer (`global` or `project`), description (optional), created_at, updated_at, `sensitive` flag, allowed `binaries` (list of executable base names; empty = any), allowed `hosts` (list of hostnames; empty = any; advisory in v1, see R-EXEC-08).
+- R-VAULT-06. Each secret record MUST carry: name, layer (`global` or `project`), `kind` (`secret`, masked at capture, or `text`, visible at capture; both are stored, injected and redacted alike and never returned), description (optional), created_at, updated_at, `sensitive` flag, allowed `binaries` (list of executable base names; empty = any), allowed `hosts` (list of hostnames; empty = any; advisory in v1, see R-EXEC-08).
 - R-VAULT-07. The vault MUST never store the value in any derived or cached form outside the encrypted file (no index, no search cache, no clipboard).
 - R-VAULT-08. `init` and `sync` MUST NOT read, import or copy any value from the process environment, from `.env` files or from other credential stores. Importing is an explicit `gentle-vault import` the user runs with a path.
 - R-VAULT-09. Everything except the cleartext envelope header MUST be encrypted at rest: values, names, descriptions, project roots and grants. A copy of `$GENTLE_VAULT_HOME` without the master key MUST reveal no secret value and no secret name outside the audit log (see `STORAGE.md` § What a leaked directory reveals).
@@ -74,9 +80,11 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - R-CAP-02. The prompt MUST show the secret name and the agent-supplied reason, so the user can judge whether the request is legitimate.
 - R-CAP-03. The prompt MUST offer the grant scope choices (R-GRANT-02) in the same interaction so a first use costs exactly one prompt.
 - R-CAP-03a. The capture prompt MUST also offer the layer choice (`global` / `this project`) when `cwd` is inside a repository, defaulting to the agent's `suggested_layer` or `global`.
-- R-CAP-04. Blank or whitespace-only input MUST fail the capture without writing anything. Surrounding whitespace MUST be trimmed. Cancel MUST leave the vault unchanged.
+- R-CAP-04. Blank or whitespace-only input MUST fail the capture without writing anything. Surrounding whitespace MUST be trimmed. Cancel MUST leave the vault unchanged. In a capture of several fields this is all-or-nothing: one blank field, a cancel or a timeout writes none of them.
 - R-CAP-05. Capture MUST be rate-limited per session (default: a refused or cancelled request for the same name cannot be re-asked for 60 s) to blunt prompt-injection loops that nag the user.
 - R-CAP-06. The extension MUST intercept user input that matches known secret patterns (GitHub `ghp_`/`github_pat_`, OpenAI `sk-`, AWS `AKIA`, Slack `xox`, Stripe `sk_live`, private key PEM blocks, JWTs, and high-entropy strings ≥ 32 chars when preceded by `=` or `:`) **before** it reaches the model, and offer to store it as a named secret, replacing the text with its reference.
+- R-CAP-08. One capture MUST be able to ask for 1 to 8 fields under a single reason, a single layer choice and a single scope choice (R-API-02). Fields already stored are shown as stored and get no box; the model is not told which ones were. The offered scopes are those every field allows (a `sensitive` field limits all of them to `once`). Every backend renders the fields in one interaction: one form where the backend has forms (Pi, PowerShell, zenity `--forms`), otherwise consecutive boxes in the same prompt, where cancelling any box cancels the whole capture.
+- R-CAP-09. A `text` field MUST be visible while typed and a `secret` field masked; nothing else differs. The kind is chosen by the agent's request and shown to the user, who can still cancel; an agent that marks a secret as `text` only makes it visible on the user's own screen.
 - R-CAP-07. The user MUST be able to add or replace a value manually, without any agent request: `gentle-vault set NAME [--global|--project]` in any terminal and `/vault set NAME` in Pi / Gentle Shell. Both use the same masked capture (R-CAP-01) and never accept the value as an argument. Inside a repository with neither flag, the prompt asks for the layer.
 
 ### 5.3 Grants
@@ -110,7 +118,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 ### 5.6 Agent-facing surface
 
 - R-API-01. The broker MUST expose exactly four agent-callable tools in v1: `secret_request`, `secret_list`, `secret_exec`, `secret_manage`. Tool names are identical across hosts.
-- R-API-02. `secret_request(name, reason, suggested_scope?, suggested_layer?)` returns `{ ok, ref, grant: {scope, expires_at} }` or a typed refusal. It never returns a value, and it never returns whether the value *exists* before the user has confirmed (to avoid enumeration by prompt injection): the user prompt shows "already stored, grant only?" vs "new value" but the model only learns `ok`.
+- R-API-02. `secret_request(name | fields[], reason, suggested_scope?, suggested_layer?)` returns `{ ok, refs: [{name, ref, layer}], grant: {scope, expires_at} }` (plus `ref` and `layer` when a single `name` was asked) or a typed refusal. `fields` holds 1 to 8 `{name, kind?, label?, description?}` (R-CAP-08). It never returns a value, and it never returns whether the value *exists* before the user has confirmed (to avoid enumeration by prompt injection): the user prompt shows "already stored, grant only?" vs "new value" but the model only learns `ok`.
 - R-API-03. `secret_list()` returns names and metadata only for the secrets visible from `cwd`: the current project layer plus global secrets not overridden by it, each marked with its layer. It MUST also return a `policy` block (R-API-06).
 - R-API-06. The `policy` block MUST state, as fixed normative text from `CONTRACT.md`, what the agent can do (request, list, exec, propose management) and cannot do (read values, grant itself, skip confirmation, print the environment while secrets are injected, use a secret outside its allowlist), plus the current project root or `null`, the available scopes and layers, and the active cooldowns by name. The MCP server MUST ship the same text as its server `instructions`.
 - R-API-07. `secret_manage(action, name, layer, reason, changes?, to?)` lets the agent **propose** `remove`, `edit` (description, binaries, hosts, sensitive), `move` (between global and the current project) or `replace` (new value captured out of band). Every action MUST open a user confirmation through the capture channel (R-CAP-01) showing the action, name, layer, the diff of changes and the reason. Nothing is applied without that confirmation. The agent only receives `{ ok, applied }` or a typed refusal, never a value.
@@ -130,7 +138,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 - R-AUD-01. An append-only JSONL log at `$GENTLE_VAULT_HOME/audit.jsonl` MUST record: capture (name, layer, session, reason, `by: agent|user`), grant (name, layer, session, scope, expiry), exec (R-EXEC-06), manage (action, name, layer, session, reason, outcome), refusal (type, name, session), revoke, rm, mv. Never values.
 - R-AUD-02. Each record MUST include the SHA-256 of the previous record (hash chain) so tampering is detectable by `gentle-vault audit --verify`.
-- R-AUD-03. The log MUST never leave the machine. No telemetry in v1.
+- R-AUD-03. The log MUST never leave the machine. No telemetry in v1. With sync enabled, only an encrypted digest of the log's head (sequence number and line hash) is uploaded, so tampering with the local log becomes detectable (R-SYNC-10).
 
 ### 5.9 Install, sync, doctor, uninstall
 
@@ -140,9 +148,26 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - R-INS-04. Every config file `init` touches MUST be snapshotted first to `$GENTLE_VAULT_HOME/backups/<timestamp>/<path>` and written atomically with a merge that preserves unrelated keys.
 - R-INS-05. `init` MUST add `$GENTLE_VAULT_HOME/**` to each agent's file-read deny list where the agent supports one, and MUST verify that the Gentle AI permissions component's deny list, when present, is not weakened.
 - R-INS-06. `init` MUST finish by running `doctor` and printing its report.
-- R-INS-07. `doctor` MUST be read-only and report: binary version and signature status, vault present/locked/unlocked, keychain backend in use, per-agent registration status (MCP, hooks, deny-list), extension version for Pi, active grants count, audit chain validity.
+- R-INS-07. `doctor` MUST be read-only and report: binary version and signature status, vault present/locked/unlocked, keychain backend in use, per-agent registration status (MCP, hooks, deny-list), extension version for Pi, active grants count, audit chain validity, and with sync enabled the server, last sync, pending push, conflicts, generation and anchor state (without contacting the server).
 - R-INS-08. `sync` MUST re-apply registrations idempotently after a host or gentle-vault upgrade.
 - R-INS-09. `uninstall` MUST restore all snapshots, remove the extension, and leave the vault in place unless `--purge` is given, which requires typing the word `purge`.
+
+### 5.10 Remote sync
+
+Normative protocol: `REMOTE_SYNC.md`.
+
+- R-SYNC-01. Sync MUST be opt-in (`gentle-vault remote register` or `remote join`). Without it gentle-vault makes no network call beyond those of AGENTS.md invariant 8.
+- R-SYNC-02. The server MUST be zero-knowledge: it stores only ciphertext sealed on the device, public keys, counters and timestamps. No key that decrypts a vault object is ever sent to it, and authentication to it uses keys independent of the encryption keys.
+- R-SYNC-03. The client MUST refuse a server URL that is not `https://`, except loopback `http://`, and MUST verify every downloaded object (AEAD, AAD account, generation and version, signatures) before using it. A version or generation older than one already seen is `remote_rollback`.
+- R-SYNC-04. A new device MUST obtain the master key only by pairing with an existing device, verified by two codes typed by the user (the new device's key fingerprint on the approver, a confirmation code derived from the master key on the new device), or by the user's recovery key. Neither path lets the server substitute a device key or plant a master key of its own.
+- R-SYNC-05. Every command that registers, pairs, recovers, revokes, rotates the recovery key, resolves a conflict, restores a version, logs out or links a project MUST be user-only: its input and the codes and keys it shows go through the prompt backend (R-CAP-01), never arguments, stdin, stdout, stderr, `--json` or the audit log; with no prompt backend it is refused with `not_model_callable`.
+- R-SYNC-06. Revoking a device MUST rotate the master key and the recovery key in one atomic server transaction; remaining devices accept the new key only from a non-revoked device of their own encrypted roster.
+- R-SYNC-07. Merge MUST be per record (three-way against the last agreed version, hybrid logical clocks, tombstones). When both sides changed a record the newer change wins and the other is kept as a conflict for the user to resolve; no record is lost silently.
+- R-SYNC-08. Grants, prompt tokens, configuration and the audit log MUST NOT sync. A grant never applies to a record replaced on another device.
+- R-SYNC-09. The local vault MUST stay authoritative and usable offline. `exec` MUST NOT touch the network; a change made offline syncs on a later command.
+- R-SYNC-10. With sync enabled the client MUST upload, encrypted, the head of its audit log, and `audit --verify` MUST check the local log against those anchors.
+- R-SYNC-11. Project layers MUST be identified independently of their path, with one root per device. A project layer reaches a new machine only when the user links it (`gentle-vault link`), never by matching a remote URL automatically.
+- R-SYNC-12. `gentle-vault-server` MUST ship as one static binary and a container image that runs as non-root with a read-only root filesystem and one data volume, deployable behind a TLS reverse proxy (Dokploy).
 
 ## 6. Non-functional requirements
 
@@ -151,16 +176,18 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - R-NFR-03 *Supply chain*: releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
 - R-NFR-04 *Observability*: `--json` on every command for host adapters; human output otherwise.
 - R-NFR-05 *Compatibility*: contract `gentle-ai.secrets-broker/v1` is frozen on first stable release; additive changes bump the minor capability version; consumers refuse unknown major versions.
-- R-NFR-06 *Testing*: leak tests on every tier (see `TESTING.md`); a PR touching exec/redact/prompt/mcp/hooks without extending the leak test is rejected by CI.
+- R-NFR-06 *Testing*: leak tests on every tier (see `TESTING.md`); a PR touching exec/redact/prompt/mcp/hooks/remote/server without extending the leak test is rejected by CI.
+- R-NFR-07 *Sync server*: Linux amd64 and arm64 images; one instance serves at least 100 accounts on 256 MiB of memory; a sync round with no change costs one request answered `304`.
 
 ## 7. Success criteria for v1
 
 - A user can go from nothing to "agent created a GitHub release using a token it never saw" in under 3 minutes on all three OSes.
+- A secret stored on one machine is usable on a second machine after `init`, `remote join` and one approval, in under 2 minutes, and the server's data directory contains no fixture value, secret name or project path.
 - The leak test battery passes with zero secret bytes in any captured transcript, log, session file or tool result across Pi, Claude Code, Codex and OpenCode.
 - Gentle AI maintainers can read `CONTRACT.md` and `ARCHITECTURE.md` and identify where it would slot into `internal/components/` without asking design questions.
 
 ## 8. Open questions
 
-- Q1. Should `project` grants and project layers be keyed by git remote URL instead of filesystem root, so a re-clone keeps them? (Decided for v1: root path. `gentle-vault relink OLD NEW` moves a project layer and its grants to a new checkout path. Remote keying stays a v2 candidate.)
+- Q1. Should `project` grants and project layers be keyed by git remote URL instead of filesystem root, so a re-clone keeps them? (Decided for v1: root path. `gentle-vault relink OLD NEW` moves a project layer and its grants to a new checkout path. Remote keying stays a v2 candidate. With sync, project layers get a path-independent id and per-device roots (R-SYNC-11); the origin URL only produces a hint to run `link`.)
 - Q2. Should `secret_list` be hidden from the model entirely and exposed only to the user via `/vault list`? (Leaning: keep it; the agent needs to know which handles exist to avoid re-asking.)
 - Q3. Windows native prompt: PowerShell window vs. a tiny Go/Win32 dialog. (Leaning: PowerShell for v1, zero extra dependencies.)

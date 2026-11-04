@@ -82,11 +82,41 @@ Docs: https://github.com/<owner>/gentle-vault#use-it-from-the-agent
 
 Re-applies steps 6–8 from receipts. Run after upgrading gentle-vault, Gentle Shell, Gentle AI (`gentle-ai sync` may rewrite host configs) or any host. `doctor` tells you when it is needed.
 
+## Several machines (optional)
+
+`init` never contacts a server; sync is a separate, explicit step (`REMOTE_SYNC.md`).
+
+**1. Run the server** (once, on your VPS or Dokploy). Deploy `deploy/compose.yaml` (image `ghcr.io/<owner>/gentle-vault-server`, one volume `/data`, `GV_SERVER_PUBLIC_URL=https://vault.example.com`) behind the proxy's TLS, then create an invite:
+
+```bash
+docker exec <container> gentle-vault-server invite --ttl 24h
+```
+
+**2. First machine** (the one that already has your secrets):
+
+```bash
+gentle-vault remote register --server https://vault.example.com
+```
+
+A dialog asks for the invite, then shows your **recovery key** once. Write it down offline; with no device left it is the only way back in.
+
+**3. Every other machine:**
+
+```bash
+npx gentle-vault@latest init
+gentle-vault remote join --server https://vault.example.com   # prints a pairing code
+# on the first machine:
+gentle-vault remote approve                                   # type the pairing code, read the confirmation code
+# back on the new machine: type the confirmation code
+```
+
+From then on every change syncs by itself, and machines that were offline catch up on their next command. In a repository whose project secrets came from another machine, run `gentle-vault link <label>` once (`list` tells you when).
+
 ## `uninstall`
 
 1. For each receipt in `state.json`, restore the snapshot taken at registration (or remove only the keys gentle-vault added if the file changed since, using a 3-way merge; conflicts are reported and left to the user).
 2. Remove the extension from each Pi home.
-3. Leave `~/.gentle-vault/` intact. With `--purge` and the literal confirmation `purge`: delete the keychain item and the directory.
+3. Leave `~/.gentle-vault/` intact. With `--purge` and the literal confirmation `purge`: delete the keychain item and the directory. `uninstall` never touches the sync server; run `gentle-vault remote logout` (or revoke the device from another machine) first if this machine synced.
 
 ## Updates
 

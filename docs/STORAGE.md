@@ -22,36 +22,53 @@ A JSON envelope with a cleartext header and one AEAD-encrypted body. The header 
 
 ```json
 {
+  "schema": 2,
   "global": {
     "GITHUB_TOKEN": {
       "id": "9f2c…",
       "value": "…",
+      "kind": "secret",
       "description": "GitHub PAT, repo scope",
       "sensitive": false,
       "binaries": ["gh", "git"],
       "hosts": ["api.github.com"],
-      "created_at": "…", "updated_at": "…"
+      "created_at": "…", "updated_at": "…",
+      "hlc": "1793782800123.0@3fa1…"
     },
     "DATABASE_URL": { "value": "…", "description": "local dev db", "…": "…" }
   },
   "projects": {
-    "/home/me/shop-api": {
+    "7c41…": {
       "label": "shop-api",
+      "origin": "github.com/acme/shop-api",
+      "roots": { "3fa1…": "/home/me/shop-api", "b20e…": "C:/Users/me/code/shop-api" },
+      "hlc": "…",
       "secrets": {
         "DATABASE_URL": { "value": "…", "description": "shop-api staging", "…": "…" },
+        "DB_HOST": { "value": "…", "kind": "text", "…": "…" },
         "STRIPE_SECRET_KEY": { "value": "…", "sensitive": true, "…": "…" }
       }
     }
+  },
+  "tombstones": [ { "key": "global/OLD_TOKEN", "hlc": "…", "deleted_by": "3fa1…" } ],
+  "conflicts": [],
+  "devices": {
+    "3fa1…": { "label": "laptop", "sign_pub": "…", "box_pub": "…", "added_at": "…", "added_by": "register",
+                "revoked_at": null, "last_sync": { "version": 41, "at": "…" } }
   }
 }
 ```
+
+**Schema 2.** `schema` is absent in schema 1 bodies (the format before sync). Schema 2 adds, per record, `kind` (`secret` or `text`, default `secret`; R-VAULT-06) and `hlc` (the hybrid logical clock of its last change, `REMOTE_SYNC.md` § 7.3); keys `projects` by a random 16-byte hex **project id** with `label`, an optional normalized `origin` URL read from `.git/config` when the layer is created, and `roots` (device id → canonical root); and adds `tombstones`, `conflicts` and `devices` (the roster, empty until sync is enabled). A vault without sync uses the same schema; its `roots` hold only its own device. **Migration** happens on the first save after an upgrade, under the vault lock and with the usual snapshot: every schema-1 project layer gets a new id, `roots: {<this device>: <old key>}` and `origin` when the root still has one; every record gets `kind: "secret"` and an `hlc` from the current time; `schema` becomes 2. A schema-1 binary refuses a schema-2 body as `vault_corrupt` with the message `vault was written by a newer gentle-vault; upgrade`, and a body with a `schema` higher than it knows is refused the same way.
+
+**Device id.** `state.json.device_id` is 16 random bytes (hex) created by `init` or by the migration. It names this machine in `roots` and the roster whether or not sync is enabled.
 
 **Record id.** Every record carries a random `id` (16 bytes from `crypto/rand`, hex) inside the encrypted body. It is created when the record is created and **regenerated whenever its value is replaced**; metadata edits (`edit`), `mv` and `relink` keep it (they keep the value). Grants bind to it (see § Grants). The id is internal: no command prints it.
 
 ### Layers
 
 - `global` holds secrets usable from any directory. `projects` maps a canonical repository root to that project's own secrets. `label` is the root's base name, shown in prompts and `list`.
-- **Resolution** of `NAME` for a `cwd`: find the repository root of `cwd` (`git rev-parse --show-toplevel`, else the nearest ancestor containing `.git`); if `projects[root].secrets[NAME]` exists use it, else `global[NAME]`, else `unknown_secret`. A project secret therefore overrides a global one with the same name only inside that repository (PRD R-LAYER-02).
+- **Resolution** of `NAME` for a `cwd`: find the repository root of `cwd` (`git rev-parse --show-toplevel`, else the nearest ancestor containing `.git`); find the project whose `roots[<this device>]` equals that root; if its `secrets[NAME]` exists use it, else `global[NAME]`, else `unknown_secret`. A project layer with no root for this device (it came from another machine through sync) is invisible until the user runs `gentle-vault link` (`REMOTE_SYNC.md` § 7.5). A project secret therefore overrides a global one with the same name only inside that repository (PRD R-LAYER-02).
 - **Project root rule (v1):** the root is the nearest ancestor of `cwd` that contains a `.git` entry, either a directory or the file of a linked worktree. gentle-vault never spawns `git`; for normal checkouts and linked worktrees this equals `git rev-parse --show-toplevel`. Outside such an ancestor there is no project and only the global layer applies.
 - Project roots are canonicalized (absolute, symlinks resolved, case-folded on Windows and macOS) before lookup. Linked Git worktrees resolve to their own top level, so each worktree is its own project unless the user runs `gentle-vault relink` to point it at an existing layer.
 - Both layers live in this one encrypted body. Project paths, names and descriptions are as protected as the values. Nothing is ever written inside the repository.
@@ -69,7 +86,7 @@ The body is only ever materialized inside `internal/vault` for the duration of o
 - **Mode is implied by the files**: `key.enc` present means passphrase mode; otherwise the OS keychain. There is no mode field in `state.json`.
 - **Unlock cache**: the unlocked key is cached only in a memory-backed runtime directory: `$XDG_RUNTIME_DIR/gentle-vault/<vault-id>.key` (0600 file in a 0700 directory, tmpfs on Linux), content `{ expires_at, key }`, for `config.unlock_ttl` (default 8 h). It is used only on Linux, and only when `$XDG_RUNTIME_DIR` is set to an absolute path naming an existing directory; the directory and file are made owner-only through `internal/perm`. Everywhere else (Windows, macOS, Linux without `XDG_RUNTIME_DIR`) there is no cache and the passphrase is asked on every unlock: those platforms ship an OS keychain, so passphrase mode is rare there, and a disk-backed cache would put the key on disk unencrypted. An expired entry is deleted and ignored; `gentle-vault lock` deletes the file.
 - **Passphrase prompt**: `init --passphrase` (without `--passphrase-stdin`) asks the passphrase twice and every command that needs the key in passphrase mode with no cache entry asks it once, both through the prompt backend (slice 1.9: the controlling terminal, echo off, never stdin). The unlock prompt is used only when a controlling terminal exists; otherwise the vault stays locked (`vault_locked`) as before. Ctrl-C or end of input is `cancelled` (exit 1) and a wrong passphrase is `vault_locked`; a successful unlock refreshes the cache where one is available.
-- `gentle-vault rekey` rotates the master key: decrypt, generate new key, encrypt, swap, and update keychain/key.enc atomically with a backup of the old envelope.
+- `gentle-vault rekey` rotates the master key: decrypt, generate new key, encrypt, swap, and update keychain/key.enc atomically with a backup of the old envelope, and add the old key to `keys/retired.enc` (§ Retired keys). With sync enabled it is the rekey of `REMOTE_SYNC.md` § 4.5: other devices receive the new key through the server, sealed to their device keys.
 
 ## Atomic writes and backups
 
@@ -97,6 +114,8 @@ Backups are pruned to the last 20 snapshots by default (`config.backups_keep`), 
 | `$GENTLE_VAULT_HOME/` | 0700 | owner-only ACL, inheritance disabled |
 | `vault.enc`, `key.enc`, `grants.enc`, `audit.jsonl`, `audit.head`, `state.json` | 0600 | owner-only ACL |
 | `backups/**` | 0600 | owner-only ACL |
+| `remote/`, `keys/` | 0700 | owner-only ACL |
+| `remote/*.enc`, `keys/retired.enc` | 0600 | owner-only ACL |
 | `bindings.yaml`, `dumpguard.yaml`, `config.yaml` | 0600 | owner-only ACL |
 
 `doctor` reports any file whose mode is wider than this.
@@ -144,7 +163,7 @@ Drop rules, all inside the same locked operation as the vault change (vault firs
 
 **Scope rules** (`internal/grants`). `once` and `session` need a host session; `project` needs a project record, stores `project_root` and no session, and never expires. A `sensitive` record accepts `once` only; `project` scope on a global record is refused with the message `project scope needs a project secret` (still `scope_not_allowed`). `session` lives 30 minutes by default (`--ttl` 1 minute to 24 hours); an unused `once` grant expires after 10 minutes and is consumed by the first matching check. Adding a grant replaces an identical `(name, layer, session, scope)` grant. A `project` grant also requires `cwd` to be inside `project_root`, on path boundaries (`/work/shop` does not cover `/work/shop-old`).
 
-`prompt_token_hash` records which prompt created the grant (the broker issues a one-time random token to its own prompt backend, and `grant` must present it; the hash is stored for audit). This is the mechanism behind "grants are user-UI-only". A token is 32 random bytes in base64url, bound to one `(name, layer, scope, session, ttl)` and, when issued for an existing record, to its `record_id` (a token issued for a value that does not exist yet, as with `set --grant`, binds name, layer, scope, session and ttl only), where an omitted ttl is the scope's default (30 minutes for `session`) so it is part of the binding, valid for 2 minutes and for one use; an unknown, expired, reused or mismatched token (a token presented for a different request, TTL included, is burnt) is refused as `not_model_callable`. `gentle-vault prompt` is the issuer (slice 1.9, terminal backend; native dialogs in 1.10); `set --grant` interactive issues and redeems one in a single step, so its grant is audited as `prompt token` too. The CLI confirms a grant either with such a token (`--from-prompt-token`) or with a y/N answer on the **controlling terminal** (`/dev/tty`, `CONIN$`; never stdin).
+`prompt_token_hash` records which prompt created the grant (the broker issues a one-time random token to its own prompt backend, and `grant` must present it; the hash is stored for audit). This is the mechanism behind "grants are user-UI-only". A token is 32 random bytes in base64url, bound to one `(names, layer, scope, session, ttl)`, where `names` is the sorted list of the fields of one prompt (one name for a single-field request; a multi-field token is redeemed for all its names at once by `set --stdin --fields`, all-or-nothing, and creates one grant per record), and, when issued for an existing record, to its `record_id` (a token issued for a value that does not exist yet, as with `set --grant`, binds name, layer, scope, session and ttl only), where an omitted ttl is the scope's default (30 minutes for `session`) so it is part of the binding, valid for 2 minutes and for one use; an unknown, expired, reused or mismatched token (a token presented for a different request, TTL included, is burnt) is refused as `not_model_callable`. `gentle-vault prompt` is the issuer (slice 1.9, terminal backend; native dialogs in 1.10); `set --grant` interactive issues and redeems one in a single step, so its grant is audited as `prompt token` too. The CLI confirms a grant either with such a token (`--from-prompt-token`) or with a y/N answer on the **controlling terminal** (`/dev/tty`, `CONIN$`; never stdin).
 
 ## Audit log: `audit.jsonl`
 
@@ -159,7 +178,7 @@ One JSON object per line. Every record:
   "hash": "sha256:<hash of this line without the hash field>" }
 ```
 
-Events: `init`, `capture`, `grant`, `exec`, `manage`, `refusal`, `revoke`, `rm`, `mv`, `edit`, `relink`, `rekey`, `restore`, `uninstall`, `warning`, `prompt`. An unknown event is refused when appending.
+Events: `init`, `capture`, `grant`, `exec`, `manage`, `refusal`, `revoke`, `rm`, `mv`, `edit`, `relink`, `link`, `rekey`, `restore`, `uninstall`, `warning`, `prompt`, `remote`. An unknown event is refused when appending. `remote` records carry `detail` `registered`, `joined (pairing)`, `joined (recovery)`, `approved <device>`, `revoked <device>`, `recovery key rotated`, `conflict resolved`, `restored version N` or `logged out`, and never a code, a key or a server token; a sync round itself is not audited (it is not a user decision), except an applied conflict, which adds a `warning` (`detail: "sync conflict"`, names, layer).
 
 **Fields.** In this order: `ts` (RFC 3339, nanoseconds, UTC), `seq` (1-based), `prev`, `event`, `session`, then the optional `host` (`{name, version}`), `names`, `layer` (`global` or `project:<root>`), `by`, `reason`, `cwd`, `refusal` (the refusal type), `scope`, `expires_at`, `command`, `exit_code`, `duration_ms`, `redactions`, `outcome`, `detail`, and finally `hash`. Optional fields are omitted when empty. The API takes secret **names** only; a name that does not match the secret-name rule is dropped (never written raw) and the record gets `detail: "invalid name"`.
 
@@ -190,7 +209,8 @@ If someone copies the whole `$GENTLE_VAULT_HOME` (a stolen backup, a synced fold
 | `key.enc` (passphrase mode) | only by brute-forcing the passphrase through Argon2id (64 MiB per guess) | the master key, if the passphrase is weak |
 | `audit.jsonl` | yes | secret **names**, layers, sessions, redacted commands, timestamps. Never values. |
 | `audit.head` | yes | the sequence number and hash of the newest audit record. No names, no values. |
-| `state.json`, `config.yaml`, `bindings.yaml`, `dumpguard.yaml` | yes | installed hosts, versions, settings. No names, no values. |
+| `state.json`, `config.yaml`, `bindings.yaml`, `dumpguard.yaml` | yes | installed hosts, versions, settings, device id and, with sync, server URL, account id, generation and version. No names, no values. |
+| `remote/device.enc`, `remote/base.enc`, `keys/retired.enc` | no (AEAD) | format, write counter |
 
 In keychain mode the key never sits in the directory; it lives in the OS keychain, unlocked only by the user's login session. The audit log stays cleartext on purpose: it is append-only and must be verifiable (`audit --verify`) even when the vault is locked or corrupt. Hiding names in the audit log too (keyed hashes) is a v2 candidate, see `ROADMAP.md`.
 
@@ -208,4 +228,19 @@ In keychain mode the key never sits in the directory; it lives in the OS keychai
 }
 ```
 
-Receipts are what `sync` re-applies and `uninstall` reverts.
+Receipts are what `sync` re-applies and `uninstall` reverts. With remote sync, `state.json` also holds `device_id` and `remote` (`REMOTE_SYNC.md` § 11); `remote` is absent when the vault does not sync.
+
+## Remote files
+
+Only present once the vault syncs. Both use the `vault.enc` envelope with their own `format` and write counter in `state.json`, sealed with the master key, written under `vault.lock` with the atomic-write steps above, owner-only like the other files, and never snapshotted (they are rebuilt from the server).
+
+| File | `format` | Content |
+| --- | --- | --- |
+| `remote/device.enc` | `gentle-vault-device/1` | this device's 32-byte secret `DK` (`REMOTE_SYNC.md` § 2) |
+| `remote/base.enc` | `gentle-vault-base/1` | the body of the last remote version this device agreed with, the base of the three-way merge |
+
+A missing or unreadable `base.enc` makes the next round merge with an empty base: nothing is lost, and keys changed on both sides become conflicts. A missing `device.enc` turns sync off with `remote_auth` until `remote join` runs again.
+
+## Retired keys
+
+`keys/retired.enc` (`format: "gentle-vault-retired/1"`, sealed with the current master key) lists the master keys this vault used before: `[{generation or "local", key, retired_at}]`. `rekey`, a revocation and joining an account with a non-empty local vault add the key they replace, so `restore` can still open a backup made under an older key, and `audit --verify` can read anchors sealed under one. Entries are pruned with the backups that need them. A retired key is no weaker than the backups it opens: whoever holds the current key can already read them.

@@ -352,7 +352,9 @@ func (v *Vault) RelinkWithGrants(oldRoot, newRoot string, ed GrantsEditor) (int,
 			if _, taken := b.Projects[to]; taken {
 				return ErrExists
 			}
-			b.Projects[to] = &projectBody{Label: label, Secrets: p.Secrets}
+			moved := *p // same id: the layer moves, it is not a new project
+			moved.Label, moved.Origin = label, originOf(to)
+			b.Projects[to] = &moved
 			delete(b.Projects, from)
 			n = len(p.Secrets)
 			return nil

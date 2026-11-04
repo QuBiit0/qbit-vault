@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -68,29 +67,12 @@ func Open(home string, key secret.Secret) (*Vault, error) {
 }
 
 func (v *Vault) load() (*body, error) {
-	pt, _, err := v.st.load()
+	pt, hdr, err := v.st.load()
 	if err != nil {
 		return nil, err
 	}
 	defer clear(pt)
-	b := newBody()
-	if err := json.Unmarshal(pt, b); err != nil {
-		return nil, corrupt("unreadable body")
-	}
-	if b.Global == nil {
-		b.Global = map[string]wireRecord{}
-	}
-	if b.Projects == nil {
-		b.Projects = map[string]*projectBody{}
-	}
-	for root, p := range b.Projects {
-		if p == nil {
-			delete(b.Projects, root)
-		} else if p.Secrets == nil {
-			p.Secrets = map[string]wireRecord{}
-		}
-	}
-	return b, nil
+	return decodeBody(pt, hdr.Device)
 }
 
 // locked runs fn holding the in-process mutex and the vault lock file. With
@@ -138,11 +120,16 @@ func (v *Vault) mutateLocked(fn func(*body) error) error {
 		if b, err = v.load(); err != nil {
 			return err
 		}
+	} else {
+		// A first save: the device id it will record names this device.
+		b.device = v.st.deviceForNew()
+		b.clock = newClock(b.device, b)
 	}
+	before := b.index()
 	if err := fn(b); err != nil {
 		return err
 	}
-	pt, err := json.Marshal(b)
+	pt, err := encodeBody(b, before)
 	if err != nil {
 		return errors.New("vault: body encoding failed")
 	}
@@ -291,6 +278,14 @@ func (v *Vault) ListAll() ([]Entry, error) {
 			for n, w := range p.Secrets {
 				_, over := b.Global[n]
 				out = append(out, Entry{Name: n, Layer: l, Record: fromWire(n, w), OverridesGlobal: over})
+			}
+		}
+		// Layers from other devices with no root here: listed, marked, and
+		// never resolved (no Root, so no command can address them).
+		for _, p := range b.unlinked {
+			l := Layer{Project: true, Label: p.Label}
+			for n, w := range p.Secrets {
+				out = append(out, Entry{Name: n, Layer: l, Record: fromWire(n, w), Unlinked: true})
 			}
 		}
 		return nil

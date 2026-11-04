@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -107,8 +106,8 @@ func Restore(home, id string, key secret.Secret) error {
 			return err
 		}
 		defer clear(pt)
-		if json.Unmarshal(pt, newBody()) != nil {
-			return corrupt("backup body unreadable")
+		if _, err := decodeBody(pt, ""); err != nil {
+			return err
 		}
 		st, err := loadState(home)
 		if err != nil {

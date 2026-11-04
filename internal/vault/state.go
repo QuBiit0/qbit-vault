@@ -22,9 +22,25 @@ const (
 // state is the part of state.json this package owns. Unknown top-level keys
 // are carried in extra and written back untouched.
 type state struct {
-	VaultID string
-	Writes  uint64
-	extra   map[string]json.RawMessage
+	VaultID  string
+	Writes   uint64
+	DeviceID string // this machine in project roots and the roster (schema 2)
+	extra    map[string]json.RawMessage
+}
+
+var deviceIDRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// NewDeviceID returns 16 random bytes as hex.
+func NewDeviceID() string { return newProjectID() }
+
+// ReadDeviceID returns the device id recorded in state.json, "" when the
+// vault predates it and has not been opened since.
+func ReadDeviceID(home string) (string, error) {
+	st, err := loadState(home)
+	if err != nil {
+		return "", err
+	}
+	return st.DeviceID, nil
 }
 
 var vaultIDRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
@@ -65,6 +81,11 @@ func (s *state) marshal() ([]byte, error) {
 	if m["writes"], err = json.Marshal(s.Writes); err != nil {
 		return nil, err
 	}
+	if s.DeviceID != "" {
+		if m["device_id"], err = json.Marshal(s.DeviceID); err != nil {
+			return nil, err
+		}
+	}
 	return json.MarshalIndent(m, "", "  ")
 }
 
@@ -89,9 +110,14 @@ func loadState(home string) (*state, error) {
 	if json.Unmarshal(m["writes"], &s.Writes) != nil {
 		return nil, corrupt("state has no write counter")
 	}
+	if raw, ok := m["device_id"]; ok {
+		if json.Unmarshal(raw, &s.DeviceID) != nil || !deviceIDRE.MatchString(s.DeviceID) {
+			return nil, corrupt("state has a malformed device id")
+		}
+	}
 	for k, v := range m {
 		switch k {
-		case "format", "vault_id", "writes":
+		case "format", "vault_id", "writes", "device_id":
 		default:
 			s.extra[k] = v
 		}
@@ -105,12 +131,27 @@ type store struct {
 	key  secret.Secret
 	keep int
 	id   string // vault id for a first save; empty means generate one
+	// device is the device id a first save records (see deviceForNew).
+	device string
+}
+
+// deviceForNew is the device id of a vault being created: the one in an
+// existing state.json, else a fresh one the first save records.
+func (s *store) deviceForNew() string {
+	if st, err := loadState(s.home); err == nil && st.DeviceID != "" {
+		return st.DeviceID
+	}
+	if s.device == "" {
+		s.device = NewDeviceID()
+	}
+	return s.device
 }
 
 // header is what load reports about the vault file besides its plaintext.
 type header struct {
 	CreatedAt string
 	Writes    uint64
+	Device    string
 }
 
 // load decrypts vault.enc and checks it against state.json. A vault file
@@ -134,18 +175,25 @@ func (s *store) load() ([]byte, header, error) {
 		}
 		return nil, header{}, err
 	}
+	repair := false
 	switch {
 	case aad.Writes < st.Writes:
 		clear(pt)
 		return nil, header{}, ErrRollback
 	case aad.Writes > st.Writes:
-		st.Writes = aad.Writes
+		st.Writes, repair = aad.Writes, true
+	}
+	if st.DeviceID == "" {
+		// A vault from before device ids: name this machine now.
+		st.DeviceID, repair = NewDeviceID(), true
+	}
+	if repair {
 		if err := s.saveState(st); err != nil {
 			clear(pt)
 			return nil, header{}, err
 		}
 	}
-	return pt, header{CreatedAt: aad.CreatedAt, Writes: aad.Writes}, nil
+	return pt, header{CreatedAt: aad.CreatedAt, Writes: aad.Writes, Device: st.DeviceID}, nil
 }
 
 func (s *store) saveState(st *state) error {
@@ -192,7 +240,11 @@ func (s *store) save(plaintext []byte) error {
 		if id == "" {
 			id = NewID()
 		}
-		st = &state{VaultID: id, extra: map[string]json.RawMessage{}}
+		dev := s.device
+		if dev == "" {
+			dev = NewDeviceID()
+		}
+		st = &state{VaultID: id, DeviceID: dev, extra: map[string]json.RawMessage{}}
 	case err != nil:
 		return err
 	}

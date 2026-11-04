@@ -3,6 +3,7 @@ package vault
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 
 	"github.com/QuBiit0/gentle-vault/internal/secret"
 )
@@ -32,6 +33,9 @@ type Entry struct {
 	Layer           Layer
 	Record          Record
 	OverridesGlobal bool
+	// Unlinked marks a project layer synced from another device that has no
+	// root on this one: Layer.Root is empty (STORAGE.md § Layers).
+	Unlinked bool
 }
 
 // The plaintext body (docs/STORAGE.md § Plaintext body). It exists only
@@ -47,20 +51,38 @@ type wireRecord struct {
 	Hosts       []string `json:"hosts"`
 	CreatedAt   string   `json:"created_at"`
 	UpdatedAt   string   `json:"updated_at"`
+	// HLC is the hybrid logical clock of the record's last change (schema 2).
+	HLC string `json:"hlc,omitempty"`
 }
 
+// projectBody is one project layer. ID is stable across devices; Roots maps
+// each device to its checkout (schema 2).
 type projectBody struct {
-	Label   string                `json:"label"`
-	Secrets map[string]wireRecord `json:"secrets"`
+	Label   string
+	Secrets map[string]wireRecord
+	ID      string
+	Origin  string
+	Roots   map[string]string
+	HLC     string
 }
 
+// body is the decoded vault body (see body2.go for the schema 2 codec).
+// Projects holds the layers linked on this device, keyed by its root.
 type body struct {
-	Global   map[string]wireRecord   `json:"global"`
-	Projects map[string]*projectBody `json:"projects"`
+	Global     map[string]wireRecord
+	Projects   map[string]*projectBody
+	unlinked   []*projectBody
+	tombstones []tombstone
+	conflicts  []json.RawMessage
+	devices    map[string]json.RawMessage
+	device     string
+	clock      *hlcClock
 }
 
 func newBody() *body {
-	return &body{Global: map[string]wireRecord{}, Projects: map[string]*projectBody{}}
+	b := &body{Global: map[string]wireRecord{}, Projects: map[string]*projectBody{}}
+	b.clock = &hlcClock{}
+	return b
 }
 
 func toWire(r Record) wireRecord {
@@ -115,7 +137,8 @@ func (b *body) secrets(l Layer, create bool) map[string]wireRecord {
 		if label == "" {
 			label = baseName(l.Root)
 		}
-		p = &projectBody{Label: label, Secrets: map[string]wireRecord{}}
+		p = &projectBody{Label: label, Secrets: map[string]wireRecord{}, ID: newProjectID(),
+			Origin: originOf(l.Root), Roots: map[string]string{}}
 		b.Projects[l.Root] = p
 	}
 	return p.Secrets

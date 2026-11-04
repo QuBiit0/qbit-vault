@@ -23,7 +23,7 @@ This document tracks the slices S.1-S.10 of docs/ROADMAP.md § Phase 2S. Branch 
 | T5 | S5 | inline | S.4 server core, S.5 pairing, recovery, rekey, anchors | fdca3e7 (S.4), 4c3f05e | done |
 | T6 | S5 | inline | S.6 packaging: `gentle-vault-server` serve/invite/health, Dockerfile, compose | 39c8b6b | done |
 | T7 | S5 | inline | S.7-S.9 client: S.7a vault side 9f3113f; S.7b transport bc5d4b2; S.7c commands d6f1fff; S.8 rounds 8c29c20; S.9a key rotation f57ce32; S.9b conflicts, history, anchors 0f22398 | | done |
-| T8 | S5 | inline | S.10 e2e: Docker sync battery (`bash e2e/docker-test.sh`) | (S.10 commit) | done |
+| T8 | S5 | inline | S.10 e2e: Docker sync battery (`bash e2e/docker-test.sh`) | d0abf51 | done |
 
 ## Log
 

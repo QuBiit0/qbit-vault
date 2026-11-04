@@ -105,7 +105,7 @@ The repair of `state.json` on load (vault file ahead of the counter after a cras
 
 A save of `vault.enc` also rewrites `state.json`; step 1 then copies **both** current files into the **same** `backups/<timestamp>/` directory before either is written, so every snapshot is a consistent (`vault.enc`, `state.json`) pair. The first save of a fresh vault has nothing to copy and creates no snapshot. Writes of a single file outside a vault save get their own snapshot directory.
 
-Backups are pruned to the last 20 snapshots by default (`config.backups_keep`), which for vault saves means the last 20 saves. `gentle-vault restore --from <ts>` swaps a backup back in (with its own backup of the current state first).
+Backups are pruned to the last 20 snapshots by default (`config.backups_keep`), which for vault saves means the last 20 saves. `gentle-vault restore --from <ts>` swaps a backup back in (with its own backup of the current state first): it opens the snapshot's `vault.enc` with the current key or a retired one and saves that body as the **next** write under the current key, so the rollback counter moves forward instead of tripping `vault_corrupt`. It works over a corrupt or rolled-back live vault and takes the snapshot's `state.json` when the live one is unreadable. `grants.enc` is not part of a snapshot and is left alone.
 
 ## File permissions
 
@@ -243,4 +243,4 @@ A missing or unreadable `base.enc` makes the next round merge with an empty base
 
 ## Retired keys
 
-`keys/retired.enc` (`format: "gentle-vault-retired/1"`, sealed with the current master key) lists the master keys this vault used before: `[{generation or "local", key, retired_at}]`. `rekey`, a revocation and joining an account with a non-empty local vault add the key they replace, so `restore` can still open a backup made under an older key, and `audit --verify` can read anchors sealed under one. Entries are pruned with the backups that need them. A retired key is no weaker than the backups it opens: whoever holds the current key can already read them.
+`keys/retired.enc` (`format: "gentle-vault-retired/1"`, sealed with the current master key, written atomically like the other files) lists the master keys this vault used before, newest first: `{"keys":[{"generation":"local"|"<n>","key":"<base64>","retired_at":"…"}]}`, at most 20 entries (the oldest is dropped; backups are pruned to 20 saves by default, so an older key rarely opens anything). A file that cannot be opened is treated as empty: it only means no older key to try. `rekey`, a revocation and joining an account with a non-empty local vault add the key they replace, so `restore` can still open a backup made under an older key, and `audit --verify` can read anchors sealed under one. Entries are pruned with the backups that need them. A retired key is no weaker than the backups it opens: whoever holds the current key can already read them.

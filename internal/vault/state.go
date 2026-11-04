@@ -206,7 +206,14 @@ func (s *store) save(plaintext []byte) error {
 		}
 	}
 
-	st.Writes++
+	return s.sealNext(st, created, 0, plaintext)
+}
+
+// sealNext seals plaintext under s.key as write max(st.Writes, floor)+1 and
+// saves it with st through savePair (snapshot first). The caller holds the
+// vault lock and keeps ownership of plaintext.
+func (s *store) sealNext(st *state, created string, floor uint64, plaintext []byte) error {
+	st.Writes = max(st.Writes, floor) + 1
 	sealed, err := seal(s.key, AAD{Format: FormatVault, Cipher: CipherName, CreatedAt: created, Writes: st.Writes}, plaintext)
 	if err != nil {
 		return err
@@ -217,3 +224,4 @@ func (s *store) save(plaintext []byte) error {
 	}
 	return s.savePair(sealed, stateBytes)
 }
+

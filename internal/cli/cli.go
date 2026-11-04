@@ -222,7 +222,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newAudit(g))
 	root.AddCommand(newExec(g))
 	root.AddCommand(newPromptCmd(g))
-	root.AddCommand(newLock(g), newUnlock(g))
+	root.AddCommand(newLock(g), newUnlock(g), newRestore(g))
 	return root
 }
 

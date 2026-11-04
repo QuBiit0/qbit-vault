@@ -275,7 +275,3 @@ func (b *cliBackend) Revoke(_ context.Context, e broker.Envelope, r broker.Revok
 	}
 	return broker.RevokeResponse{OK: true, Revoked: n}, nil
 }
-
-func (b *cliBackend) Manage(context.Context, broker.Envelope, broker.ManageRequest) (broker.ManageResponse, error) {
-	return broker.ManageResponse{}, refusal.New(refusal.Internal, "").WithMessage("manage is not available yet")
-}

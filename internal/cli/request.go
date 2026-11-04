@@ -45,11 +45,8 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	defer s.close()
 	cmd := quiet()
 
-	cooling := false
-	if err := g.mutateGrants(io.Discard, s, func(st *grants.Store) (bool, error) {
-		_, cooling = grants.CoolingDown(st, name, e.Session, clock())
-		return false, nil
-	}); err != nil {
+	cooling, err := g.coolingDown(s, name)
+	if err != nil {
 		return broker.RequestResponse{}, asRefusal(err)
 	}
 	if cooling {
@@ -85,10 +82,7 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
 	}
 	declined := func(outcome string) error {
-		_ = g.mutateGrants(io.Discard, s, func(st *grants.Store) (bool, error) {
-			grants.Cool(st, name, e.Session, clock())
-			return true, nil
-		})
+		g.coolDown(s, name)
 		g.record(io.Discard, audit.Record{Event: audit.EventPrompt, Names: []string{name}, Layer: auditLayer(layer), Outcome: outcome})
 		return refusal.New(refusal.UserDeclined, name)
 	}

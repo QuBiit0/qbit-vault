@@ -20,7 +20,7 @@ Branch `feat/cli-skeleton`.
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
 | T1 | S1-S4, S7 | inline | `internal/broker`: envelope decode and validation, dispatch, capabilities, normative policy; `broker --op`; CLI backend for `list`, `exec`, `grant`, `revoke` | 60ee2ac | done |
-| T2 | S5, S7 | inline | `request` (single name): reason heuristic, cooldown, non-disclosure, in-process prompt, store and grant | | pending |
+| T2 | S5, S7 | inline | `request` (single name): reason heuristic, cooldown, non-disclosure, in-process prompt, store and grant | 8de9a67 | done |
 | T3 | S5 | inline | multi-field `request` (2.2b) and backend rendering (2.2c) | | pending |
 | T4 | S5 | inline | `manage` (2.2a) | | pending |
 | T5 | S6 | inline | `mcp` stdio server (2.3) | | pending |

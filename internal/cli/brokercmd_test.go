@@ -176,18 +176,6 @@ func TestBrokerRevoke(t *testing.T) {
 	}
 }
 
-func TestBrokerManageNotYet(t *testing.T) {
-	w := newWorld(t)
-	for op, extra := range map[string]string{
-		"manage": `"action":"remove","name":"A","layer":"global","reason":"this token is no longer used"`,
-	} {
-		code, m, _ := w.broker(op, envelope(op, w.outside, extra))
-		if code != exitcode.Refusal || refusalType(m) != "internal" || !strings.HasSuffix(m["refusal"].(map[string]any)["message"].(string), "is not available yet") {
-			t.Errorf("%s: code=%d m=%v", op, code, m)
-		}
-	}
-}
-
 func TestBrokerWithoutVault(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()

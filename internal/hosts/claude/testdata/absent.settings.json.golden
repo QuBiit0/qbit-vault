@@ -1,0 +1,75 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/qbit/bin/qbit-vault",
+            "args": [
+              "hook",
+              "pre-bash"
+            ],
+            "timeout": 10,
+            "statusMessage": "qbit-vault hook pre-bash"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/qbit/bin/qbit-vault",
+            "args": [
+              "hook",
+              "post-bash"
+            ],
+            "timeout": 30,
+            "statusMessage": "qbit-vault hook post-bash"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/qbit/bin/qbit-vault",
+            "args": [
+              "hook",
+              "post-read"
+            ],
+            "timeout": 30,
+            "statusMessage": "qbit-vault hook post-read"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/qbit/bin/qbit-vault",
+            "args": [
+              "hook",
+              "user-prompt"
+            ],
+            "timeout": 30,
+            "statusMessage": "qbit-vault hook user-prompt"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read({HOME}/.qbit-vault/**)",
+      "Edit({HOME}/.qbit-vault/**)"
+    ]
+  }
+}

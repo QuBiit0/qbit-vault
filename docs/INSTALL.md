@@ -51,7 +51,7 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 3 | Master key | Try keychain. On success: generate key, store, `keychain: <backend>`. On failure (headless Linux, WSL without Secret Service): **passphrase prompt** (masked, twice) → `key.enc` | only without keychain |
 | 4 | Empty vault | Write `vault.enc` with `{secrets:{}}`. **Never** reads `process.env` or any `.env` | no |
 | 5 | Detect hosts | Presence of `~/.claude/`, `~/.codex/`, OpenCode config dir, `~/.pi/agent/`, `~/.gentle-shell/agent/`; honor `--agents` | no |
-| 6 | Register hosts | Per `AGENT_INTEGRATIONS.md`: MCP entries, hooks, plugin, deny-list; receipts to `state.json` | no |
+| 6 | Register hosts | Per `AGENT_INTEGRATIONS.md`: MCP entries, hooks, plugin, deny-list; receipts to `state.json`. Claude Code (implemented): `mcpServers.qbit-vault` in `~/.claude.json`, four hooks and the `//<vault home>/**` Read/Edit deny rules in `~/.claude/settings.json` | no |
 | 7 | Deny-list check | Confirm Gentle AI entries survived (R-INS-05); abort + restore on failure | no |
 | 8 | Extension | `gentle-shell install npm:qbit-vault-pi@<pinned>` and/or `pi install npm:qbit-vault-pi@<pinned>` (pinned version, `--ignore-scripts`) | no |
 | 9 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
@@ -68,7 +68,7 @@ Keychain    macos-keychain   (master key stored)
 Vault       empty            (0 secrets)
 Hosts
   gentle-shell   ~/.gentle-shell/agent   extension qbit-vault-pi@0.1.0 ✔  mcp ✔
-  claude-code    ~/.claude               mcp ✔  hooks ✔ (3)  deny-list ✔ (Gentle AI entries preserved: 11)
+  claude-code    ~/.claude               mcp ✔  hooks ✔ (4)  deny-list ✔ (Gentle AI entries preserved: 11)
   codex          ~/.codex                mcp ✔  prompt=tty (sandbox detected)
   opencode       not found               skipped
 Backups     ~/.qbit-vault/backups/20261016T081500Z (4 files)

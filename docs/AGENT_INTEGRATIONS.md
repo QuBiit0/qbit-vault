@@ -22,22 +22,44 @@ The MCP server never exposes `grant`. A `grant` envelope arriving on its stdin i
 
 ### Registration written by `init`
 
-**Claude Code** (`~/.claude/settings.json`, merged, snapshotted):
+**Claude Code** (adapter `claude-code`, `internal/hosts/claude`): three steps, each merged into a user-scope file after a snapshot, owning only its own entries.
+
+| Step | File | Owns |
+| --- | --- | --- |
+| `mcp` | `~/.claude.json` | `mcpServers.qbit-vault` |
+| `hooks` | `~/.claude/settings.json` | the hook entries whose `statusMessage` starts with `qbit-vault hook ` |
+| `deny` | `~/.claude/settings.json` | the two `permissions.deny` strings below |
+
+Claude Code keeps **user-scoped MCP servers in `~/.claude.json`** (top-level `mcpServers`), not in `settings.json`; hooks and permissions live in `settings.json` (checked 2026-11-04 against <https://code.claude.com/docs/en/mcp.md> § MCP installation scopes and <https://code.claude.com/docs/en/settings.md>). Detection is read-only: `~/.claude` is a directory, or a `claude` binary is on `PATH`.
+
+`~/.claude.json` (`command` is the absolute, symlink-resolved path of the running `qbit-vault`; `env` appears only when the vault home is not `~/.qbit-vault`):
+
+```json
+{ "mcpServers": { "qbit-vault": { "type": "stdio", "command": "/usr/local/bin/qbit-vault", "args": ["mcp"], "env": { "QBIT_VAULT_HOME": "/data/vault" } } } }
+```
+
+`~/.claude/settings.json`:
 
 ```json
 {
-  "mcpServers": { "qbit-vault": { "command": "qbit-vault", "args": ["mcp"] } },
   "hooks": {
-    "PreToolUse":  [{ "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "qbit-vault hook pre-bash" }] }],
+    "PreToolUse":  [{ "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "/usr/local/bin/qbit-vault", "args": ["hook", "pre-bash"], "timeout": 10, "statusMessage": "qbit-vault hook pre-bash" }] }],
     "PostToolUse": [
-      { "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "qbit-vault hook post-bash" }] },
-      { "matcher": "Read", "hooks": [{ "type": "command", "command": "qbit-vault hook post-read" }] }
+      { "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "/usr/local/bin/qbit-vault", "args": ["hook", "post-bash"], "timeout": 30, "statusMessage": "qbit-vault hook post-bash" }] },
+      { "matcher": "Read", "hooks": [{ "type": "command", "command": "/usr/local/bin/qbit-vault", "args": ["hook", "post-read"], "timeout": 30, "statusMessage": "qbit-vault hook post-read" }] }
     ],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "qbit-vault hook user-prompt" }] }]
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/qbit-vault", "args": ["hook", "user-prompt"], "timeout": 30, "statusMessage": "qbit-vault hook user-prompt" }] }]
   },
-  "permissions": { "deny": ["Read(~/.qbit-vault/**)"] }
+  "permissions": { "deny": ["Read(//home/me/.qbit-vault/**)", "Edit(//home/me/.qbit-vault/**)"] }
 }
 ```
+
+Decisions behind the shapes:
+- **Exec form.** `command` is the binary and `args` its arguments (<https://code.claude.com/docs/en/hooks.md> § Exec form and shell form): no shell parses the line, so a path with spaces (`C:\Program Files\QBit Vault\qbit-vault.exe`) needs no quoting. On Windows exec form needs a real `.exe`, which `qbit-vault.exe` is. The hooks always exit 0 (S6, fail open), so `onFailure` is left unset.
+- **Ownership marker.** Exec form leaves no `qbit-vault hook` text in `command`, so each entry carries it in `statusMessage` (the spinner text Claude Code shows while the hook runs): `qbit-vault hook pre-bash`, `... post-bash`, `... post-read`, `... user-prompt`. Re-running `init` replaces exactly those entries (also after the binary moved) and never touches another tool's hook, Gentle AI's included.
+- **Deny rules use the resolved vault home in Claude Code's absolute form** `//path` (a single leading slash would anchor at `~/.claude`; on Windows `C:\Users\me\.qbit-vault` is written `//c/Users/me/.qbit-vault`; <https://code.claude.com/docs/en/permissions.md> § How path patterns match). `Read` also stops the `cat`/`head`/`tail` that Claude Code recognizes in Bash; `Edit` covers the write tools (a `Write(...)` rule never matches). A shell that reads the directory by another route is not stopped, which is why no secret is ever in the agent's environment either. Each entry is owned by its full string; the user's other entries keep their place and order.
+- **Timeouts.** 10 s for `pre-bash` (never opens the vault), 30 s for the others.
+- **Not honored yet:** `CLAUDE_CONFIG_DIR` (a relocated Claude Code config) is not read; the adapter writes under the user home.
 
 Hook semantics (Claude Code hook protocol):
 - `pre-bash` (implemented; the rewrite below is not, see "What `pre-bash` does today"): reads `{session_id, tool_input.command, cwd}`; if the command references known secrets or an implicit binding matches, returns `hookSpecificOutput.updatedInput.command = "qbit-vault exec --session claude:<session_id> --secret … -- <cmd>"`. If a referenced secret has no grant, returns `permissionDecision: "deny"` with reason `grant_required: NAME — call secret_request`. Dump-guard violations: deny with `dump_command`.

@@ -114,9 +114,11 @@ From then on every change syncs by itself, and machines that were offline catch 
 
 ## `uninstall`
 
-1. For each receipt in `state.json`, restore the snapshot taken at registration (or remove only the keys qbit-vault added if the file changed since, using a 3-way merge; conflicts are reported and left to the user).
-2. Remove the extension from each Pi home.
-3. Leave `~/.qbit-vault/` intact. With `--purge` and the literal confirmation `purge`: delete the keychain item and the directory. `uninstall` never touches the sync server; run `qbit-vault remote logout` (or revoke the device from another machine) first if this machine synced.
+`uninstall` is a user command: it asks in the prompt backend and the agent's shell cannot run it.
+
+1. For each host recorded in `state.json`, in reverse step order: if the file is still exactly what qbit-vault wrote, restore the snapshot taken at registration byte for byte (or delete a file qbit-vault created); if the user changed it since, remove only the entries qbit-vault added and keep everything else. The host is forgotten in `state.json` only when this succeeded; otherwise it stays, the command exits 1 and you can run it again.
+2. The Pi extension is installed by you (`pi install npm:qbit-vault-pi`), so remove it the same way (`pi remove`); `uninstall` only reverts the MCP entry.
+3. Leave `~/.qbit-vault/` intact. With `--purge` you type the literal word `purge` instead of confirming; after every host reverted it deletes the keychain item and the directory, and nothing else. `uninstall` never touches the sync server, so `--purge` refuses while this vault syncs: run `qbit-vault remote logout` (or revoke the device from another machine) first.
 
 ## Updates
 

@@ -1,6 +1,6 @@
 # Testing
 
-Three tiers, mirroring Gentle AI, plus a leak battery that runs on every tier. **Built today:** Tier 1 (`go test ./...`, run in CI on Linux, macOS and Windows with `tools/leakgrep` over the verbose output; see § CI below), the Docker sync battery (`e2e/docker-test.sh`) and the Docker hosts battery (`e2e/hosts-test.sh`), the Docker install-from-scratch battery (`e2e/install-test.sh`), the leak battery and the conformance harness. **Planned:** the rest of Tier 2 as separate images (items marked *planned* below), Tier 3, `qbit-vault-pi` tests (Phase 4) and a Windows/macOS e2e job. Package names below are the directories under `internal/`.
+Three tiers plus a leak battery that runs on every tier. **Built today:** Tier 1 (`go test ./...`, run in CI on Linux, macOS and Windows with `tools/leakgrep` over the verbose output; see § CI below), the Docker sync battery (`e2e/docker-test.sh`) and the Docker hosts battery (`e2e/hosts-test.sh`), the Docker install-from-scratch battery (`e2e/install-test.sh`), the leak battery and the conformance harness. **Planned:** the rest of Tier 2 as separate images (items marked *planned* below), Tier 3, `qbit-vault-pi` tests (Phase 4) and a Windows/macOS e2e job. Package names below are the directories under `internal/`.
 
 ## Tier 1 — unit (`go test ./...`, `pnpm test` in packages)
 

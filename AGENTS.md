@@ -70,7 +70,9 @@ qbit-vault/                     (module github.com/QuBiit0/qbit-vault)
 ├── .github/workflows/ci.yml    gofmt, vet, build, test on Linux/macOS/Windows, plus a latest-stable-Go job; leak grep
 ├── packages/qbit-vault-pi/     planned (Phase 4): TypeScript Pi / Gentle Shell extension
 ├── packages/qbit-vault/        planned (Phase 5): npm launcher
-└── scripts/install.sh, install.ps1   planned (Phase 5)
+├── scripts/                    install.sh, install.ps1 (one-line install from a release, SHA-256
+│                               verified) and their tests install_test.sh, install_test.ps1
+└── .goreleaser.yaml            release archives; .github/workflows/release.yml runs it on v* tags
 ```
 
 ## Conventions

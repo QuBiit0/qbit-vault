@@ -1,4 +1,4 @@
-// Package broker is the contract gentle-ai.secrets-broker/v1
+// Package broker is the contract qbit-vault.secrets-broker/v1
 // (contracts/secrets-broker/v1/CONTRACT.md): it decodes and validates one
 // request envelope, applies the transport rules, dispatches the op to a
 // Backend and answers with exactly one JSON object, a success payload or a
@@ -22,7 +22,7 @@ import (
 
 const (
 	// Contract is the only contract this broker speaks.
-	Contract = "gentle-ai.secrets-broker/v1"
+	Contract = "qbit-vault.secrets-broker/v1"
 	// Capabilities is the capability version (CONTRACT.md header).
 	Capabilities = "1.0"
 	// MaxRequestBytes bounds one request.

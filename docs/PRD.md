@@ -14,7 +14,7 @@ Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants
 
 Also built, outside the numbered requirements of this document: the interactive TUI (`qbit-vault tui`, and `qbit-vault` with no arguments on a terminal; `CLI.md` § TUI, `ROADMAP.md`). It is a front end over the existing commands and keeps their invariants (no value shown, values typed only in the prompt backend, grants revoke-only). Not exercised: its suspend and resume around the masked prompt on a real terminal.
 
-Nothing is released. Install today: `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` (the repository is private) or build from source (`INSTALL.md`).
+Pre-release from `v0.1.0-beta.1`. Install with the `install.sh` / `install.ps1` one-liners (release archive, SHA-256 verified), `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest`, or from source (`INSTALL.md`).
 
 ## 1. Problem statement
 
@@ -24,14 +24,14 @@ Coding agents routinely need credentials to finish real work: `gh` needs a token
 - the user pastes it into the chat, where it enters the transcript, the on-disk session file and the model provider's servers;
 - the user interrupts the agent and performs the step by hand, which defeats the point of having an agent.
 
-Gentle AI already blocks the *reading* of credential files through its sensitive-paths deny list and refuses to store credentials at install time. There is no sanctioned path for an agent to *use* a credential without seeing it. qbit-vault provides that path.
+Agent harnesses can already block the *reading* of credential files through deny lists and refuse to store credentials at install time. There is no sanctioned path for an agent to *use* a credential without seeing it. qbit-vault provides that path.
 
 ## 2. Goals
 
 - G1. An agent can complete a task that needs a credential without the credential value ever entering its context, transcript, session file or provider request.
 - G2. Supplying a credential takes the user one masked input and one grant decision, inside the same terminal session, with no context switch.
-- G3. Installation is one command on macOS, Linux and Windows and configures every supported agent that is present. (Today: `go install` then `qbit-vault init`; the single-command `npx` install is Phase 5.)
-- G4. The design is adoptable by Gentle AI as a native component without rewrite: same language, same contract style, same mutation and release discipline.
+- G3. Installation is one command on macOS, Linux and Windows and configures every supported agent that is present. (Today: the `install.sh` / `install.ps1` one-liners or `go install`, then `qbit-vault init`; the `npx` launcher is Phase 5.)
+- G4. The design is embeddable by any agent harness without rewrite: one static binary, a versioned contract, snapshot-first config mutation and a documented release discipline.
 - G5. Pi / Gentle Shell gets the richest experience (inline masked input, shell-tool override, sidebar audit; the extension is Phase 4); Claude Code and Codex get a functionally equivalent one through MCP and, for Claude Code, hooks. OpenCode is out of scope.
 - G6. Secrets are organized in a **global** layer (used everywhere) and **project** layers (bound to one repository), managed with the same few commands by the user and, with user confirmation, by the agent.
 - G7. The agent can always learn, in one call, exactly what it may and may not do with the vault.
@@ -160,7 +160,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - R-INS-02. *Status: Phase 5, not built (no `packages/`).* The npm launcher MUST have no `postinstall`. Platform binaries MUST ship as `optionalDependencies` (`@qbit-vault/cli-darwin-arm64`, etc.) and be verified against a checksum embedded in the launcher before first run.
 - R-INS-03. `init` MUST detect installed agents by their config directories and register only those present, unless `--agents` is given.
 - R-INS-04. Every config file `init` touches MUST be snapshotted first to `$QBIT_VAULT_HOME/backups/<timestamp>/<path>` and written atomically with a merge that preserves unrelated keys.
-- R-INS-05. `init` MUST add `$QBIT_VAULT_HOME/**` to each agent's file-read deny list where the agent supports one, and MUST verify that the Gentle AI permissions component's deny list, when present, is not weakened. *Status: Claude Code gets Read and Edit deny rules; Codex and Pi get none (their adapters write only the MCP entry). Existing entries survive because the merge touches only entries qbit-vault owns (golden and e2e tests); there is no separate verify-and-abort step.*
+- R-INS-05. `init` MUST add `$QBIT_VAULT_HOME/**` to each agent's file-read deny list where the agent supports one, and MUST verify that deny entries other tools put there, when present, are not weakened. *Status: Claude Code gets Read and Edit deny rules; Codex and Pi get none (their adapters write only the MCP entry). Existing entries survive because the merge touches only entries qbit-vault owns (golden and e2e tests); there is no separate verify-and-abort step.*
 - R-INS-06. `init` MUST finish by running `doctor` and printing its report.
 - R-INS-07. `doctor` MUST be read-only and report: binary version and signature status, vault present/locked/unlocked, keychain backend in use, per-agent registration status (MCP, hooks, deny-list), extension version for Pi, active grants count, audit chain validity, and with sync enabled the server, last sync, pending push, conflicts, generation and anchor state (without contacting the server). *Status: built are vault state and keychain mode, permissions, per-step host registration and drift, the audit chain and the grants store (the last two only when broken), and the sync line (server, devices, conflicts, pending push, last round). Not built: binary version/signature, Pi extension version, the active grants count, generation and anchor state.*
 - R-INS-08. `sync` MUST re-apply registrations idempotently after a host or qbit-vault upgrade.
@@ -189,7 +189,7 @@ Normative protocol: `REMOTE_SYNC.md`.
 - R-NFR-02 *Latency*: `exec` overhead ≤ 50 ms over running the command directly on a warm keychain; prompt round-trip is user-bound.
 - R-NFR-03 *Supply chain* (*Phase 5, not built*): releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
 - R-NFR-04 *Observability*: `--json` on every command for host adapters; human output otherwise.
-- R-NFR-05 *Compatibility*: contract `gentle-ai.secrets-broker/v1` is frozen on first stable release; additive changes bump the minor capability version; consumers refuse unknown major versions.
+- R-NFR-05 *Compatibility*: contract `qbit-vault.secrets-broker/v1` is frozen on first stable release; additive changes bump the minor capability version; consumers refuse unknown major versions.
 - R-NFR-06 *Testing*: leak tests on every tier (see `TESTING.md`); a PR touching exec/redact/prompt/mcp/hooks/remote/server without extending the leak test is rejected by CI.
 - R-NFR-07 *Sync server*: Linux amd64 and arm64 images; one instance serves at least 100 accounts on 256 MiB of memory; a sync round with no change costs one request answered `304`.
 
@@ -198,7 +198,7 @@ Normative protocol: `REMOTE_SYNC.md`.
 - A user can go from nothing to "agent created a GitHub release using a token it never saw" in under 3 minutes on all three OSes.
 - A secret stored on one machine is usable on a second machine after `init`, `remote join` and one approval, in under 2 minutes, and the server's data directory contains no fixture value, secret name or project path.
 - The leak test battery passes with zero secret bytes in any captured transcript, log, session file or tool result across Pi, Claude Code and Codex.
-- Gentle AI maintainers can read `CONTRACT.md` and `ARCHITECTURE.md` and identify where it would slot into `internal/components/` without asking design questions.
+- A host maintainer can read `CONTRACT.md` and `ARCHITECTURE.md` and integrate the broker without asking design questions.
 
 ## 8. Open questions
 

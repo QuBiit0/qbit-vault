@@ -220,14 +220,14 @@ Every host adapter edits the user's own files (`~/.claude/settings.json`, `~/.co
 
 | # | Decision | Alternatives rejected | Why |
 | --- | --- | --- | --- |
-| D1 | Go core | TypeScript core | Same stack as gentle-ai (upstream path), single static binary, no runtime for Claude Code or Codex users, easy keychain bindings |
+| D1 | Go core | TypeScript core | Single static binary, no runtime for Claude Code or Codex users, easy keychain bindings |
 | D2 | No daemon in v1 | Unix-socket broker daemon | Simpler threat surface, no lifecycle to manage on Windows; grants file gives the same cross-session behavior |
 | D3 | Values via stdin / masked prompt, never argv | `set NAME VALUE` | Shell history and `ps` exposure |
 | D4 | Per-child env injection | Writing a temp `.env`, exporting to the shell | Temp files leak; exports outlive the command |
 | D5 | Grants are user-UI-only | Model-callable `secret_grant` | Prompt injection would grant itself |
 | D6 | Existence not disclosed to the model before consent | `secret_request` returning `exists: true` | Avoids enumeration by injected content |
 | D7 | XChaCha20-Poly1305 + Argon2id | AES-GCM, scrypt | Misuse-resistant nonces, memory-hard KDF, both in `x/crypto` |
-| D8 | Contract-first (`secrets-broker/v1`) | Ad-hoc tool schemas per host | gentle-ai adoption requires it; identical behavior across hosts |
+| D8 | Contract-first (`secrets-broker/v1`) | Ad-hoc tool schemas per host | Any host can integrate against a stable, versioned surface; identical behavior across hosts |
 | D9 | Four tools only (`request`, `list`, `exec`, `manage`) | Separate `secret_grant`, `secret_get`, `secret_policy`, one tool per management action | Smallest surface the model can misuse; `get` and `grant` must not exist; policy rides on `list` so the agent learns its rules in the call it makes anyway |
 | D11 | Two layers, `global` and `project`, in one encrypted file | Per-project vault files; `.vault` file inside the repo; a per-secret `projects` allowlist | One file keeps project paths encrypted and writes atomic; nothing in the repo means nothing to commit by accident; overrides cover the real case (same name, different value per repo) that an allowlist cannot |
 | D12 | Agent management is propose-and-confirm | Agent mutates directly; agent read-only | Keeps invariant 6 (every change is an explicit user action) while letting the agent organize the vault |

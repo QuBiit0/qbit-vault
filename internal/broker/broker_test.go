@@ -61,7 +61,7 @@ var cwd = func() string {
 
 func env(op string, extra string) string {
 	cwdJSON, _ := json.Marshal(cwd)
-	s := `{"contract":"gentle-ai.secrets-broker/v1","op":"` + op + `","v":1,"session":"pi:2f1c00ab","cwd":` + string(cwdJSON)
+	s := `{"contract":"qbit-vault.secrets-broker/v1","op":"` + op + `","v":1,"session":"pi:2f1c00ab","cwd":` + string(cwdJSON)
 	if extra != "" {
 		s += "," + extra
 	}
@@ -115,7 +115,7 @@ func TestEnvelopeValidation(t *testing.T) {
 			t.Errorf("%s reached the backend", c.name)
 		}
 	}
-	rel := `{"contract":"gentle-ai.secrets-broker/v1","op":"list","v":1,"session":"pi:2f1c00ab","cwd":"relative/dir"}`
+	rel := `{"contract":"qbit-vault.secrets-broker/v1","op":"list","v":1,"session":"pi:2f1c00ab","cwd":"relative/dir"}`
 	if typ, msg := refusalOf(t, call(t, &fake{}, TransportHost, rel)); typ != "internal" || msg != "invalid request: cwd" {
 		t.Errorf("relative cwd: %s %q", typ, msg)
 	}
@@ -140,7 +140,7 @@ func TestErrorsNeverEchoInput(t *testing.T) {
 
 func TestCapabilities(t *testing.T) {
 	got := string(Handle(context.Background(), []byte(env("capabilities", "")), &fake{}, TransportHost))
-	want := `{"ok":true,"contract":"gentle-ai.secrets-broker/v1","capabilities":"1.0","ops":["request","list","exec","manage","grant","revoke","capabilities"],"layers":["global","project"],"prompt_backends":["zenity","tty"],"field_kinds":["secret","text"],"max_fields":8,"keychain":"secret-service","streaming":true,"sync":false}` + "\n"
+	want := `{"ok":true,"contract":"qbit-vault.secrets-broker/v1","capabilities":"1.0","ops":["request","list","exec","manage","grant","revoke","capabilities"],"layers":["global","project"],"prompt_backends":["zenity","tty"],"field_kinds":["secret","text"],"max_fields":8,"keychain":"secret-service","streaming":true,"sync":false}` + "\n"
 	if got != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
 	}

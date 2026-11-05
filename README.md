@@ -14,7 +14,7 @@ by **qbitdev**
 
 QBit Vault (`qbit-vault`) is a local secrets broker for coding agents. Claude Code, Codex and Pi / Gentle Shell can run commands that need a `GITHUB_TOKEN`, a `DATABASE_URL` or any API key, and the value never enters the model's context, the chat transcript, the session file or the provider's servers.
 
-> **Status: pre-release, private beta.** The repository is private for now and nothing is released. The vault, the broker, the MCP server, host registration and multi-device sync are built and tested. You install it with `go install` ([docs/INSTALL.md](docs/INSTALL.md)). See [Status / Roadmap](#status--roadmap).
+> **Status: public beta (`v0.1.0-beta.1`).** The vault, the broker, the MCP server, host registration and multi-device sync are built and tested on Linux, macOS and Windows. Expect rough edges and report them in [Issues](https://github.com/QuBiit0/qbit-vault/issues). See [Status / Roadmap](#status--roadmap).
 
 ## Why
 
@@ -84,12 +84,23 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/STORAGE.md](docs/ST
 
 ## Quickstart
 
-Requires Go 1.26 or newer. The repository is private, so `go install` needs access to it (details in [docs/INSTALL.md](docs/INSTALL.md)).
+Install with one command (it verifies the SHA-256 of the release archive; details and options in [docs/INSTALL.md](docs/INSTALL.md)):
 
 ```bash
-# 1. Install (no release exists yet; @latest is the newest commit of the default branch)
-export GOPRIVATE=github.com/QuBiit0/*
-go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+```
+
+Or, with Go 1.26+: `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest`.
+
+```bash
+# 1. Check the install
+qbit-vault version
 
 # 2. Create an empty vault and register the agents it finds on this machine
 qbit-vault init
@@ -199,7 +210,7 @@ Protocol, keys and failure modes: [docs/REMOTE_SYNC.md](docs/REMOTE_SYNC.md).
 | --- | --- |
 | Pi / Gentle Shell extension (`qbit-vault-pi`): inline capture, shell-tool override, redaction hook | 4 |
 | Claude Code `PreToolUse` rewrite of secret references into `exec`, and its `grant_required` / `dump_command` denials | 4 |
-| Release binaries, signed checksums, npm launcher, Homebrew formula, install scripts, published server image | 5 |
+| Minisign-signed checksums, npm launcher, Homebrew formula, published server image (release archives, `checksums.txt`, build provenance and the install scripts exist) | 5 |
 | `qbit-vault update` and the opt-out update check | 5 |
 | `qbit-vault redact` command (the redaction engine exists and is used by `exec`, hooks and the MCP server) | 4 (the Pi extension design calls it; no `redact` command exists) |
 | TUI self-update (the Update section is a static *planned* screen that shows the manual `go install` command) | 5, with `qbit-vault update` |

@@ -1,0 +1,149 @@
+# Install qbit-vault from a GitHub release on Windows (docs/INSTALL.md § One-line install).
+#
+#   irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+#
+# Environment:
+#   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
+#   QBIT_VAULT_INSTALL_DIR  target directory (default: where qbit-vault already is, else %LOCALAPPDATA%\Programs\qbit-vault)
+#   QBIT_VAULT_RELEASE_URL  base download URL or local directory (default: the GitHub releases)
+#   QBIT_VAULT_NO_PATH      set to 1 to leave the user PATH unchanged
+#   QBIT_VAULT_NO_SYNC      set to 1 to skip `qbit-vault sync` after an upgrade
+#
+# It downloads one archive and checksums.txt, verifies the SHA-256, copies the
+# binary and adds its directory to the user PATH. An existing install is
+# upgraded in place, and when the vault is already set up it runs
+# `qbit-vault sync` so your agents use the new binary. It never asks for, reads
+# or stores a secret, and it never runs `qbit-vault init`: that stays your step.
+
+function Install-QBitVault {
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+    $repo = 'QuBiit0/qbit-vault'
+    $releaseUrl = if ($env:QBIT_VAULT_RELEASE_URL) { $env:QBIT_VAULT_RELEASE_URL } else { "https://github.com/$repo/releases/download" }
+    $installDir = $env:QBIT_VAULT_INSTALL_DIR
+    $version = $env:QBIT_VAULT_VERSION
+    $vaultHome = if ($env:QBIT_VAULT_HOME) { $env:QBIT_VAULT_HOME } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.qbit-vault' }
+
+    function Say($msg) { Write-Host "qbit-vault install: $msg" }
+    function Fetch($url, $file) {
+        if ($url -match '^https://') {
+            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $file
+        } else {
+            Copy-Item -LiteralPath $url -Destination $file
+        }
+    }
+
+    switch ($env:PROCESSOR_ARCHITECTURE) {
+        'AMD64' { $arch = 'amd64' }
+        'ARM64' { $arch = 'arm64' }
+        default { throw "qbit-vault install: unsupported architecture $($env:PROCESSOR_ARCHITECTURE)" }
+    }
+
+    if (-not $version) {
+        # releases/latest skips pre-releases, so ask for the newest release of any kind.
+        $releases = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/$repo/releases?per_page=1"
+        $version = @($releases)[0].tag_name
+        if (-not $version) { throw "qbit-vault install: no release of $repo found" }
+    }
+
+    $archive = "qbit-vault_windows_$arch.zip"
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("qbit-vault-" + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    try {
+        Say "installing qbit-vault $version (windows/$arch)"
+        Fetch "$releaseUrl/$version/$archive" (Join-Path $tmp $archive)
+        Fetch "$releaseUrl/$version/checksums.txt" (Join-Path $tmp 'checksums.txt')
+
+        $want = $null
+        foreach ($line in Get-Content (Join-Path $tmp 'checksums.txt')) {
+            $parts = $line -split '\s+'
+            if ($parts.Count -ge 2 -and $parts[1] -eq $archive) { $want = $parts[0].ToLowerInvariant() }
+        }
+        if (-not $want) { throw "qbit-vault install: $archive is not listed in checksums.txt" }
+        # .NET directly: Get-FileHash is missing when Windows PowerShell inherits pwsh's module path.
+        $stream = [IO.File]::OpenRead((Join-Path $tmp $archive))
+        try { $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($stream) } finally { $stream.Dispose() }
+        $got = -join ($hash | ForEach-Object { $_.ToString('x2') })
+        if ($want -ne $got) { throw "qbit-vault install: checksum mismatch for ${archive}: nothing was installed" }
+
+        Expand-Archive -LiteralPath (Join-Path $tmp $archive) -DestinationPath (Join-Path $tmp 'x')
+        $exe = Join-Path $tmp 'x\qbit-vault.exe'
+        if (-not (Test-Path -LiteralPath $exe)) { throw 'qbit-vault install: the archive has no qbit-vault.exe' }
+        # An existing install is upgraded where it is, so its path (and every
+        # agent registration that holds it) stays the same.
+        $previous = (Get-Command qbit-vault -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+        $previousVersion = $null
+        if ($previous) {
+            try { $previousVersion = ((& $previous version 2>$null) -split ' ')[1] } catch { $previousVersion = $null }
+        }
+        if (-not $installDir) {
+            $installDir = Join-Path $env:LOCALAPPDATA 'Programs\qbit-vault'
+            if ($previous) {
+                $prevDir = Split-Path -Parent $previous
+                $probe = Join-Path $prevDir ('.qbit-vault-write-' + [Guid]::NewGuid().ToString('N'))
+                try { New-Item -ItemType File -Path $probe | Out-Null; Remove-Item -LiteralPath $probe; $installDir = $prevDir } catch { }
+            }
+        }
+        $target = Join-Path $installDir 'qbit-vault.exe'
+        if ($previousVersion -and $previous -eq $target) {
+            if ($previousVersion -eq $version) { Say "qbit-vault $version is already installed; reinstalling it" }
+            else { Say "upgrading qbit-vault $previousVersion -> $version" }
+        }
+
+        New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+        # Leftovers of earlier upgrades go now if nothing runs them any more.
+        Get-ChildItem -LiteralPath $installDir -Filter 'qbit-vault.exe.old*' -Force -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+        # A running .exe cannot be overwritten but can be renamed: move it aside
+        # under a fresh name (an older aside file may still be locked), and put
+        # it back if the copy fails, so a failed upgrade never leaves no binary.
+        $old = $null
+        if (Test-Path -LiteralPath $target) {
+            $old = "$target.old-" + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            Move-Item -LiteralPath $target -Destination $old
+        }
+        try {
+            Copy-Item -LiteralPath $exe -Destination $target
+        } catch {
+            if ($old) { Move-Item -LiteralPath $old -Destination $target -Force -ErrorAction SilentlyContinue }
+            throw "qbit-vault install: could not write ${target}: the previous binary was kept"
+        }
+        if ($old) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
+        Say "installed $target"
+
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        $onPath = @($userPath -split ';') -contains $installDir
+        if (-not $onPath -and $env:QBIT_VAULT_NO_PATH -ne '1') {
+            $newPath = if ($userPath) { "$userPath;$installDir" } else { $installDir }
+            [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+            $env:Path = "$env:Path;$installDir"
+            Say "added $installDir to your user PATH (open a new terminal to pick it up)"
+        } elseif (-not $onPath) {
+            Say "$installDir is not on your PATH"
+        }
+        $active = (Get-Command qbit-vault -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+        if ($active -and $active -ne $target) {
+            Say "another qbit-vault at $active comes first on your PATH; remove it so your shell runs the new one"
+        }
+
+        if (Test-Path -LiteralPath (Join-Path $vaultHome 'state.json')) {
+            # Already set up: re-apply the recorded agent registrations, so they
+            # point at this binary. sync reads no secret and asks nothing.
+            if ($env:QBIT_VAULT_NO_SYNC -eq '1') {
+                Say "skipped 'qbit-vault sync' (QBIT_VAULT_NO_SYNC=1); run it yourself so your agents use this binary"
+            } else {
+                & $target sync
+                if ($LASTEXITCODE -eq 0) { Say 'agent registrations are up to date; restart your agents to load the new version' }
+                else { Say "'qbit-vault sync' reported a problem (see above); run 'qbit-vault doctor', then restart your agents" }
+            }
+        } else {
+            Say "next: run 'qbit-vault' (guided setup) or 'qbit-vault init', then 'qbit-vault doctor'"
+        }
+    } finally {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Install-QBitVault

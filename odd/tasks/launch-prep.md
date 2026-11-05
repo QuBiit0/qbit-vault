@@ -15,10 +15,10 @@ Get the private GitHub repo QuBiit0/qbit-vault ready for a future public launch 
 
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
-| T1 | S2 | inline | c327bfe, e243808, 102ba1f | in progress |
+| T1 | S2 | inline | c327bfe, e243808, 102ba1f, 7b0d2cf, 8aab182, a8c5081 | done |
 | T2 | S5 | inline | 04bbde4 | done |
 | T3 | S3, S4, S6 | worker | bfa606d | done |
-| T4 | S2, S5 | inline | | pending |
+| T4 | S2, S5 | inline | (T4) | in progress |
 
 - T1: fix the CI failures (JSON redaction of invalid UTF-8 under Go 1.26; Windows-only host path tests on POSIX); CI also tests the Go version go.mod names and the latest stable.
 - T2: community files (needs the user's license choice).
@@ -35,3 +35,4 @@ Get the private GitHub repo QuBiit0/qbit-vault ready for a future public launch 
 - L6. Independent verify of 7b0d2cf (gentle-ai-verify) timed out (stalled 4 min after a bash call, likely the Docker run): unavailable, not retried. Evidence in hand: behavior RED on Linux, GREEN on Linux (Docker) and Windows, go vet for linux/darwin/windows. Accepting a character device (S_IFCHR) on fd 3 means a host that passes a terminal there shows the value on the user's own screen; the host chooses what it passes, and the screen is not the model boundary, so this stays. macOS is confirmed by CI.
 - L7. Two more macOS arm64 attempts on 7b0d2cf never got a runner (0 steps). User's choice (verbatim): "Probar macOS Intel". The CI matrix now uses `macos-15-intel`; docs/TESTING.md says why.
 - L8. First real macOS run on macos-15-intel (8aab182): every package passed except TestValueFDKindRefusesWhatAHostCannotPass and TestOpenValueFDRefusesAPollerAndLeavesItOpen, the two guards written in L5. On macOS fstat reports a kqueue with a file type a pipe also has, so the type filter alone accepted it (Linux epoll has no type and was already refused). This is the macOS RED of those tests. Fix: isEventPoller probes with kevent(fd, no changes, no events, zero timeout), which succeeds only on a kqueue and changes nothing (valuefd_kqueue.go for darwin and the BSDs; valuefd_nokqueue.go returns false elsewhere). go vet clean for linux, darwin, freebsd and windows; Linux tests green; macOS confirmed by CI.
+- L9. CI on a8c5081: ubuntu, macos-15-intel, windows and the stable-Go job all green (run 42078806408), the first full green on the three platforms. Native review (assess high: shell_source in ci.yml; lineage review-d874ede2b1ff42e6 on bfa606d..a8c5081, lenses risk + reliability): approved, acknowledged, authority burned. Non-blocking follow-ups: F7 `R1-chr-device-fd3` (valuefd_unix.go:19): S_IFCHR is accepted, so a host passing a terminal on fd 3 shows the value on the user's screen; consider refusing ttys (isatty) and keeping only /dev/null-like devices; F8 `R3-closed-fd-race` (valuefd_unix_test.go:46-55): the closed-descriptor case can race with another goroutine reusing the number; F9 `R3-linux-epoll-type` (valuefd_nokqueue.go:5-8): Linux relies on epoll's fstat type being 0; a probe (epoll_wait with a zero timeout) would not depend on it. Repository metadata set: description and topics (claude-code, coding-agents, developer-tools, golang, mcp, secrets-management, security, tui, vault).

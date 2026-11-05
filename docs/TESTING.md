@@ -71,7 +71,7 @@ Runs on every pull request and on pushes to `main`.
 
 | Job | Where | What |
 | --- | --- | --- |
-| `test` | ubuntu, macos and windows | Go version named by `go.mod` (`go-version-file`). `gofmt -l` (ubuntu only), `go vet ./...`, `go build ./...`, `go test -v -count=1 ./...` (with `-race` on ubuntu only) teed to `ci-logs/`, then `tools/leakgrep` over it |
+| `test` | ubuntu, macOS (Intel runner `macos-15-intel`: the arm64 pool rarely has capacity for private repositories) and windows | Go version named by `go.mod` (`go-version-file`). `gofmt -l` (ubuntu only), `go vet ./...`, `go build ./...`, `go test -v -count=1 ./...` (with `-race` on ubuntu only) teed to `ci-logs/`, then `tools/leakgrep` over it |
 | `test-stable-go` | ubuntu | Latest stable Go. `go vet`, `go test -count=1 ./...`, leak grep. It exists because the redactor models `encoding/json`, whose output for invalid UTF-8 differs between Go versions; a change shows up on the pull request instead of after a toolchain upgrade |
 
 The Docker batteries are not in CI. Run them locally before a change that touches sync, host registration or the install path. Tests that check Windows path escaping (`internal/hosts/claude`, `internal/hosts/codex`) run on Windows only; on POSIX a `C:\` path is correctly refused as not absolute.

@@ -46,3 +46,25 @@ jobs:
       - name: leak grep
         if: always()
         run: go run ./tools/leakgrep ci-logs
+
+  # The matrix above builds with the Go version go.mod names. This job builds
+  # with the latest stable Go, so a behavior change between versions (such as
+  # encoding/json's handling of invalid UTF-8, which the redactor models) shows
+  # up on the pull request instead of after a toolchain upgrade.
+  test-stable-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: |
+          mkdir -p ci-logs
+          set -o pipefail
+          go test -count=1 ./... 2>&1 | tee ci-logs/go-test.log
+      - name: leak grep
+        if: always()
+        run: go run ./tools/leakgrep ci-logs

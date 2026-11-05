@@ -309,3 +309,133 @@ func TestMatchAmbiguousWrapperSegments(t *testing.T) {
 		}
 	}
 }
+
+func TestMatchStillRefusesRealDumps(t *testing.T) {
+	g := Default()
+	refused := []string{
+		`echo $GITHUB_TOKEN`,
+		`echo "$GITHUB_TOKEN" | cat`,
+		`printf '%s' "$GITHUB_TOKEN" | tee /dev/stdout`,
+		`printf '%s' "$GITHUB_TOKEN" | wc -c | cat`,
+		`printf '%s' "$GITHUB_TOKEN" | wc -c; echo $GITHUB_TOKEN`,
+		`printf '%s' "$GITHUB_TOKEN" | wc -c && echo $GITHUB_TOKEN`,
+		`printf '%s' "$GITHUB_TOKEN" >&2 | wc -c`,
+		`printf '%s' "$GITHUB_TOKEN" 2>&1 >&2 | wc -c`,
+		`echo "$GITHUB_TOKEN" > /dev/stderr | wc -c`,
+		`printf '%s' "$GITHUB_TOKEN" | wc -c /dev/stdin`,
+		`printf '%s' "$GITHUB_TOKEN" | wc --files0-from=-`,
+		`printf '%s' "$GITHUB_TOKEN" | ./wc -c`,
+		`printf '%s' "$GITHUB_TOKEN" | base64`,
+		`printf '%s' "$GITHUB_TOKEN" | xxd`,
+		// A digest of the value lets whoever reads it test guesses offline: a
+		// weak secret falls to a dictionary. Only counts are allowed.
+		`printf '%s' "$GITHUB_TOKEN" | sha256sum`,
+		`printf '%s' "$GITHUB_TOKEN" | sha256sum -`,
+		`echo "$GITHUB_TOKEN" | md5sum`,
+		`printf '%s' "$GITHUB_TOKEN" | cksum`,
+		`printf '%s' "$GITHUB_TOKEN" | sha256sum | cat`,
+		`printf '%s' "$GITHUB_TOKEN" | sha256sum --tag /dev/stdin`,
+		`{ printf '%s' "$GITHUB_TOKEN"; } | wc -c`,
+		`wc -c <(printf '%s' "$GITHUB_TOKEN")`,
+		`echo "$(printf %s "$GITHUB_TOKEN" | wc -c)$GITHUB_TOKEN"`,
+		`echo "x $(cat /proc/self/environ)" | wc -c`,
+		`env | wc -l`,
+		`Write-Output $env:GITHUB_TOKEN`,
+		`Write-Output "$env:GITHUB_TOKEN.Length"`,
+		`Write-Output "len $env:GITHUB_TOKEN.Length"`,
+		`Write-Output "($env:GITHUB_TOKEN.Length)"`,
+		`Write-Output $env:GITHUB_TOKEN.Substring(0,4)`,
+		`Write-Output $env:GITHUB_TOKEN.LengthX`,
+		`Write-Output $env:GITHUB_TOKEN.Length $env:GITHUB_TOKEN`,
+		`Write-Output $env:GITHUB_TOKEN.ToCharArray()`,
+		"Write-Output \"`$env:GITHUB_TOKEN.Length\" $env:GITHUB_TOKEN",
+		`Get-ChildItem env:`,
+		`printenv GITHUB_TOKEN`,
+		`cat /proc/self/environ`,
+		`echo ${GITHUB_TOKEN:0:4}`,
+	}
+	for _, cmd := range refused {
+		if !g.Match(cmd, inj) && !g.MatchRaw(cmd, inj) {
+			t.Errorf("%q must still be refused", cmd)
+		}
+	}
+}
+
+// A digest of the value is not a count: whoever reads it can test guesses
+// offline, so a weak secret falls to a dictionary. The POSIX matcher (the one
+// that models pipes) must refuse it on its own.
+func TestDigestOfTheValueIsADump(t *testing.T) {
+	g := Default()
+	for _, cmd := range []string{
+		`printf '%s' "$GITHUB_TOKEN" | sha256sum`,
+		`printf '%s' "$GITHUB_TOKEN" | sha256sum -`,
+		`echo "$GITHUB_TOKEN" | md5sum`,
+		`printf '%s' "$GITHUB_TOKEN" | cksum`,
+		`printf '%s' "$GITHUB_TOKEN" | b2sum`,
+	} {
+		if !g.Match(cmd, inj) {
+			t.Errorf("%q must be refused", cmd)
+		}
+	}
+}
+
+// Review round (dogfood 1, L4): the length rewrite and the counter producers
+// are the minimum that is allowed; each shape below was a bypass.
+
+// refusedByEach asserts both matchers refuse cmd on their own, so a case
+// cannot pass because only the other one happened to.
+func refusedByEach(t *testing.T, cmds []string) {
+	t.Helper()
+	g := Default()
+	for _, cmd := range cmds {
+		if !g.Match(cmd, inj) {
+			t.Errorf("Match must refuse %q", cmd)
+		}
+		if !g.MatchRaw(cmd, inj) {
+			t.Errorf("MatchRaw must refuse %q", cmd)
+		}
+	}
+}
+
+// The dogfood-1 relaxation (counter pipes, a `.Length` rewrite) was reverted:
+// a guard that reads text cannot see `set -x`, a redefined `wc` or how
+// PowerShell parses a bareword, and two rounds of review found commands it
+// allowed that print the value. Only `${#NAME}` stays allowed; everything
+// below is refused by the POSIX matcher, and the PowerShell shapes also by
+// the raw one.
+func TestNoCounterOrLengthExemption(t *testing.T) {
+	g := Default()
+	posix := []string{
+		`printf %s "$GITHUB_TOKEN" | wc -c`,
+		`printf '%s' "$GITHUB_TOKEN" | wc -c`,
+		`echo $GITHUB_TOKEN | wc -c`,
+		`echo -n "$GITHUB_TOKEN" | wc --bytes`,
+		`set -x; printf %s "$GITHUB_TOKEN" | wc -c`,
+		`set -x; echo $GITHUB_TOKEN | wc -c`,
+		`wc(){ cat; }; printf %s "$GITHUB_TOKEN" | wc -c`,
+		`printf(){ command printf "$@" >&2; }; printf %s "$GITHUB_TOKEN" | wc -c`,
+		`printf '%d' "$GITHUB_TOKEN" | wc -c`,
+	}
+	for _, cmd := range posix {
+		if !g.Match(cmd, inj) {
+			t.Errorf("%q must be refused", cmd)
+		}
+	}
+	pwsh := []string{
+		`$env:GITHUB_TOKEN.Length`,
+		`Write-Output $env:GITHUB_TOKEN.Length`,
+		`Write-Host a$env:GITHUB_TOKEN.Length`,
+		`Write-Host x=$env:GITHUB_TOKEN.Length`,
+		`echo "$('"')$env:GITHUB_TOKEN.Length"`,
+	}
+	for _, cmd := range pwsh {
+		if !g.Match(cmd, inj) || !g.MatchRaw(cmd, inj) {
+			t.Errorf("%q must be refused by both matchers", cmd)
+		}
+	}
+	for _, cmd := range []string{`echo ${#GITHUB_TOKEN}`, `printf '%s\n' "${#GITHUB_TOKEN}"`} {
+		if g.Match(cmd, inj) {
+			t.Errorf("%q prints only a length and must stay allowed", cmd)
+		}
+	}
+}

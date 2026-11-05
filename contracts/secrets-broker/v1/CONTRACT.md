@@ -127,7 +127,7 @@ Request:
 | `timeout_ms` | no | 1 s – 1 h, default 600 000 |
 | `shell` | no | `auto` \| `sh` \| `bash` \| `cmd` \| `pwsh` |
 
-Behavior (normative, see PRD R-EXEC-*): resolve every `from` for `cwd` to its layer → check grants for that name and layer → dump-guard → binary allowlist → build env (parent env minus any var named like a vault secret, plus injected) → run in own process group with timeout → stream stdout/stderr through the redactor → audit → return.
+Behavior (normative, see PRD R-EXEC-*): resolve every `from` for `cwd` to its layer → check grants for that name and layer → dump-guard → binary allowlist → build env (parent env minus any var named like a vault secret, plus injected) → run in own process group with timeout → stream stdout/stderr through the redactor → audit → return. A `once` grant is spent only if the child process is created: a refusal at any earlier step, or a command that cannot start, leaves it usable; a child that starts and exits non-zero spends it. On Windows a bare `bash` or `sh` in `command` never resolves to WSL; with no Git for Windows it is an `internal` refusal with a fixed message.
 
 Response:
 ```json
@@ -220,6 +220,8 @@ A refusal is `{ "ok": false, "refusal": { "type": "<type>", "name": "<secret nam
 
 Messages MUST be built from the secret **name** and fixed strings only.
 
+Every refusal answered to a request with a valid envelope, over the host or the model transport, is appended to the audit log as a `refusal` record: the `type`, the `name` when there is one, and the envelope's `session`. The record never holds the command, the reason or a value.
+
 ## Model-facing tool definitions (normative text)
 
 These descriptions are shipped verbatim to every host so models see the same contract.
@@ -230,7 +232,7 @@ These descriptions are shipped verbatim to every host so models see the same con
 
 **`secret_manage`** — "Propose a change to a secret: remove it, edit its metadata, move it between global and this project, or replace its value. The user confirms or declines outside the chat; nothing changes without that. You never see values and you cannot grant access. Give a concrete reason."
 
-**`secret_exec`** — "Run a shell command with named secrets injected as environment variables for that process only. Output is returned with secret values redacted. Commands that print the environment are refused. Prefer this over asking the user to paste credentials."
+**`secret_exec`** — "Run a shell command with named secrets injected as environment variables for that process only. Output is returned with secret values redacted. Commands that print the environment or a secret are refused; to use only a length, write ${#NAME}. Prefer this over asking the user to paste credentials."
 
 ## Conformance
 

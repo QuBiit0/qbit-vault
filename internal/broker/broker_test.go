@@ -324,3 +324,57 @@ func TestLimitsCountCharacters(t *testing.T) {
 		t.Fatalf("a 154-character reason was refused: %s %q", typ, msg)
 	}
 }
+
+// auditing is a fake backend that also keeps an audit log (D4).
+type auditing struct {
+	fake
+	refused []refusal.Refusal
+	envs    []Envelope
+}
+
+func (a *auditing) Refused(e Envelope, rf refusal.Refusal) {
+	a.envs, a.refused = append(a.envs, e), append(a.refused, rf)
+}
+
+func TestRefusalsAreReportedToAnAuditingBackend(t *testing.T) {
+	a := &auditing{}
+	a.err = refusal.New(refusal.GrantRequired, "A_KEY")
+	ctx := context.Background()
+
+	// A backend refusal, a validation refusal and a transport refusal all
+	// reach the log with the envelope that carried them.
+	Handle(ctx, []byte(env("exec", `"command":"x","secrets":[{"name":"A_KEY"}]`)), a, TransportModel)
+	Handle(ctx, []byte(env("exec", `"command":"","secrets":[{"name":"A_KEY"}]`)), a, TransportModel)
+	Handle(ctx, []byte(env("grant", `"name":"A_KEY","layer":"global","scope":"once","prompt_token":"0123456789abcdef0123"`)), a, TransportModel)
+	// A backend failure that is not a refusal becomes internal.
+	a.err = errors.New("TESTSECRET_boom")
+	Handle(ctx, []byte(env("list", ``)), a, TransportModel)
+
+	want := []refusal.Type{refusal.GrantRequired, refusal.Internal, refusal.NotModelCallable, refusal.Internal}
+	if len(a.refused) != len(want) {
+		t.Fatalf("%d refusals reported, want %d", len(a.refused), len(want))
+	}
+	for i, typ := range want {
+		if a.refused[i].Type != typ || a.envs[i].Session != "pi:2f1c00ab" || a.envs[i].Cwd != cwd {
+			t.Errorf("report %d: %+v for %+v, want %s", i, a.refused[i], a.envs[i], typ)
+		}
+		if strings.Contains(a.refused[i].Message, "TESTSECRET_") {
+			t.Errorf("report %d carries backend error text: %q", i, a.refused[i].Message)
+		}
+	}
+	if a.refused[0].Name == nil || *a.refused[0].Name != "A_KEY" {
+		t.Errorf("the secret name is lost: %+v", a.refused[0])
+	}
+
+	// Successes, and requests with no usable envelope, report nothing.
+	a.err = nil
+	n := len(a.refused)
+	Handle(ctx, []byte(env("list", ``)), a, TransportModel)
+	Handle(ctx, []byte(env("capabilities", ``)), a, TransportModel)
+	Handle(ctx, []byte(`{"contract":"other"}`), a, TransportModel)
+	Handle(ctx, []byte(`not json`), a, TransportModel)
+	Handle(ctx, []byte(strings.Replace(env("list", ``), `"pi:2f1c00ab"`, `"bad session"`, 1)), a, TransportModel)
+	if len(a.refused) != n {
+		t.Fatalf("%d extra reports for successes and unattributable requests", len(a.refused)-n)
+	}
+}

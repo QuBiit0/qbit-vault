@@ -84,17 +84,23 @@ var errMismatch = refusal.New(refusal.ContractMismatch, "")
 func Handle(ctx context.Context, raw []byte, b Backend, t Transport) []byte {
 	v, err := handle(ctx, raw, b, t)
 	if err != nil {
-		var rf refusal.Refusal
-		if !errors.As(err, &rf) || !rf.Valid() {
-			rf = refusal.New(refusal.Internal, "")
-		}
-		v = rf.Envelope()
+		v = asRefusal(err).Envelope()
 	}
 	out, merr := json.Marshal(v)
 	if merr != nil {
 		out, _ = json.Marshal(refusal.New(refusal.Internal, "").Envelope())
 	}
 	return append(out, '\n')
+}
+
+// asRefusal is the refusal an error stands for: a valid one as is, anything
+// else the fixed `internal`.
+func asRefusal(err error) refusal.Refusal {
+	var rf refusal.Refusal
+	if !errors.As(err, &rf) || !rf.Valid() {
+		rf = refusal.New(refusal.Internal, "")
+	}
+	return rf
 }
 
 // Op reports the op of a raw request, or "" when it has none readable.
@@ -122,6 +128,19 @@ func handle(ctx context.Context, raw []byte, b Backend, t Transport) (any, error
 	if err != nil {
 		return nil, err
 	}
+	v, err := dispatch(ctx, e, m, b, t)
+	if err != nil {
+		// Every refusal of a request that carried a usable envelope is
+		// audited, whichever transport asked and wherever it was decided.
+		if a, ok := b.(Auditor); ok {
+			a.Refused(e, asRefusal(err))
+		}
+		return nil, err
+	}
+	return v, nil
+}
+
+func dispatch(ctx context.Context, e Envelope, m fields, b Backend, t Transport) (any, error) {
 	switch e.Op {
 	case "capabilities":
 		return capabilities(b.Info()), nil

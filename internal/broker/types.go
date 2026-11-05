@@ -1,6 +1,10 @@
 package broker
 
-import "context"
+import (
+	"context"
+
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
+)
 
 // Envelope is the part every request carries (CONTRACT.md § Envelope).
 type Envelope struct {
@@ -219,4 +223,16 @@ type Backend interface {
 	Request(ctx context.Context, e Envelope, r RequestRequest) (RequestResponse, error)
 	Manage(ctx context.Context, e Envelope, r ManageRequest) (ManageResponse, error)
 	Info() Info
+}
+
+// Auditor is implemented by a Backend that keeps an audit log. Handle calls
+// Refused for every refusal of a request whose envelope was valid (so the
+// session is known), after the answer is decided and before it is returned.
+// A request that fails the envelope check (contract, op, session, cwd) has no
+// session to attribute and is not reported. The refusal carries a fixed
+// message and at most a validated secret name; the implementation must record
+// nothing else (no command, no reason, no field values). It is best effort:
+// it cannot change the answer.
+type Auditor interface {
+	Refused(e Envelope, rf refusal.Refusal)
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/QuBiit0/qbit-vault/internal/audit"
 	"github.com/QuBiit0/qbit-vault/internal/broker"
 	"github.com/QuBiit0/qbit-vault/internal/grants"
 	"github.com/QuBiit0/qbit-vault/internal/keychain"
@@ -75,6 +76,19 @@ func responseExit(out []byte) int {
 // its own globals bound to the envelope's session; layers and grants are
 // resolved from the envelope's cwd, never the process one.
 type cliBackend struct{ g *globals }
+
+// Refused audits a refusal answered over the broker or MCP exactly like a CLI
+// refusal (cli.go): event `refusal`, the reason code, the secret name when
+// the refusal carries a valid one, and the envelope's session. The actor is
+// the agent's host, not the user at a keyboard. Never the command, the
+// reason or any value; an audit failure changes nothing (best effort).
+func (b *cliBackend) Refused(e broker.Envelope, rf refusal.Refusal) {
+	r := audit.Record{Event: audit.EventRefusal, Session: e.Session, By: "agent", Refusal: string(rf.Type)}
+	if rf.Name != nil {
+		r.Names = []string{*rf.Name}
+	}
+	_ = audit.Append(b.g.Home(), r)
+}
 
 // bound is hot plus a pull first: it is what the operations that read for
 // the agent (list, request) start with, so the answer reflects the other

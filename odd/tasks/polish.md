@@ -25,7 +25,7 @@ Branch `feat/cli-skeleton` until T8. Spec authority: the code as built, docs/*, 
 | T5 | S1, S2 | worker | README: visual, complete, accurate (banner, diagrams, quickstart, commands, security model, status) | (T5) | done |
 | T6 | S1 | worker | full-flow control: install-from-scratch e2e in a container (go install, init, set, agent MCP flow, uninstall) + every battery green | d78a4c7 | done |
 | T7 | S2 | later | TUI spec + implementation, after the design is chosen and the dependency is approved | | pending |
-| T8 | S2 | inline | PR feat/cli-skeleton -> main, merge, default branch main | | pending |
+| T8 | S2 | inline | PR feat/cli-skeleton -> main, merge, default branch main | 9f23f51 | done |
 
 ## Log
 

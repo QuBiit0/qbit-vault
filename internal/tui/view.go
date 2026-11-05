@@ -20,9 +20,7 @@ func (m Model) View() string {
 	case ScreenSplash:
 		body = m.splashView()
 	case ScreenSetup:
-		body = m.stack(m.header(), "", m.theme.Heading("Setup wizard: coming in T2"),
-			m.theme.Mist("The guided setup is built in task T2 of odd/tasks/tui.md."), "",
-			m.footer(kv("esc", "back"), kv("ctrl+c", "quit")))
+		body = m.setupView()
 	case ScreenHome:
 		body = m.homeView()
 	case ScreenError:
@@ -117,18 +115,62 @@ func (m Model) footer(pairs ...[2]string) string {
 	return strings.Join(parts, "  ")
 }
 
-// homeView is the three panes of 01-panes: sections, list, detail, with the
-// keys of the focused pane in the footer.
-func (m Model) homeView() string {
+// joinPanes puts boxes side by side.
+func joinPanes(sep string, boxes ...string) string {
+	parts := make([]string, 0, 2*len(boxes))
+	for i, b := range boxes {
+		if i > 0 {
+			parts = append(parts, sep)
+		}
+		parts = append(parts, b)
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+}
+
+// paneWidths are the outer widths of the list and detail panes.
+func (m Model) paneWidths() (list, detail int) {
 	rest := m.width - len(indent) - sectionsW - 2
-	listW := rest * 5 / 9
-	detailW := rest - listW
+	list = rest * 5 / 9
+	return list, rest - list
+}
+
+// homeView is the three panes of 01-panes: sections, list, detail, with the
+// keys of the focused pane in the footer. An open form replaces the panes.
+func (m Model) homeView() string {
+	if m.form != nil {
+		return m.formView()
+	}
+	listW, detailW := m.paneWidths()
 	sec := sections[m.section]
-	panes := lipgloss.JoinHorizontal(lipgloss.Top,
-		m.box("qbit-vault", sectionsW, m.sectionRows(sectionsW-4), m.focus == PaneSections), " ",
-		m.box(sec.title, listW, m.placeholder(sec, sec.title+" list"), m.focus == PaneList), " ",
-		m.box("Detail", detailW, m.placeholder(sec, sec.title+" detail"), m.focus == PaneDetail))
-	return m.stack(m.header(), "", panes, "", m.footer(m.focusKeys()...))
+	listTitle, list, detailTitle, detail := sec.title, m.placeholder(sec, sec.title+" list"), "Detail", m.placeholder(sec, sec.title+" detail")
+	switch sec.title {
+	case "Secrets":
+		detailTitle, detail = m.secretDetail(detailW - 3)
+		list = m.secretsBody(listW - 3)
+	case "Grants":
+		listTitle, list = "Active grants", m.grantsBody(listW-3)
+		detailTitle, detail = m.grantDetail(detailW - 3)
+	}
+	panes := joinPanes(" ",
+		m.box("qbit-vault", sectionsW, m.sectionRows(sectionsW-4), m.focus == PaneSections),
+		m.box(listTitle, listW, list, m.focus == PaneList),
+		m.box(detailTitle, detailW, detail, m.focus == PaneDetail))
+	lines := []string{m.header(), "", panes, ""}
+	keys := m.focusKeys()
+	switch {
+	case m.ask != nil:
+		lines = append(lines, m.theme.Warn(m.ask.question))
+		lines = append(lines, wrapAll(m.theme.Mist, m.ask.consequence, m.width-2*len(indent))...)
+		lines = append(lines, "")
+		keys = [][2]string{kv("y", "confirm"), kv("any other key", "cancel")}
+	case m.notice.text != "":
+		if m.notice.bad {
+			lines = append(lines, m.theme.Flare("✗ "+m.notice.text), "")
+		} else {
+			lines = append(lines, m.theme.Green("✓ ")+m.theme.Frost(m.notice.text), "")
+		}
+	}
+	return m.stack(append(lines, m.footer(keys...))...)
 }
 
 func (m Model) sectionRows(w int) []string {
@@ -177,13 +219,51 @@ func (m Model) box(title string, w int, body []string, focused bool) string {
 	return strings.Join(append(lines, border("└"+strings.Repeat("─", inner)+"┘")), "\n")
 }
 
-// focusKeys are the footer keys of the focused pane.
+// focusKeys are the footer keys of the focused pane, with the keys of the
+// selected section ahead of the navigation ones.
 func (m Model) focusKeys() [][2]string {
+	var nav [][2]string
 	switch m.focus {
 	case PaneList:
-		return [][2]string{kv("tab", "next pane"), kv("shift+tab", "previous pane"), kv("1-7", "jump"), kv("esc", "back to sections"), kv("q", "quit")}
+		nav = [][2]string{kv("tab", "next pane"), kv("shift+tab", "previous pane"), kv("1-7", "jump"), kv("esc", "back to sections"), kv("q", "quit")}
 	case PaneDetail:
-		return [][2]string{kv("tab", "next pane"), kv("shift+tab", "previous pane"), kv("1-7", "jump"), kv("esc", "back to list"), kv("q", "quit")}
+		nav = [][2]string{kv("tab", "next pane"), kv("shift+tab", "previous pane"), kv("1-7", "jump"), kv("esc", "back to list"), kv("q", "quit")}
+	default:
+		nav = [][2]string{kv("1-7", "jump"), kv("tab", "next pane"), kv("q", "quit")}
 	}
-	return [][2]string{kv("↑↓", "section"), kv("1-7", "jump"), kv("tab", "next pane"), kv("q", "quit")}
+	move := kv("↑↓", "move")
+	if m.focus == PaneSections {
+		move = kv("↑↓", "section")
+	}
+	keys := [][2]string{move}
+	keys = append(keys, m.sectionKeys()...)
+	return append(keys, nav...)
+}
+
+// sectionKeys are the actions of the selected section; destructive ones name
+// what they do in the confirmation they open.
+func (m Model) sectionKeys() [][2]string {
+	switch sections[m.section].title {
+	case "Secrets":
+		switch {
+		case m.sec.locked:
+			return [][2]string{kv("u", "unlock")}
+		case m.sec.failed:
+			return [][2]string{kv("enter", "retry")}
+		case len(m.sec.list.Items) == 0:
+			return [][2]string{kv("a", "add")}
+		}
+		return [][2]string{kv("a", "add"), kv("d", "edit info"), kv("x", "remove")}
+	case "Grants":
+		switch {
+		case m.gr.locked:
+			return [][2]string{kv("u", "unlock")}
+		case m.gr.failed:
+			return [][2]string{kv("enter", "retry")}
+		case len(m.gr.items) == 0:
+			return nil
+		}
+		return [][2]string{kv("r", "revoke"), kv("R", "revoke all")}
+	}
+	return nil
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"os"
 	"runtime"
 	"strings"
@@ -10,9 +9,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
 	"github.com/QuBiit0/qbit-vault/internal/tui"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
 const envNoTUI = "QBIT_VAULT_NO_TUI"
@@ -82,42 +79,4 @@ func (g *globals) wantTUI() bool {
 func (g *globals) trueColor() bool {
 	ct := strings.ToLower(g.getenv("COLORTERM"))
 	return runtime.GOOS == "windows" || ct == "truecolor" || ct == "24bit"
-}
-
-// tuiBackend gives the TUI the vault status. It carries counts and names of
-// states only: no secret value ever leaves the session it opens here.
-type tuiBackend struct{ g *globals }
-
-func (b *tuiBackend) Status() (tui.Status, error) {
-	home := b.g.Home()
-	st := tui.Status{Home: home}
-	if _, err := vault.ReadID(home); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return st, nil // no vault yet: StateNone
-		}
-		return tui.Status{}, err
-	}
-	if hs, err := vault.ReadHosts(home); err == nil {
-		st.Hosts = len(hs)
-	}
-	s, err := b.g.openSessionQuiet()
-	switch {
-	case errors.Is(err, errSessionLocked):
-		st.State, st.Secrets = tui.StateLocked, -1
-		return st, nil
-	case err != nil:
-		return tui.Status{}, err
-	}
-	defer s.close()
-	entries, err := s.v.ListAll()
-	if err != nil {
-		return tui.Status{}, err
-	}
-	st.Secrets = len(entries)
-	wipeEntries(entries)
-	st.State, st.KeyStore = tui.StateUnlocked, "keychain"
-	if s.mode == keychain.ModePassphrase {
-		st.KeyStore = "passphrase"
-	}
-	return st, nil
 }

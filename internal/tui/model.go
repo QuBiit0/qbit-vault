@@ -11,7 +11,7 @@ type Screen int
 
 const (
 	ScreenSplash Screen = iota // first run, no vault yet
-	ScreenSetup                // setup wizard (T2)
+	ScreenSetup                // setup wizard
 	ScreenHome                 // the three panes: sections, list, detail
 	ScreenError                // the backend failed: a message and a next action
 )
@@ -73,6 +73,9 @@ var sections = []section{
 type Options struct {
 	Version string
 	Profile Profile
+	// Exec runs an Action with the TUI suspended; nil means tea.Exec. Tests
+	// replace it, since a program is needed to suspend anything.
+	Exec func(Action, tea.ExecCallback) tea.Cmd
 }
 
 const defaultWidth = 100
@@ -88,6 +91,13 @@ type Model struct {
 	section int
 	focus   Pane
 	width   int
+
+	wiz    wizard
+	sec    secretsPane
+	gr     grantsPane
+	form   *form         // the add or edit form, while open
+	ask    *confirmation // a destructive key waiting for "y"
+	notice notice        // the result of the last action
 }
 
 // New builds the root model and reads the vault status once. A vault that does
@@ -95,6 +105,9 @@ type Model struct {
 func New(b Backend, o Options) Model {
 	m := Model{b: b, opts: o, theme: NewTheme(o.Profile), width: defaultWidth}
 	m.load()
+	if m.screen == ScreenHome {
+		m.enterSection()
+	}
 	return m
 }
 
@@ -129,8 +142,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = max(msg.Width, 80)
 	case tea.KeyMsg:
 		return m.updateKey(msg)
+	case actionDoneMsg:
+		return m.actionDone(msg), nil
 	}
 	return m, nil
+}
+
+// actionKind says which Action finished.
+type actionKind int
+
+const (
+	actSetup actionKind = iota
+	actAdd
+	actUnlock
+)
+
+// actionDoneMsg reports that an Action (a suspended prompt, or the setup)
+// returned.
+type actionDoneMsg struct {
+	kind actionKind
+	err  error
+	name string // the secret an add was for
+}
+
+func (m Model) actionDone(msg actionDoneMsg) Model {
+	switch msg.kind {
+	case actSetup:
+		return m.setupDone(msg.err)
+	case actAdd:
+		m.refreshAfter(msg.err, "stored "+clean(msg.name))
+		for i, s := range m.sec.list.Items {
+			if s.Name == msg.name && msg.err == nil {
+				m.sec.cur = i
+			}
+		}
+	case actUnlock:
+		m.refreshAfter(msg.err, "unlocked")
+	}
+	return m
+}
+
+// exec runs an Action with the TUI suspended, so a prompt can use the terminal.
+func (m Model) exec(a Action, cb tea.ExecCallback) tea.Cmd {
+	if m.opts.Exec != nil {
+		return m.opts.Exec(a, cb)
+	}
+	return tea.Exec(a, cb)
+}
+
+// enterSection loads what the selected section shows.
+func (m *Model) enterSection() {
+	switch sections[m.section].title {
+	case "Secrets":
+		m.loadSecrets()
+	case "Grants":
+		m.loadGrants()
+	}
 }
 
 func (m Model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -141,14 +208,12 @@ func (m Model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ScreenSplash:
 		switch {
 		case key.Type == tea.KeyEnter:
-			m.screen = ScreenSetup
+			m.startWizard()
 		case isRune(key, 'q'):
 			return m, tea.Quit
 		}
 	case ScreenSetup:
-		if key.Type == tea.KeyEsc {
-			m.screen = ScreenSplash
-		}
+		return m.updateSetup(key)
 	case ScreenHome:
 		return m.updateHome(key)
 	case ScreenError:
@@ -163,7 +228,29 @@ func (m Model) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateHome(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case m.form != nil:
+		return m.updateForm(key)
+	case m.ask != nil:
+		return m.updateAsk(key)
+	}
+	m.notice = notice{}
+	var (
+		next Model
+		cmd  tea.Cmd
+		ok   bool
+	)
+	switch sections[m.section].title {
+	case "Secrets":
+		next, cmd, ok = m.secretsKey(key)
+	case "Grants":
+		next, cmd, ok = m.grantsKey(key)
+	}
+	if ok {
+		return next, cmd
+	}
 	n := len(sections)
+	before := m.section
 	switch {
 	case isRune(key, 'q'):
 		return m, tea.Quit
@@ -181,6 +268,9 @@ func (m Model) updateHome(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.section = max(m.section-1, 0)
 	case m.focus == PaneSections && (key.Type == tea.KeyDown || isRune(key, 'j')):
 		m.section = min(m.section+1, n-1)
+	}
+	if m.section != before {
+		m.enterSection()
 	}
 	return m, nil
 }

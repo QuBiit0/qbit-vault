@@ -11,9 +11,63 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/tui"
 )
 
-func newModel(b tui.Backend, color bool) tui.Model {
-	return tui.New(b, tui.Options{Version: "9.9.9", Profile: tui.Profile{Color: color, TrueColor: color}})
+// suspended counts the actions the model handed to tea.Exec (the TUI
+// suspended for a prompt) since the last newModel.
+var suspended int
+
+// fakeExec stands in for tea.Exec: it counts the suspension and runs the
+// action when the command is executed, as the program would.
+func fakeExec(a tui.Action, cb tea.ExecCallback) tea.Cmd {
+	suspended++
+	return func() tea.Msg { return cb(a.Run()) }
 }
+
+func newModel(b tui.Backend, color bool) tui.Model {
+	suspended = 0
+	return tui.New(b, tui.Options{Version: "9.9.9", Profile: tui.Profile{Color: color, TrueColor: color}, Exec: fakeExec})
+}
+
+// settle runs cmd and feeds every message it yields back to the model until
+// no command is left, as the Bubble Tea runtime would.
+func settle(m tui.Model, cmd tea.Cmd) tui.Model {
+	for cmd != nil {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, c := range batch {
+				m = settle(m, c)
+			}
+			return m
+		}
+		if _, ok := msg.(tea.QuitMsg); ok {
+			break
+		}
+		next, c := m.Update(msg)
+		m, cmd = next.(tui.Model), c
+	}
+	return m
+}
+
+// pressAll presses the keys and settles every command they return.
+func pressAll(m tui.Model, keys ...tea.KeyMsg) tui.Model {
+	for _, k := range keys {
+		next, c := m.Update(k)
+		m = settle(next.(tui.Model), c)
+	}
+	return m
+}
+
+// typeText types s one rune at a time, as a terminal delivers it.
+func typeText(m tui.Model, s string) tui.Model {
+	for _, r := range s {
+		m = pressAll(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	return m
+}
+
+func runeKey(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
 
 func press(m tui.Model, keys ...tea.KeyMsg) (tui.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -33,6 +87,9 @@ var (
 	keyShiftTab = tea.KeyMsg{Type: tea.KeyShiftTab}
 	keyCtrlC    = tea.KeyMsg{Type: tea.KeyCtrlC}
 	keyQ        = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	keySpace    = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
+	keyLeft     = tea.KeyMsg{Type: tea.KeyLeft}
+	keyRight    = tea.KeyMsg{Type: tea.KeyRight}
 )
 
 func digit(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
@@ -58,13 +115,13 @@ func TestStartsOnSplashWhenThereIsNoVault(t *testing.T) {
 	}
 }
 
-func TestSplashEnterOpensSetupPlaceholderAndEscGoesBack(t *testing.T) {
-	m, _ := press(newModel(&fakeBackend{status: noVault}, false), keyEnter)
+func TestSplashEnterOpensTheSetupWizardAndEscGoesBack(t *testing.T) {
+	m, _ := press(newModel(&fakeBackend{status: noVault, plan: setupPlan()}, false), keyEnter)
 	if m.Screen() != tui.ScreenSetup {
 		t.Fatalf("screen = %v, want setup", m.Screen())
 	}
-	if !strings.Contains(m.View(), "Setup wizard: coming in T2") {
-		t.Errorf("setup placeholder text missing:\n%s", m.View())
+	if !strings.Contains(m.View(), "Where will the vault live?") {
+		t.Errorf("the wizard's first step is missing:\n%s", m.View())
 	}
 	m, _ = press(m, keyEsc)
 	if m.Screen() != tui.ScreenSplash {
@@ -90,7 +147,7 @@ func TestStartsOnHomeWhenAVaultExists(t *testing.T) {
 	v := m.View()
 	for _, want := range []string{
 		"1 Secrets", "2 Grants", "3 Hosts", "4 Audit", "5 Sync", "6 Doctor", "7 Update",
-		"qbit-vault", "Detail", "Secrets list: coming in T2", "Secrets detail: coming in T2",
+		"qbit-vault", "Detail", "No secrets yet",
 		"~/.qbit-vault", "unlocked (keychain)", "3 hosts", "9.9.9",
 	} {
 		if !strings.Contains(v, want) {
@@ -114,20 +171,20 @@ func TestSectionSwitching(t *testing.T) {
 		name    string
 		keys    []tea.KeyMsg
 		section string
-		task    string
+		want    []string // text the section's panes show
 	}{
-		{"jump to Grants", []tea.KeyMsg{digit('2')}, "Grants", "T2"},
-		{"jump to Hosts", []tea.KeyMsg{digit('3')}, "Hosts", "T3"},
-		{"jump to Update", []tea.KeyMsg{digit('7')}, "Update", "T3"},
-		{"down twice", []tea.KeyMsg{keyDown, keyDown}, "Hosts", "T3"},
-		{"up stops at the first section", []tea.KeyMsg{keyUp}, "Secrets", "T2"},
-		{"down stops at the last section", []tea.KeyMsg{digit('7'), keyDown}, "Update", "T3"},
-		{"digit 8 is not a section", []tea.KeyMsg{digit('8')}, "Secrets", "T2"},
-		{"jump works from another pane", []tea.KeyMsg{keyTab, digit('5')}, "Sync", "T3"},
+		{"jump to Grants", []tea.KeyMsg{digit('2')}, "Grants", []string{"Active grants"}},
+		{"jump to Hosts", []tea.KeyMsg{digit('3')}, "Hosts", []string{"Hosts list: coming in T3", "Hosts detail: coming in T3"}},
+		{"jump to Update", []tea.KeyMsg{digit('7')}, "Update", []string{"Update list: coming in T3", "Update detail: coming in T3"}},
+		{"down twice", []tea.KeyMsg{keyDown, keyDown}, "Hosts", []string{"Hosts list: coming in T3"}},
+		{"up stops at the first section", []tea.KeyMsg{keyUp}, "Secrets", []string{"GITHUB_TOKEN"}},
+		{"down stops at the last section", []tea.KeyMsg{digit('7'), keyDown}, "Update", []string{"Update list: coming in T3"}},
+		{"digit 8 is not a section", []tea.KeyMsg{digit('8')}, "Secrets", []string{"GITHUB_TOKEN"}},
+		{"jump works from another pane", []tea.KeyMsg{keyTab, digit('5')}, "Sync", []string{"Sync list: coming in T3"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m, cmd := press(newModel(&fakeBackend{status: ready}, false), tt.keys...)
+			m, cmd := press(newModel(newReady(), false), tt.keys...)
 			if isQuit(cmd) || m.Screen() != tui.ScreenHome {
 				t.Fatalf("left the home screen (%v)", m.Screen())
 			}
@@ -135,7 +192,7 @@ func TestSectionSwitching(t *testing.T) {
 				t.Fatalf("section = %s, want %s", m.Section(), tt.section)
 			}
 			v := m.View()
-			for _, want := range []string{tt.section + " list: coming in " + tt.task, tt.section + " detail: coming in " + tt.task} {
+			for _, want := range tt.want {
 				if !strings.Contains(v, want) {
 					t.Errorf("view lacks %q:\n%s", want, v)
 				}

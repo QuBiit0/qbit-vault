@@ -1,2 +1,10 @@
+# LF in the repository and in the working tree for every text file. Go sources
+# fall under the default; a test fixture there holds raw control bytes, so *.go
+# is left to Git's own text detection instead of being forced to text.
 * text=auto eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.ans text eol=lf
 *.ps1 text eol=crlf

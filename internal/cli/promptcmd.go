@@ -38,11 +38,20 @@ var openValueFD = func() (io.WriteCloser, error) {
 	if runtime.GOOS == "windows" {
 		return nil, errFD3Windows
 	}
-	f := os.NewFile(valueFD, "value-fd")
-	if f == nil {
+	return openValueFDNum(valueFD)
+}
+
+// openValueFDNum opens descriptor fd for the value. Only a descriptor a host
+// can pass (valueFDKindOK) is wrapped in an *os.File: wrapping anything else,
+// such as the Go runtime's own poller, which takes fd 3 on macOS when the
+// parent passed nothing there, would hand it the value and let the file's
+// finalizer close the runtime's descriptor.
+func openValueFDNum(fd int) (io.WriteCloser, error) {
+	if !valueFDKindOK(fd) {
 		return nil, errNoFD3
 	}
-	if _, err := f.Stat(); err != nil {
+	f := os.NewFile(uintptr(fd), "value-fd")
+	if f == nil {
 		return nil, errNoFD3
 	}
 	return f, nil

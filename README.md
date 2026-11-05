@@ -4,12 +4,17 @@
 
 # QBit Vault
 
+[![CI](https://github.com/QuBiit0/qbit-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/QuBiit0/qbit-vault/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8.svg)](go.mod)
+[![Status: pre-release](https://img.shields.io/badge/status-pre--release-orange.svg)](#status--roadmap)
+
 **Agents use your secrets. They never see them.**  
 by **qbitdev**
 
 QBit Vault (`qbit-vault`) is a local secrets broker for coding agents. Claude Code, Codex and Pi / Gentle Shell can run commands that need a `GITHUB_TOKEN`, a `DATABASE_URL` or any API key, and the value never enters the model's context, the chat transcript, the session file or the provider's servers.
 
-> **Status: pre-release.** The vault, the broker, the MCP server, host registration and multi-device sync are built and tested. Nothing is released yet: you install it with `go install`. See [Status / Roadmap](#status--roadmap).
+> **Status: pre-release, private beta.** The repository is private for now and nothing is released. The vault, the broker, the MCP server, host registration and multi-device sync are built and tested. You install it with `go install` ([docs/INSTALL.md](docs/INSTALL.md)). See [Status / Roadmap](#status--roadmap).
 
 ## Why
 
@@ -186,7 +191,7 @@ Protocol, keys and failure modes: [docs/REMOTE_SYNC.md](docs/REMOTE_SYNC.md).
 
 ## Status / Roadmap
 
-**Built and tested** (on `feat/cli-skeleton`, see [docs/ROADMAP.md](docs/ROADMAP.md)): encrypted vault with global and project layers, grants, hash-chained audit log, redaction, `exec`, native prompts (Windows, macOS, Linux, terminal), the contract broker and MCP server, host registration for Claude Code, Codex and Pi, remote sync with `qbit-vault-server`, and the interactive TUI (`qbit-vault`, see [docs/CLI.md](docs/CLI.md#tui)): first-run setup, then three panes for secrets, grants, hosts, audit, sync status and doctor. Not exercised yet: the TUI's suspend and resume (for the masked value prompt) on a real terminal; its tests replace that step.
+**Built and tested** (on `main`, see [docs/ROADMAP.md](docs/ROADMAP.md)): encrypted vault with global and project layers, grants, hash-chained audit log, redaction, `exec`, native prompts (Windows, macOS, Linux, terminal), the contract broker and MCP server, host registration for Claude Code, Codex and Pi, remote sync with `qbit-vault-server`, and the interactive TUI (`qbit-vault`, see [docs/CLI.md](docs/CLI.md#tui)): first-run setup, then three panes for secrets, grants, hosts, audit, sync status and doctor. Not exercised yet: the TUI's suspend and resume (for the masked value prompt) on a real terminal; its tests replace that step.
 
 **Planned, not built yet** — do not rely on these:
 
@@ -220,6 +225,23 @@ Known gaps that the docs state openly: no automatic passphrase fallback when the
 | [contracts/secrets-broker/v1/CONTRACT.md](contracts/secrets-broker/v1/CONTRACT.md) | The wire contract and typed refusals |
 | [design/system.md](design/system.md) | Visual identity and design tokens |
 | [AGENTS.md](AGENTS.md) | Instructions for the coding agent building this repo |
+| [odd/README.md](odd/README.md) | What `odd/tasks/` is: the development logs, not user documentation |
+
+## Contributing
+
+Contributions are welcome once the repository is public; the rules are in [CONTRIBUTING.md](CONTRIBUTING.md). Read [AGENTS.md](AGENTS.md) first: the security invariants there are tested, and a change that breaks one is rejected.
+
+## Security
+
+Do not report a vulnerability in a public issue. Follow [SECURITY.md](SECURITY.md). The threat model and what is out of scope are in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+
+## License
+
+Released under the [MIT license](LICENSE).
+
+## Community
+
+QBit Vault is built and maintained by **qbitdev**. The repository is not public yet; the public launch will bring a place to ask questions and report issues.
 
 ## Independence
 

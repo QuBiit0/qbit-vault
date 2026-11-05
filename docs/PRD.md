@@ -4,7 +4,7 @@ Version 0.1. Requirement IDs are stable; reference them from issues, PRs and tes
 
 ## 0. Implementation status
 
-Built and tested on `feat/cli-skeleton` (evidence in `ROADMAP.md`): the vault, layers, grants, audit, redaction, `exec`, the native prompts, the contract broker and MCP server (§§ 5.1–5.6, 5.8), the sync client and server (§ 5.10, `REMOTE_SYNC.md`), and host registration for **Claude Code, Codex and Pi / Gentle Shell** (§ 5.7, 5.9). Not built:
+Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants, audit, redaction, `exec`, the native prompts, the contract broker and MCP server (§§ 5.1–5.6, 5.8), the sync client and server (§ 5.10, `REMOTE_SYNC.md`), and host registration for **Claude Code, Codex and Pi / Gentle Shell** (§ 5.7, 5.9). Not built:
 
 - the Pi extension `qbit-vault-pi` (Phase 4): R-HOST-01, the Pi parts of R-CAP-01 and R-CAP-06, R-RED-04 and R-EXEC-02 on Pi; `set --stdin --fields` and `prompt --field` (R-CAP-08 is met by the broker for MCP hosts);
 - the Claude Code `PreToolUse` rewrite of secret references into `exec` (R-EXEC-02) and its `grant_required` / `dump_command` denials; today `pre-bash` only keeps user-only commands out of the agent's shell;

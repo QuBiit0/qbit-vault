@@ -595,3 +595,26 @@ func fuzzForms(v string) []string {
 	}
 	return out
 }
+
+// JSON encoders disagree on invalid UTF-8: Go 1.26 writes the replacement
+// character as the escape \ufffd while keeping valid non-ASCII text as is; Go
+// 1.27 writes it literally. A value that mixes both must be caught in either
+// form, or the bytes around the invalid one reach the agent.
+func TestJSONFormsOfInvalidUTF8AreReplaced(t *testing.T) {
+	value := "TESTSECRET_é\x80tail-of-the-value"
+	r, err := New([]secret.Secret{sec("MIXED_KEY", value)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Wipe()
+	for _, form := range []string{
+		`TESTSECRET_é\ufffdtail-of-the-value`,      // Go 1.26 encoding/json
+		"TESTSECRET_é\uFFFDtail-of-the-value",      // Go 1.27 encoding/json (literal U+FFFD)
+		`TESTSECRET_\u00e9\ufffdtail-of-the-value`, // ASCII-only encoders
+	} {
+		out, n := r.Bytes([]byte(`{"v":"` + form + `"}`))
+		if n == 0 || strings.Contains(string(out), "TESTSECRET_") || strings.Contains(string(out), "tail-of-the-value") {
+			t.Errorf("form %q survived: %q", form, out)
+		}
+	}
+}

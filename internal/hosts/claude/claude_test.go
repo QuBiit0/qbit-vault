@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -294,6 +295,9 @@ func TestMCPEntryEnvOnlyForANonDefaultHome(t *testing.T) {
 }
 
 func TestWindowsPathsAreEscaped(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("a Windows executable path is only ever written on Windows")
+	}
 	r := newRig(t)
 	r.host = claude.NewWithExe(`C:\Program Files\QBit Vault\qbit-vault.exe`)
 	r.apply()

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -268,6 +269,9 @@ func TestEnvOnlyForANonDefaultHome(t *testing.T) {
 }
 
 func TestWindowsPathsRenderAsValidTOML(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("a Windows executable path is only ever written on Windows")
+	}
 	r := newRig(t)
 	r.host = codex.NewWithExe(`C:\Program Files\QBit "Vault"\qbit-vault.exe`)
 	r.apply()

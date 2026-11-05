@@ -2,7 +2,7 @@
 
 Sliced so every PR stays ≤ 400 changed lines (Gentle AI's review budget), each with code + tests + docs. Phases are sequential; slices within a phase are mostly parallelizable. IDs refer to `docs/PRD.md`.
 
-**Status.** *done* = built, tested and committed on `feat/cli-skeleton` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *pending* = not built. Nothing is released: there is no tag, no published package and no published image. Today QBit Vault is installed with `go install` or built from source (`INSTALL.md`).
+**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *pending* = not built. Nothing is released: there is no tag, no published package and no published image. Today QBit Vault is installed with `go install` or built from source (`INSTALL.md`).
 
 | Phase | Status |
 | --- | --- |
@@ -105,7 +105,7 @@ Nothing of `packages/qbit-vault-pi` exists yet (there is no `packages/` director
 
 ## Phase 5 — hardening and release 0.1.0 — pending
 
-- Cross-agent battery green on macOS/Linux/Windows (today only the Docker batteries exist, both on Linux: sync and hosts).
+- Cross-agent battery green on macOS/Linux/Windows (today only the three Docker batteries exist, all on Linux: sync, hosts and install from scratch).
 - Packaging moved here from Phase 3 (slice 3.7): npm launcher and platform packages, goreleaser, Minisign-signed checksums, GitHub provenance, `install.sh` / `install.ps1`, Homebrew tap, `qbit-vault update` and its opt-out check.
 - Sync battery green; `qbit-vault-server` image published and deployed once on Dokploy from `deploy/compose.yaml`.
 - Security review checklist (THREAT_MODEL.md) walked for every package.

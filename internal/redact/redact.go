@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"unicode/utf8"
 
 	"github.com/QuBiit0/qbit-vault/internal/secret"
 )
@@ -178,14 +179,26 @@ func (s *state) addEncodings(b []byte, tok int) {
 			s.add(percent(b, mode, lower), tok, false)
 		}
 	}
+	// Encoders disagree on invalid UTF-8 next to literal non-ASCII text: Go
+	// 1.26 escapes the replacement character, Go 1.27 writes it as is, so a
+	// value with an invalid byte also gets the escaped form of the literal one.
+	invalid := []bool{false}
+	if !utf8.Valid(b) {
+		invalid = append(invalid, true)
+	}
 	for _, html := range []bool{false, true} {
 		for _, ascii := range []bool{false, true} {
 			for _, upper := range []bool{false, true} {
-				j := jsonEscape(b, html, ascii, upper)
-				if bytes.IndexByte(j, '/') >= 0 {
-					s.add(escapeSlashes(j), tok, false)
+				for _, inv := range invalid {
+					if ascii && inv {
+						continue // the ASCII form already escapes it
+					}
+					j := jsonEscapeInvalid(b, html, ascii, upper, inv)
+					if bytes.IndexByte(j, '/') >= 0 {
+						s.add(escapeSlashes(j), tok, false)
+					}
+					s.add(j, tok, false)
 				}
-				s.add(j, tok, false)
 			}
 		}
 	}

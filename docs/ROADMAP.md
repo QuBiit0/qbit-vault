@@ -4,7 +4,7 @@ Sliced so every PR stays ≤ 400 changed lines (Gentle AI's review budget), each
 
 ## Phase 0 — alignment (no code)
 
-- [ ] Discussion opened in gentle-ai (done: `qbit-vault-proposal.md`).
+- [ ] Discussion opened in gentle-ai (done: `docs/PROPOSAL.md`).
 - [ ] Decide repo location from maintainer feedback (companion repo vs. in-tree).
 - [ ] Reserve names: npm `qbit-vault`, `qbit-vault-pi`, `@qbit-vault/cli-*`; Go module path.
 

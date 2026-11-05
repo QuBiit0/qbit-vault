@@ -69,7 +69,8 @@ fi
 
 archive="qbit-vault_${os}_${arch}.tar.gz"
 say "installing qbit-vault $VERSION ($os/$arch)"
-fetch "$RELEASE_URL/$VERSION/$archive" "$tmp/$archive" || die "could not download $archive for $VERSION"
+fetch "$RELEASE_URL/$VERSION/$archive" "$tmp/$archive" ||
+	die "could not download $archive for $VERSION (a release being published uploads its files for a few minutes; try again)"
 fetch "$RELEASE_URL/$VERSION/checksums.txt" "$tmp/checksums.txt" || die "could not download checksums.txt for $VERSION"
 
 want="$(awk -v f="$archive" '$2 == f { print $1 }' "$tmp/checksums.txt")"
@@ -100,9 +101,12 @@ if [ -n "$previous_version" ] && [ "$previous" = "$INSTALL_DIR/qbit-vault" ]; th
 	fi
 fi
 mkdir -p "$INSTALL_DIR"
-# Copy beside the target then rename, so a running qbit-vault is never half-written.
-cp "$tmp/qbit-vault" "$INSTALL_DIR/.qbit-vault.new"
-chmod 755 "$INSTALL_DIR/.qbit-vault.new"
+# Copy beside the target then rename, so a running qbit-vault is never
+# half-written and a failed copy (a full disk) leaves the old one in place.
+if ! cp "$tmp/qbit-vault" "$INSTALL_DIR/.qbit-vault.new" || ! chmod 755 "$INSTALL_DIR/.qbit-vault.new"; then
+	rm -f "$INSTALL_DIR/.qbit-vault.new"
+	die "could not write $INSTALL_DIR/qbit-vault: the previous binary was kept"
+fi
 mv -f "$INSTALL_DIR/.qbit-vault.new" "$INSTALL_DIR/qbit-vault"
 say "installed $INSTALL_DIR/qbit-vault"
 

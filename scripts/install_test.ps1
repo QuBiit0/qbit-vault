@@ -131,7 +131,14 @@ try {
     # 6. Re-running replaces the binary in place and leaves no .old file.
     $r = Invoke-Install 'ARM64' (Join-Path $work 'good') (Join-Path $work 'dest1')
     Check 're-install replaces the binary' ((Installed (Join-Path $work 'dest1')) -eq 'fake-qbit-vault-arm64')
-    Check 're-install leaves no .old file' (-not (Test-Path (Join-Path $work 'dest1\qbit-vault.exe.old')))
+    Check 're-install leaves no .old file' (@(Get-ChildItem -Force (Join-Path $work 'dest1') -Filter 'qbit-vault.exe.old*').Count -eq 0)
+
+    # 6b. A leftover .old that cannot be removed (still locked by a running
+    # qbit-vault, played here by a non-empty directory) does not block an upgrade.
+    New-Item -ItemType Directory -Force -Path (Join-Path $work 'dest1\qbit-vault.exe.old') | Out-Null
+    Set-Content -LiteralPath (Join-Path $work 'dest1\qbit-vault.exe.old\busy') -Value 'x'
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest1')
+    Check 'a locked leftover .old does not block the upgrade' ($r.Code -eq 0 -and (Installed (Join-Path $work 'dest1')) -eq 'fake-qbit-vault-amd64')
 
     # 7. An existing install found on PATH is upgraded in place.
     $prev = Join-Path $work 'prev'

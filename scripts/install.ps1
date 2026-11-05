@@ -93,14 +93,24 @@ function Install-QBitVault {
         }
 
         New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-        # A running .exe cannot be overwritten but can be renamed: move it aside first.
+        # Leftovers of earlier upgrades go now if nothing runs them any more.
+        Get-ChildItem -LiteralPath $installDir -Filter 'qbit-vault.exe.old*' -Force -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+        # A running .exe cannot be overwritten but can be renamed: move it aside
+        # under a fresh name (an older aside file may still be locked), and put
+        # it back if the copy fails, so a failed upgrade never leaves no binary.
+        $old = $null
         if (Test-Path -LiteralPath $target) {
-            $old = "$target.old"
-            Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
-            Move-Item -LiteralPath $target -Destination $old -Force
+            $old = "$target.old-" + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            Move-Item -LiteralPath $target -Destination $old
         }
-        Copy-Item -LiteralPath $exe -Destination $target
-        Remove-Item -LiteralPath "$target.old" -Force -ErrorAction SilentlyContinue
+        try {
+            Copy-Item -LiteralPath $exe -Destination $target
+        } catch {
+            if ($old) { Move-Item -LiteralPath $old -Destination $target -Force -ErrorAction SilentlyContinue }
+            throw "qbit-vault install: could not write ${target}: the previous binary was kept"
+        }
+        if ($old) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
         Say "installed $target"
 
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')

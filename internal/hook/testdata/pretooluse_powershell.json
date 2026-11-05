@@ -1,0 +1,8 @@
+{
+  "session_id": "abc123",
+  "cwd": "C:\\Users\\dev\\proj",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "PowerShell",
+  "tool_input": { "command": "& 'qbit-vault.exe' set TESTSECRET_NAME" },
+  "tool_use_id": "toolu_01DEF456"
+}

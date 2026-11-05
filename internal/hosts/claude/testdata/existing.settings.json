@@ -1,0 +1,24 @@
+{
+	"model": "opus",
+	"hooks": {
+		"PreToolUse": [
+			{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "gentle-ai hook guard" }] }
+		],
+		"PostToolUse": [
+			{
+				"matcher": "Edit|Write",
+				"hooks": [{ "type": "command", "command": "prettier --write" }]
+			}
+		],
+		"Stop": [
+			{ "hooks": [{ "type": "command", "command": "notify-send done" }] }
+		]
+	},
+	"permissions": {
+		"allow": ["Bash(git status)"],
+		"deny": [
+			"Read(~/.ssh/**)",
+			"Read(**/.env)"
+		]
+	}
+}

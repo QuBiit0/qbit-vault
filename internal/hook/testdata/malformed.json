@@ -1,0 +1,1 @@
+{"session_id": "abc123", "tool_name": "Bash", "tool_input": {"command": "qbit-vault set TESTSECRET_X"

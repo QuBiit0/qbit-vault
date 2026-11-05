@@ -1,8 +1,8 @@
 # Contract: `gentle-ai.secrets-broker/v1`
 
-Status: **draft 1.0.0-draft.1**. Frozen on the first stable release; afterwards only additive changes under the same major, published as capability rows (`capabilities: 1.1`, `1.2`, ...). Consumers MUST refuse envelopes whose `contract` major they do not implement.
+Status: **draft 1.0.0-draft.2** (draft.2: `request` takes several typed fields; `list` reports `kind` and `unlinked_match`; `capabilities` reports field kinds and sync). Frozen on the first stable release; afterwards only additive changes under the same major, published as capability rows (`capabilities: 1.1`, `1.2`, ...). Consumers MUST refuse envelopes whose `contract` major they do not implement.
 
-This contract defines the only surface through which a host (an agent runtime, its hooks or its extension) talks to the broker. It is transport-independent: the same JSON objects travel over MCP tool calls, over the CLI with `--json`, and over host hooks.
+This contract defines the only surface through which a host (an agent runtime, its hooks or its extension) talks to the broker. It is transport-independent: the same JSON objects travel over MCP tool calls and over the CLI (`broker --op`, `--json`); the Pi extension (planned, Phase 4) would use the CLI form. The Claude Code hooks do not carry contract traffic.
 
 ## Envelope
 
@@ -17,7 +17,7 @@ Every request and response carries:
 | `contract` | yes | Literal `gentle-ai.secrets-broker/v1` |
 | `op` | yes | One of `request`, `list`, `exec`, `manage`, `grant`, `revoke`, `capabilities` |
 | `v` | yes | Operation schema version, integer, currently `1` for all ops |
-| `session` | yes | Opaque host session id, `^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$` (prefix = host: `pi`, `claude`, `codex`, `opencode`, `cli`) |
+| `session` | yes | Opaque host session id, `^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$` (prefix = host: `pi`, `claude`, `codex`, `cli`; the MCP server generates `mcp`) |
 | `cwd` | yes | Absolute path of the working directory; used to resolve the repository root for the project layer and the `project` scope |
 | `host` | no | `{ "name": "gentle-shell", "version": "3.7.0" }` for audit |
 
@@ -29,28 +29,42 @@ Every secret lives in one **layer**: `global`, or `project` (the repository that
 
 ## Operations
 
-### `request` — ask for a secret handle (model-callable)
+### `request` — ask for one or several secret handles (model-callable)
 
-Request:
+Request, one secret:
 ```json
 { "op": "request", "name": "GITHUB_TOKEN", "reason": "gh release create v1.2.0", "suggested_scope": "session", "suggested_layer": "global" }
 ```
 
+Request, several fields in one prompt:
+```json
+{ "op": "request", "reason": "run the shop-api migrations against staging",
+  "fields": [ { "name": "DB_HOST", "kind": "text", "label": "Host" },
+              { "name": "DB_USER", "kind": "text", "label": "User" },
+              { "name": "DB_PASSWORD", "label": "Password", "description": "staging db password" } ],
+  "suggested_scope": "session", "suggested_layer": "project" }
+```
+
 | Field | Req | Rules |
 | --- | --- | --- |
-| `name` | yes | `^[A-Z][A-Z0-9_]{0,63}$` |
+| `name` | one of `name`, `fields` | `^[A-Z][A-Z0-9_]{0,63}$`; shorthand for `fields: [{name}]` |
+| `fields[]` | one of `name`, `fields` | 1–8 entries, names unique (a duplicate is `invalid_name`). Each `{name, kind?, label?, description?}`: `kind` `secret` (default; masked) or `text` (visible while typed); `label` ≤ 40 chars shown next to the box (default the name); `description` ≤ 200 chars, stored on a new record. Labels and descriptions are shown escaped, like `reason` |
 | `reason` | yes | 8–200 chars, shown verbatim to the user; MUST NOT be empty or generic (`"needed"` is refused with `reason_too_vague` by a minimal heuristic: < 3 words) |
 | `suggested_scope` | no | `once` \| `session` \| `project`; a hint only, the user chooses |
 | `suggested_layer` | no | `global` \| `project`; a hint only, the user chooses. `project` outside a repository → `no_project` |
 
-Behavior: the broker opens the **user-facing prompt** (host UI or native). If `name` resolves for `cwd`, the prompt asks only for a grant; otherwise it asks for the value, the layer (when `cwd` is in a repository) and a grant. The model is not told which of the two happened.
+Behavior: the broker opens **one user-facing prompt** (host UI or native) for all fields. A field whose name resolves for `cwd` is shown as *already stored* and gets no box; every other field gets a box (masked for `secret`, visible for `text`). The prompt asks the layer once for the new values (when `cwd` is in a repository) and one scope for all fields, offering only scopes every field allows (a `sensitive` one limits all to `once`). It is all-or-nothing: a blank box, a cancel or a timeout stores nothing and grants nothing. On confirmation every new value is stored and every field's record is granted with the chosen scope. The model is not told which fields were already stored. A name in its cooldown makes the whole request `rate_limited` (naming it); a decline starts the cooldown for every name in the request. With sync enabled the broker pulls first (bounded, `REMOTE_SYNC.md` § 7.1), so a secret stored on another machine is found.
 
 Response:
 ```json
-{ "ok": true, "ref": "secret://GITHUB_TOKEN", "layer": "global", "grant": { "scope": "session", "expires_at": "2026-10-16T09:12:00Z" } }
+{ "ok": true,
+  "refs": [ { "name": "DB_HOST", "ref": "secret://DB_HOST", "layer": "project" },
+            { "name": "DB_USER", "ref": "secret://DB_USER", "layer": "project" },
+            { "name": "DB_PASSWORD", "ref": "secret://DB_PASSWORD", "layer": "project" } ],
+  "grant": { "scope": "session", "expires_at": "2026-10-16T09:12:00Z" } }
 ```
 
-`expires_at` is `null` for `project`. For `once`, the grant is consumed by the next `exec` in the same session that references the name.
+A single-`name` request also carries `ref` and `layer` of that one field, so draft.1 callers keep working. `layer` is per field because a field already stored keeps its own layer. `expires_at` is `null` for `project`. For `once`, each field's grant is consumed by the next `exec` in the same session that references that name.
 
 ### `list` — enumerate handles (model-callable)
 
@@ -61,23 +75,24 @@ Response:
 { "ok": true,
   "project": { "root": "/home/me/shop-api", "label": "shop-api" },
   "secrets": [
-  { "name": "GITHUB_TOKEN", "layer": "global", "overrides_global": false,
+  { "name": "GITHUB_TOKEN", "layer": "global", "overrides_global": false, "kind": "secret",
     "description": "GitHub PAT, repo scope", "sensitive": false,
     "binaries": ["gh", "git"], "hosts": ["api.github.com"],
     "created_at": "…", "updated_at": "…",
     "grant": { "scope": "session", "expires_at": "…" } },
   { "name": "DATABASE_URL", "layer": "project", "overrides_global": true, "…": "…", "grant": null } ],
+  "unlinked_match": null,
   "policy": { "…": "see below" } }
 ```
 
-Returns the secrets that resolve from `cwd`: every secret of the current project layer, plus every global secret not overridden by it. `project` is `null` outside a repository. Other projects' secrets are never listed. Never values.
+Returns the secrets that resolve from `cwd`: every secret of the current project layer, plus every global secret not overridden by it. `project` is `null` outside a repository. Other projects' secrets are never listed. Never values. `unlinked_match` is `{ "label": "shop-api" }` when sync brought a project layer from another device whose origin URL matches this repository but the user has not linked it here (`REMOTE_SYNC.md` § 7.5): the agent may suggest that the user run `qbit-vault link shop-api`; it cannot link it itself. Otherwise `null`.
 
 `policy` tells the agent everything it may and may not do. Its strings are normative (hosts ship them verbatim) and the same text is the MCP server's `instructions`:
 
 ```json
 { "can": [
     "List secret names and metadata visible from this directory with secret_list.",
-    "Ask the user for a secret by name with a concrete reason using secret_request; the user types it outside the chat.",
+    "Ask the user for one or several secrets (up to 8 fields, each secret or plain text) with a concrete reason using secret_request; the user types them outside the chat.",
     "Run commands with granted secrets using secret_exec or the shell tool; output comes back redacted.",
     "Propose removing, editing, moving (global <-> this project) or replacing a secret using secret_manage; the user confirms or declines." ],
   "cannot": [
@@ -87,7 +102,8 @@ Returns the secrets that resolve from `cwd`: every secret of the current project
     "Reach the secrets of another project.",
     "Print the environment (env, printenv, set, /proc/*/environ, ...) while secrets are injected.",
     "Use a secret with a binary outside its allowlist.",
-    "Re-ask for a name the user declined during its cooldown." ],
+    "Re-ask for a name the user declined during its cooldown.",
+    "Configure sync, pair or revoke devices, or link a project layer; only the user can." ],
   "layers": ["global", "project"],
   "scopes": ["once", "session", "project"],
   "cooldowns": [ { "name": "AWS_SECRET_ACCESS_KEY", "until": "…" } ] }
@@ -111,7 +127,7 @@ Request:
 | `timeout_ms` | no | 1 s – 1 h, default 600 000 |
 | `shell` | no | `auto` \| `sh` \| `bash` \| `cmd` \| `pwsh` |
 
-Behavior (normative, see PRD R-EXEC-*): resolve every `from` for `cwd` to its layer → check grants for that name and layer → dump-guard → binary allowlist → build env (parent env minus any var named like a vault secret, plus injected) → run in own process group with timeout → stream stdout/stderr through the redactor → audit → return.
+Behavior (normative, see PRD R-EXEC-*): resolve every `from` for `cwd` to its layer → check grants for that name and layer → dump-guard → binary allowlist → build env (parent env minus any var named like a vault secret, plus injected) → run in own process group with timeout → stream stdout/stderr through the redactor → audit → return. A `once` grant is spent only if the child process is created: a refusal at any earlier step, or a command that cannot start, leaves it usable; a child that starts and exits non-zero spends it. On Windows a bare `bash` or `sh` in `command` never resolves to WSL; with no Git for Windows it is an `internal` refusal with a fixed message.
 
 Response:
 ```json
@@ -156,9 +172,9 @@ Response:
 
 ### `grant` — create or widen a grant (**user-UI only, never model-callable**)
 
-Only the host UI (Pi extension prompt, native dialog) may send it, and only as the result of a user interaction. The MCP server does not expose it as a tool. The CLI accepts it only from an interactive TTY or with `--from-prompt-token <t>` issued by the broker's own prompt.
+Only the host UI (the planned Pi extension prompt, or the native dialog) may send it, and only as the result of a user interaction. The MCP server does not expose it as a tool. The CLI accepts it only from an interactive TTY or with `--from-prompt-token <t>` issued by the broker's own prompt.
 
-Request: `{ "op": "grant", "name": "GITHUB_TOKEN", "layer": "global", "scope": "session", "ttl_ms": 1800000 }`
+Request: `{ "op": "grant", "name": "GITHUB_TOKEN", "layer": "global", "scope": "session", "ttl_ms": 43200000 }`
 Response: `{ "ok": true, "grant": { "scope": "session", "expires_at": "…" } }`
 
 ### `revoke` — drop grants (user-callable)
@@ -174,8 +190,9 @@ Response:
 { "ok": true, "contract": "gentle-ai.secrets-broker/v1", "capabilities": "1.0",
   "ops": ["request","list","exec","manage","grant","revoke","capabilities"],
   "layers": ["global","project"],
-  "prompt_backends": ["pi-ui","osascript","powershell","zenity","tty"],
-  "keychain": "secret-service", "streaming": true }
+  "prompt_backends": ["pi-ui","osascript","powershell","zenity","kdialog","tty"],
+  "field_kinds": ["secret","text"], "max_fields": 8,
+  "keychain": "secret-service", "streaming": true, "sync": false }
 ```
 
 ## Refusals
@@ -189,32 +206,34 @@ A refusal is `{ "ok": false, "refusal": { "type": "<type>", "name": "<secret nam
 | `user_declined` | User cancelled the prompt | no (60 s cooldown) | Tell the model the user declined; do not re-ask |
 | `rate_limited` | Re-request inside the cooldown | no | Back off |
 | `reason_too_vague` | `request.reason` fails the heuristic | yes | Model rephrases with a concrete reason |
-| `invalid_name` | Name fails the regex | no | Fix the name |
+| `invalid_name` | Name fails the regex, or appears twice in `fields` | no | Fix the name |
 | `scope_not_allowed` | `project`/`session` asked for a `sensitive` secret | no | Offer `once` |
 | `scope_binary` | Command's binary not in the secret's `binaries` | no | Tell the user; user may edit the allowlist |
 | `no_project` | `layer: "project"` or `suggested_layer: "project"` while `cwd` is not inside a repository | no | Use `global`, or run from the repository |
 | `dump_command` | Command matches the dump-guard list | no | Tell the model the command is refused while secrets are injected |
 | `not_model_callable` | `grant` arrived over MCP or without a prompt token | no | Log; this is an attack signal |
 | `vault_locked` | Keychain unavailable and no cached passphrase | yes | Prompt for passphrase |
-| `vault_corrupt` | AEAD tag or envelope check failed | no | Point to `gentle-vault restore` |
+| `vault_corrupt` | AEAD tag or envelope check failed | no | Point to `qbit-vault restore` |
 | `timeout` | `exec` exceeded `timeout_ms` | yes | Child killed; partial redacted output returned in `partial` |
 | `contract_mismatch` | Unsupported `contract` or `v` | no | Upgrade |
 | `internal` | Anything else | maybe | Message never contains values |
 
 Messages MUST be built from the secret **name** and fixed strings only.
 
+Every refusal answered to a request with a valid envelope, over the host or the model transport, is appended to the audit log as a `refusal` record: the `type`, the `name` when there is one, and the envelope's `session`. The record never holds the command, the reason or a value.
+
 ## Model-facing tool definitions (normative text)
 
 These descriptions are shipped verbatim to every host so models see the same contract.
 
-**`secret_request`** — "Ask the user for permission to use a named secret (e.g. GITHUB_TOKEN) in a later command. The user will type or approve it outside the chat. You NEVER receive the value; you receive a reference and a grant. Give a concrete reason (what command, what for). Do not request secrets you do not need for the current task. If the user declines, do not ask again."
+**`secret_request`** — "Ask the user for permission to use one or several named secrets (e.g. GITHUB_TOKEN, or DB_HOST, DB_USER and DB_PASSWORD together) in later commands. Ask for everything one task needs in a single call: up to 8 fields, each 'secret' (masked) or 'text' (visible, for non-secret values such as a hostname). The user will type or approve them outside the chat. You NEVER receive the values; you receive references and a grant. Give a concrete reason (what command, what for). Do not request secrets you do not need for the current task. If the user declines, do not ask again."
 
 **`secret_list`** — "List the secrets available from this directory (global ones and this project's), and the rules for what you can and cannot do with them. Values are never returned. Call this first when you need a credential."
 
 **`secret_manage`** — "Propose a change to a secret: remove it, edit its metadata, move it between global and this project, or replace its value. The user confirms or declines outside the chat; nothing changes without that. You never see values and you cannot grant access. Give a concrete reason."
 
-**`secret_exec`** — "Run a shell command with named secrets injected as environment variables for that process only. Output is returned with secret values redacted. Commands that print the environment are refused. Prefer this over asking the user to paste credentials."
+**`secret_exec`** — "Run a shell command with named secrets injected as environment variables for that process only. Output is returned with secret values redacted. Commands that print the environment or a secret are refused; to use only a length, write ${#NAME}. Prefer this over asking the user to paste credentials."
 
 ## Conformance
 
-A host adapter is conformant when it passes `e2e/contract-conformance` (see `docs/TESTING.md`): every op, every refusal, the no-value invariant on every byte returned, and the `grant`-over-MCP rejection.
+A host adapter is conformant when it passes the conformance harness (`internal/conformance` and `TestContractConformance` in `internal/cli`, see `docs/TESTING.md`): every op, every refusal, the no-value invariant on every byte returned, and the `grant`-over-MCP rejection.

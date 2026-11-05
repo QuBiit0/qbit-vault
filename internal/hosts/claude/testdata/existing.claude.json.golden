@@ -1,0 +1,15 @@
+{
+    "numStartups": 12,
+    "mcpServers": {
+        "my-db": { "type": "stdio", "command": "npx", "args": ["-y", "db-mcp"] },
+        "docs": {"type":"http","url":"https://example.com/mcp"},
+        "qbit-vault": {
+            "type": "stdio",
+            "command": "/opt/qbit/bin/qbit-vault",
+            "args": [
+                "mcp"
+            ]
+        }
+    },
+    "projects": {}
+}

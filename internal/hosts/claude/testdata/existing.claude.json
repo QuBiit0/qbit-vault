@@ -1,0 +1,8 @@
+{
+    "numStartups": 12,
+    "mcpServers": {
+        "my-db": { "type": "stdio", "command": "npx", "args": ["-y", "db-mcp"] },
+        "docs": {"type":"http","url":"https://example.com/mcp"}
+    },
+    "projects": {}
+}

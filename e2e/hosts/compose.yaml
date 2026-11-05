@@ -1,0 +1,13 @@
+# Host registration battery (docs/TESTING.md § Tier 2 item 9): one container
+# with a fake user HOME. Run it with e2e/hosts-test.sh (project name
+# qbv-e2e-hosts); nothing is mounted from the host and nothing is published.
+name: qbv-e2e-hosts
+
+services:
+  hosts:
+    build:
+      context: ../..
+      dockerfile: e2e/Dockerfile
+      target: hosts
+    image: qbit-vault-e2e-hosts:local
+    init: true

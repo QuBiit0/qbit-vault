@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "qbit-vault": {
+      "type": "stdio",
+      "command": "/opt/qbit/bin/qbit-vault",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

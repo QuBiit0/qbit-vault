@@ -1,4 +1,6 @@
-# Proposal: `gentle-vault` — a secrets broker so agents can *use* credentials without ever *seeing* them
+> **Historical document.** This is the original proposal, written when the product was called *gentle-vault* and framed as a possible Gentle AI component. It was renamed QBit Vault (`qbit-vault`) and is now an independent project (`odd/tasks/rename-qbit.md`). The body below is unchanged and is **not** the current state: the "Nothing built yet" status line is obsolete, and OpenCode and the npm-first install were later dropped or moved. The current state lives in `PRD.md`, `ARCHITECTURE.md`, `CLI.md`, `INSTALL.md` and `ROADMAP.md`.
+
+# Proposal: QBit Vault (`qbit-vault`) — a secrets broker so agents can *use* credentials without ever *seeing* them
 
 **Type:** Idea / design discussion (pre-issue, per the issue-first workflow)
 **Scope:** gentle-ai component candidate + Gentle Shell companion package
@@ -18,7 +20,7 @@ What does not exist is the *positive* half: a sanctioned way for an agent to **u
 2. the user pastes it into the chat (it lands in the transcript, the session file and the provider), or
 3. the user leaves the agent and does the step by hand.
 
-The deny list closes the door. Nothing opens a window. `gentle-vault` is that window, built on the same rules.
+The deny list closes the door. Nothing opens a window. `qbit-vault` is that window, built on the same rules.
 
 ## Principle
 
@@ -28,7 +30,7 @@ No tool result, message, log or session file ever carries a secret value. Secret
 
 ## How it stays aligned with Gentle AI's rules
 
-| Existing rule | What `gentle-vault` does about it |
+| Existing rule | What `qbit-vault` does about it |
 | --- | --- |
 | Installer never requests or stores credentials (R-MCP-04) | `install`/`sync` only create an **empty** encrypted store and register adapters. Capture happens exclusively at runtime, on an explicit user action, never during setup, never from the environment. |
 | Sensitive-paths deny list | The vault directory is **added** to the deny list for every agent. The vault is an encrypted file (XChaCha20-Poly1305 / AES-GCM) with the master key in the OS keychain (passphrase + Argon2id fallback). The vault is never a `.env`. |
@@ -42,9 +44,9 @@ No tool result, message, log or session file ever carries a secret value. Secret
 ## Architecture
 
 ```
-gentle-vault (Go — same stack as gentle-ai)
+qbit-vault (Go — same stack as gentle-ai)
 ├── core      encrypted store, keychain, grants, scopes, audit
-├── CLI       gentle-vault init | set | list | revoke | exec | doctor
+├── CLI       qbit-vault init | set | list | revoke | exec | doctor
 ├── MCP       stdio server → Claude Code, Codex, OpenCode, Pi (native MCP since v4)
 └── adapters  per-agent hooks + deny-list additions, via backup + atomic merge
 
@@ -71,19 +73,19 @@ gentle-shell companion (TypeScript)
 ### Install
 
 ```
-npx gentle-vault init            # or: gentle-ai install --components vault (if adopted)
-gentle-shell install npm:gentle-vault
+npx qbit-vault init            # or: gentle-ai install --components vault (if adopted)
+gentle-shell install npm:qbit-vault
 ```
 
 Detects installed agents, creates the empty store, keychain-backs the master key, registers hooks/MCP entries and deny-list additions through the backup path. Nothing is asked for at install time.
 
 ## Questions for maintainers
 
-1. **Shape**: companion package first (`gentle-vault` repo, Go core + Gentle Shell extension) with a later `gentle-ai install --components vault` path, or would you rather see it proposed directly as a component inside this repo?
+1. **Shape**: companion package first (`qbit-vault` repo, Go core + Gentle Shell extension) with a later `gentle-ai install --components vault` path, or would you rather see it proposed directly as a component inside this repo?
 2. **Contract**: is `gentle-ai.secrets-broker/v1` the right place in the capability taxonomy, and should it live under `contracts/` alongside `review-integration`?
 3. **R-MCP-04 wording**: would you accept an explicit clarification that the rule governs *install/sync time* and that runtime capture under explicit user consent is in scope?
 4. **Backends**: v1 = local encrypted store + OS keychain. Pluggable backends (`op://`, `pass`, Infisical) later. Objections to that order?
-5. **Naming**: `gentle-vault` follows the `gentle-*` convention; happy to use whatever fits the trademark policy.
+5. **Naming**: `qbit-vault` follows the `gentle-*` convention; happy to use whatever fits the trademark policy.
 
 If the direction is welcome, I will open a Feature Request issue scoped to the v1 contract and threat model (≤400-line PR slices, issue-first), and start the companion repo.
 

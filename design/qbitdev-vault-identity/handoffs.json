@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-atom-keyhole.html",
+  "handoffs": {
+    "01-atom-keyhole.html": {
+      "status": "implemented",
+      "queued": true,
+      "sentAt": "2026-11-05T12:22:50.053Z",
+      "startedAt": "2026-11-05T12:59:09.312Z",
+      "implementedAt": "2026-11-05T13:32:14.715Z",
+      "feature": "odd/tasks/polish.md",
+      "note": "Tokens in design/system.md; brand assets in assets/brand/ and the README banner; terminal theme, half-block truecolor mark, splash and header in internal/tui (commit af04545, verified, native review approved). Terminal app: no web preview URL."
+    }
+  }
+}

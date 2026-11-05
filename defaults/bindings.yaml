@@ -1,7 +1,7 @@
 # Implicit bindings: binary → env vars it reads.
 # A binding only proposes names. Injection still requires the secret to exist
 # in the vault AND an active grant for the session. User-editable; validated by `doctor`.
-format: gentle-vault-bindings/1
+format: qbit-vault-bindings/1
 bindings:
   gh:        [GITHUB_TOKEN, GH_TOKEN]
   git:       [GITHUB_TOKEN]

@@ -1,0 +1,30 @@
+# qbit-vault-server behind the Dokploy (Traefik) proxy, which terminates TLS
+# on the public domain. Set QBV_SERVER_PUBLIC_URL to that https:// origin.
+# Invite the first account:  docker compose exec server /qbit-vault-server invite
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: qbit-vault-server:local
+    environment:
+      QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
+      QBV_SERVER_TRUST_PROXY: "1"
+    volumes:
+      - vault-data:/data
+    read_only: true
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "/qbit-vault-server", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  vault-data:

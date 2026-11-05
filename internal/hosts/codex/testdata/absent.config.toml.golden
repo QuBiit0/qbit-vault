@@ -1,0 +1,3 @@
+[mcp_servers.qbit-vault]
+command = "/opt/qbit/bin/qbit-vault"
+args = ["mcp"]

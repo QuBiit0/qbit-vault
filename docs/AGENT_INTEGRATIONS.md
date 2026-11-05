@@ -1,24 +1,24 @@
 # Agent integrations
 
-One broker, one contract, four hosts. The table shows what each host gets and through which mechanism. "Rich" means the extension/hook path; "MCP" means the portable fallback through `secret_exec`.
+One broker, one contract, three hosts: Claude Code, Codex and Pi / Gentle Shell. OpenCode was in the original design and is dropped (`odd/tasks/hosts.md` S8; no adapter exists). "Built" means `init` registers it and it is tested; *planned* items need the Pi extension (Phase 4, `GENTLE_SHELL_EXTENSION.md`) and are not built. "MCP" is the portable path through `secret_exec`; today it is the path every host uses.
 
-| Capability | Pi / Gentle Shell | Claude Code | OpenCode | Codex |
-| --- | --- | --- | --- | --- |
-| `secret_request` / `secret_list` / `secret_exec` / `secret_manage` tools | extension-registered tools (and MCP since Pi ≥ 0.99) | MCP | MCP | MCP |
-| Agent rules (`policy`) known up front | system prompt + `secret_list` | MCP `instructions` + `secret_list` | MCP `instructions` + `secret_list` | MCP `instructions` + `secret_list` |
-| Manual entry by the user | `/vault set` (masked, inline) | `qbit-vault set` in a terminal | same | same |
-| Masked capture inside the terminal | `ctx.ui.custom` inline | native dialog | native dialog | native dialog |
-| Transparent injection into the host's own shell tool | `bash` override | `PreToolUse` hook rewrite | plugin `tool.execute.before` (when available) | no (use `secret_exec`) |
-| Output redaction of the host's shell/read tools | `tool_result` hook | `PostToolUse` hook | plugin `tool.execute.after` | n/a (secret_exec output is already redacted) |
-| Paste interception | `pi.on("input")` | `UserPromptSubmit` hook | not available | not available |
-| Vault dir on read deny list | Gentle AI permissions / Pi settings | `permissions.deny` | OpenCode permissions | Codex sandbox config |
-| Audit widget | sidebar | `/vault` skill prints `audit --tail` | none | none |
+| Capability | Pi / Gentle Shell | Claude Code | Codex |
+| --- | --- | --- | --- |
+| `secret_request` / `secret_list` / `secret_exec` / `secret_manage` tools | MCP (built, Pi ≥ 0.99); extension-registered tools (planned) | MCP (built) | MCP (built) |
+| Agent rules (`policy`) known up front | `secret_list` (built); system prompt (planned) | MCP `instructions` + `secret_list` | MCP `instructions` + `secret_list` |
+| Manual entry by the user | `qbit-vault set` in a terminal; `/vault set` (planned) | `qbit-vault set` in a terminal | same |
+| Masked capture | native dialog or terminal prompt (built); `ctx.ui.custom` inline (planned) | native dialog | native dialog |
+| Transparent injection into the host's own shell tool | `bash` override (planned) | `PreToolUse` rewrite (planned; `pre-bash` today only denies user-only commands) | no (use `secret_exec`) |
+| Output redaction of the host's shell/read tools | `tool_result` hook (planned) | `PostToolUse` hooks `post-bash` and `post-read` (built) | n/a (`secret_exec` output is already redacted) |
+| Paste interception | `pi.on("input")` (planned) | `UserPromptSubmit` hook `user-prompt` (built; blocks) | not available |
+| Vault dir on read deny list | none registered | `permissions.deny` Read and Edit (built) | none registered |
+| Audit widget | sidebar (planned) | none (`qbit-vault audit --tail` in a terminal) | none |
 
 ## MCP server (all hosts)
 
 Started by the host as `qbit-vault mcp`. Exposes exactly four tools with the normative descriptions from `CONTRACT.md`, and the `policy` text as the server `instructions` returned at `initialize`, so hosts that surface MCP instructions give the agent its rules before any call. Input schemas are the `requestReq`, `listReq`, `execReq`, `manageReq` definitions minus the envelope fields, which the server fills in (`session` from `QBIT_VAULT_SESSION` or a generated `mcp:<uuid>`, `cwd` from the server's working directory, which hosts start in the project root).
 
-The MCP server never exposes `grant`. A `grant` envelope arriving on its stdin is answered with `not_model_callable` and audited.
+The MCP server never exposes `grant`: there is no such tool, and a `grant` envelope sent over a model-facing transport (`broker --op`) is refused with `not_model_callable` unless it carries a prompt token the broker's own prompt backend issued.
 
 ### Registration written by `init`
 
@@ -123,15 +123,9 @@ Sandbox note: `init` does **not** set `QBIT_VAULT_PROMPT`. The Codex docs (check
 
 Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.openai.com/codex/config-advanced, Config and state locations). The adapter does not read it and always uses `~/.codex/config.toml`, the same way the Claude adapter ignores `CLAUDE_CONFIG_DIR`.
 
-**OpenCode** (`~/.config/opencode/opencode.json`, merged):
+**OpenCode**: dropped. The original design registered an MCP entry in `~/.config/opencode/opencode.json` and a bash-rewrite plugin; no adapter exists, `--agents opencode` is an unknown agent, and none is planned for 0.1 (`odd/tasks/hosts.md` S8).
 
-```json
-{ "mcp": { "qbit-vault": { "type": "local", "command": ["qbit-vault", "mcp"], "enabled": true } } }
-```
-
-plus, when the OpenCode plugin API is present, a plugin file `~/.config/opencode/plugin/qbit-vault.ts` implementing `tool.execute.before` (rewrite bash to exec, dump-guard) and `tool.execute.after` (redaction). Gentle AI v4 manages OpenCode V2 plugins; `init` writes outside Gentle AI's managed set and `doctor` verifies no collision.
-
-**Pi (plain, without Gentle Shell)**: `pi install npm:qbit-vault-pi` for the extension (rich path) and, for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the tools exist even if the extension is disabled.
+**Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`pi install npm:qbit-vault-pi`, the rich path) is Phase 4 and does not exist yet.
 
 **Pi / Gentle Shell registration written by `init`** (adapter `pi`, `internal/hosts/pi`): one step, `mcp`, merged into `<Pi agent dir>/mcp.json` after a snapshot, owning only `mcpServers.qbit-vault`:
 
@@ -143,7 +137,7 @@ plus, when the OpenCode plugin API is present, a plugin file `~/.config/opencode
 
 The extension is **not** installed by `init` (it needs the network, invariant 8). After a successful registration `init` prints `host pi: to add the extension, run: pi install npm:qbit-vault-pi` (JSON: `install_command` on the host) and the user runs it. Not honored: `.pi/mcp.json`, and an agent directory passed with a Pi command-line option.
 
-**Gentle Shell**: `gentle-shell install npm:qbit-vault-pi` into `~/.gentle-shell/agent` (or `--link` home). See `GENTLE_SHELL_EXTENSION.md`.
+**Gentle Shell** (planned, with the extension): `gentle-shell install npm:qbit-vault-pi` into `~/.gentle-shell/agent` (or `--link` home). See `GENTLE_SHELL_EXTENSION.md`.
 
 ## Native capture dialog (non-Pi hosts)
 
@@ -156,7 +150,7 @@ The extension is **not** installed by `init` (it needs the network, invariant 8)
 | Linux (desktop) | `zenity` or `kdialog` | zenity: `--entry --hide-text` for the value (`--password` has no text field, so it could not show the request), `--list --radiolist`, `--question`; kdialog: `--password`, `--radiolist`, `--yesno`. zenity is tried first; kdialog renders every text as rich text, so the request is HTML-escaped and its layout lines become `<br>` | `DISPLAY` or `WAYLAND_DISPLAY` is set and one of the two is on `PATH` |
 | Any | `tty` | opens `/dev/tty` (`CONIN$` on Windows), disables echo, reads value, prints the scope choice menu | the fallback, or `QBIT_VAULT_PROMPT=tty` |
 
-The dialog always shows: secret name, the reason verbatim (control and bidi characters shown as visible escapes, so a reason cannot add a line or paint over the dialog), the host and session id, the project label (or `global`), and whether the value is **new** or **already stored (it will be replaced)**. When the value is new and `cwd` is inside a repository, the dialog also asks for the layer (`Global` / `This project`). For `secret_manage` the same backends render a confirmation (`prompt --confirm`) with the action, the diff and `Confirm` / `Decline`; closing the dialog or pressing Esc is `Decline`, and on Windows and macOS so is Enter (the default button). A passphrase asked twice (`init`) is two dialogs.
+The dialog always shows: secret name, the reason verbatim (control and bidi characters shown as visible escapes, so a reason cannot add a line or paint over the dialog), the host and session id, the project label (or `global`), and whether the value is **new** or **already stored (it will be replaced)**. When the value is new and `cwd` is inside a repository, the dialog also asks for the layer (`Global` / `This project`). For `secret_manage` the same backends render a confirmation (opened by the broker itself; a `prompt --confirm` command for hosts is planned, slice 4.3) with the action, the diff and `Confirm` / `Decline`; closing the dialog or pressing Esc is `Decline`, and on Windows and macOS so is Enter (the default button). A passphrase asked twice (`init`) is two dialogs.
 
 **Several fields in one prompt** (CONTRACT `request` with `fields`, R-CAP-08). The request text, the layer question and the scope choice appear once; every new field gets its own box labelled with its `label` (default the name), masked for `secret` and visible for `text`; stored fields are listed as *already stored* without a box. PowerShell renders one WinForms form with one `TextBox` per field (`UseSystemPasswordChar` only on secret ones; each value comes back as one base64 line on the helper's private stdout); zenity uses one `--forms` dialog (`--add-password` for secret fields, `--add-entry` for text ones, answers split on a control-character separator); osascript and kdialog have no multi-field form, so they show one box per field in a row, each repeating the request header and a `field 2 of 3` line, and cancelling any box cancels the whole capture; the terminal does the same with one line per field (echo off for secret fields, on for text fields). Empty boxes, a cancel or the timeout store nothing (R-CAP-04).
 
@@ -174,15 +168,12 @@ The dialog always shows: secret name, the reason verbatim (control and bidi char
 
 ## Deny-list alignment with Gentle AI
 
-When the Gentle AI permissions component is installed, `init`:
-1. Reads the existing deny entries for the host.
-2. Adds `$QBIT_VAULT_HOME/**` if missing.
-3. Verifies every pre-existing Gentle AI entry is still present after the merge; aborts and restores the snapshot otherwise (PRD R-INS-05).
+For Claude Code, `init` adds the vault home to `permissions.deny` (the `deny` step above) with a merge that owns only its two entries, so every entry another tool put there, Gentle AI's included, keeps its place and order (tested with golden files and in the Docker hosts battery). A separate step that re-reads the entries and aborts and restores the snapshot if one went missing (PRD R-INS-05) is **not built**; `doctor` reports drift of our own entries only. Codex and Pi have no deny registration.
 
 ## Implicit bindings
 
-See `ARCHITECTURE.md` § Implicit binding table. The same `bindings.yaml` is read by the Pi extension, the Claude Code hook and the OpenCode plugin, so behavior is identical.
+**Planned, not built.** See `ARCHITECTURE.md` § Implicit binding table: no code loads `bindings.yaml` yet. The design is that the Pi extension and the Claude Code hook read the same file, so behavior is identical.
 
 ## Subagents
 
-A subagent is a new session id (Pi subagents and Gentle Agents get their own; Claude Code subagents share `session_id` but hooks receive a distinct `agent_id`, which the hook appends: `claude:<session_id>/<agent_id>`). No grant inheritance (R-GRANT-05). The user sees a separate prompt naming the subagent.
+A subagent is a new session id. Over MCP, each MCP server process uses `QBIT_VAULT_SESSION` or generates its own `mcp:<16 hex>`, so a subagent with its own server needs its own grants. Planned with the extension and the hook rewrite: Pi subagents and Gentle Agents get `pi:<child-id>`, and Claude Code subagents (same `session_id`, distinct `agent_id`) get `claude:<session_id>/<agent_id>`. No grant inheritance (R-GRANT-05). The user sees a separate prompt naming the session.

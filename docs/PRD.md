@@ -1,6 +1,18 @@
 # PRD: QBit Vault (`qbit-vault`)
 
-Version 0.1 (design). Requirement IDs are stable; reference them from issues, PRs and tests.
+Version 0.1. Requirement IDs are stable; reference them from issues, PRs and tests. The requirements are normative: a requirement is met unless a *Status* note says otherwise.
+
+## 0. Implementation status
+
+Built and tested on `feat/cli-skeleton` (evidence in `ROADMAP.md`): the vault, layers, grants, audit, redaction, `exec`, the native prompts, the contract broker and MCP server (§§ 5.1–5.6, 5.8), the sync client and server (§ 5.10, `REMOTE_SYNC.md`), and host registration for **Claude Code, Codex and Pi / Gentle Shell** (§ 5.7, 5.9). Not built:
+
+- the Pi extension `qbit-vault-pi` (Phase 4): R-HOST-01, the Pi parts of R-CAP-01 and R-CAP-06, R-RED-04 and R-EXEC-02 on Pi; `set --stdin --fields` and `prompt --field` (R-CAP-08 is met by the broker for MCP hosts);
+- the Claude Code `PreToolUse` rewrite of secret references into `exec` (R-EXEC-02) and its `grant_required` / `dump_command` denials; today `pre-bash` only keeps user-only commands out of the agent's shell;
+- the npm launcher, signed releases, `install.sh`/Homebrew and `qbit-vault update` (Phase 5): R-INS-01 as worded, R-INS-02, R-NFR-03, the binary-signature part of R-INS-07;
+- OpenCode (R-HOST-04): dropped by a recorded decision (`odd/tasks/hosts.md` S8);
+- the TUI (`ROADMAP.md`): planned, not a v1 requirement of this document.
+
+Nothing is released. Install today: `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` (the repository is private) or build from source (`INSTALL.md`).
 
 ## 1. Problem statement
 
@@ -16,9 +28,9 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 - G1. An agent can complete a task that needs a credential without the credential value ever entering its context, transcript, session file or provider request.
 - G2. Supplying a credential takes the user one masked input and one grant decision, inside the same terminal session, with no context switch.
-- G3. Installation is one command on macOS, Linux and Windows and configures every supported agent that is present.
+- G3. Installation is one command on macOS, Linux and Windows and configures every supported agent that is present. (Today: `go install` then `qbit-vault init`; the single-command `npx` install is Phase 5.)
 - G4. The design is adoptable by Gentle AI as a native component without rewrite: same language, same contract style, same mutation and release discipline.
-- G5. Pi / Gentle Shell gets the richest experience (inline masked input, shell-tool override, sidebar audit); Claude Code, Codex and OpenCode get a functionally equivalent one through MCP and hooks.
+- G5. Pi / Gentle Shell gets the richest experience (inline masked input, shell-tool override, sidebar audit; the extension is Phase 4); Claude Code and Codex get a functionally equivalent one through MCP and, for Claude Code, hooks. OpenCode is out of scope.
 - G6. Secrets are organized in a **global** layer (used everywhere) and **project** layers (bound to one repository), managed with the same few commands by the user and, with user confirmation, by the agent.
 - G7. The agent can always learn, in one call, exactly what it may and may not do with the vault.
 - G8. The same vault works on several machines and is backed up off the machine through a self-hosted, zero-knowledge sync server (`qbit-vault-server`), with no scripts and no plaintext leaving a device. See `REMOTE_SYNC.md`.
@@ -40,7 +52,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 - F1 *First use*: agent needs `GITHUB_TOKEN`; vault has none; user types it in a masked prompt; chooses grant scope; command runs; output is redacted.
 - F2 *Reuse*: agent needs `GITHUB_TOKEN` in a new session; vault has it; user is asked only for a grant.
-- F3 *Accidental paste*: user pastes `ghp_…` into the chat; the extension intercepts it before the model sees it and offers to store it as `secret://GITHUB_TOKEN`.
+- F3 *Accidental paste*: user pastes `ghp_…` into the chat; the host intercepts it before the model sees it. Claude Code (built): the `user-prompt` hook blocks the prompt and tells the user to store it with `qbit-vault set`. Pi (Phase 4): the extension offers to store it as `secret://GITHUB_TOKEN` and replaces the text.
 - F4 *Inspection*: user runs `qbit-vault list` / `audit` to see names, layers, scopes and who used what, when.
 - F7 *Manual entry*: user runs `qbit-vault set DATABASE_URL --project` (or `/vault set` in Pi) and types the value in a masked prompt, with no agent involved.
 - F8 *Agent-proposed management*: agent calls `secret_manage(move, DATABASE_URL, to: project, reason)`; user sees the proposal out of band and confirms or declines; the agent only learns `ok` or `user_declined`.
@@ -82,7 +94,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 - R-CAP-03a. The capture prompt MUST also offer the layer choice (`global` / `this project`) when `cwd` is inside a repository, defaulting to the agent's `suggested_layer` or `global`.
 - R-CAP-04. Blank or whitespace-only input MUST fail the capture without writing anything. Surrounding whitespace MUST be trimmed. Cancel MUST leave the vault unchanged. In a capture of several fields this is all-or-nothing: one blank field, a cancel or a timeout writes none of them.
 - R-CAP-05. Capture MUST be rate-limited per session (default: a refused or cancelled request for the same name cannot be re-asked for 60 s) to blunt prompt-injection loops that nag the user.
-- R-CAP-06. The extension MUST intercept user input that matches known secret patterns (GitHub `ghp_`/`github_pat_`, OpenAI `sk-`, AWS `AKIA`, Slack `xox`, Stripe `sk_live`, private key PEM blocks, JWTs, and high-entropy strings ≥ 32 chars when preceded by `=` or `:`) **before** it reaches the model, and offer to store it as a named secret, replacing the text with its reference.
+- R-CAP-06. *Status: Claude Code built (the `user-prompt` hook blocks a prompt with a stored value or a well-known secret shape; it does not offer to store it and has no generic high-entropy match); Pi extension Phase 4.* The extension MUST intercept user input that matches known secret patterns (GitHub `ghp_`/`github_pat_`, OpenAI `sk-`, AWS `AKIA`, Slack `xox`, Stripe `sk_live`, private key PEM blocks, JWTs, and high-entropy strings ≥ 32 chars when preceded by `=` or `:`) **before** it reaches the model, and offer to store it as a named secret, replacing the text with its reference.
 - R-CAP-08. One capture MUST be able to ask for 1 to 8 fields under a single reason, a single layer choice and a single scope choice (R-API-02). Fields already stored are shown as stored and get no box; the model is not told which ones were. The offered scopes are those every field allows (a `sensitive` field limits all of them to `once`). Every backend renders the fields in one interaction: one form where the backend has forms (Pi, PowerShell, zenity `--forms`), otherwise consecutive boxes in the same prompt, where cancelling any box cancels the whole capture.
 - R-CAP-09. A `text` field MUST be visible while typed and a `secret` field masked; nothing else differs. The kind is chosen by the agent's request and shown to the user, who can still cancel; an agent that marks a secret as `text` only makes it visible on the user's own screen.
 - R-CAP-07. The user MUST be able to add or replace a value manually, without any agent request: `qbit-vault set NAME [--global|--project]` in any terminal and `/vault set NAME` in Pi / Gentle Shell. Both use the same masked capture (R-CAP-01) and never accept the value as an argument. Inside a repository with neither flag, the prompt asks for the layer.
@@ -98,8 +110,8 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 ### 5.4 Exec (injection)
 
-- R-EXEC-01. `qbit-vault exec --session <id> --secret NAME[=ENV] ... -- <command>` MUST run `<command>` as a child process whose environment is the parent environment **minus** any variable already named like a vault secret, **plus** the granted values. The value MUST NOT be exported to the parent.
-- R-EXEC-02. The host-side shell tool (Pi `bash` override, Claude Code `PreToolUse` hook) MUST rewrite a command that references a known secret (`$NAME`, `${NAME}`, `%NAME%`, `$env:NAME`, `{{secret:NAME}}`) into a `qbit-vault exec` invocation. A reference to a name with no active grant MUST trigger the grant prompt (R-GRANT-03), not a silent empty variable.
+- R-EXEC-01. `qbit-vault exec --session <id> --secret [ENV=]NAME ... -- <command>` MUST run `<command>` as a child process whose environment is the parent environment **minus** any variable already named like a vault secret, **plus** the granted values. The value MUST NOT be exported to the parent.
+- R-EXEC-02. *Status: not built (Claude Code rewrite and Pi bash override); MCP hosts use `secret_exec`.* The host-side shell tool (Pi `bash` override, Claude Code `PreToolUse` hook) MUST rewrite a command that references a known secret (`$NAME`, `${NAME}`, `%NAME%`, `$env:NAME`, `{{secret:NAME}}`) into a `qbit-vault exec` invocation. A reference to a name with no active grant MUST trigger the grant prompt (R-GRANT-03), not a silent empty variable.
 - R-EXEC-03. While any secret is injected, the command MUST be refused (typed refusal `dump_command`) if it matches the dump-command list: `env`, `printenv`, `set` (bare), `export -p`, `declare -x`, `cat|less|more /proc/*/environ`, `Get-ChildItem Env:`, `gci env:`, `[Environment]::GetEnvironmentVariables()`, `echo $NAME`/`echo %NAME%`/`Write-Output $env:NAME` where NAME is injected. The list MUST be a data file, not code, so it can be extended without a release. The list also covers bare `export`, `declare`/`typeset` (bare, `-p`, or naming an injected variable), `compgen -e|-v`, any read of `/proc/<self|pid|$$|$BASHPID>/environ`, `find -exec env|printenv`, `${!var}` indirection, here-strings and here-documents that reference an injected name, interpreter one-liners that read the environment (awk, perl, python, node, ruby), `$env:NAME` anywhere and `Get-Content env:`, cmd `set PREFIX` and `%NAME:~0,5%`; wrappers (`nice`, `timeout`, `stdbuf`, `strace`, `chroot`, `ionice`, `setsid`, `doas`, `xargs`, `sudo`, `env`, ...) are resolved before matching. Under `--shell cmd|pwsh` the raw command is tested too. Only `${#NAME}` (the length expansion) is not a dump; counter pipes (`| wc -c`), PowerShell `$env:NAME.Length` and digests of the value stay refused, because a text guard cannot see `set -x`, redefined commands or PowerShell's argument parsing. On Windows a bare `bash` or `sh` never resolves to WSL's launcher (CLI.md § Exec). This is a best-effort layer (THREAT_MODEL R1, R2).
 - R-EXEC-04. stdout and stderr MUST be streamed through the redactor (R-RED-01) before being returned to the host.
 - R-EXEC-05. The child's exit code MUST be propagated unchanged.
@@ -128,10 +140,10 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 ### 5.7 Hosts
 
-- R-HOST-01. Pi / Gentle Shell: the extension `qbit-vault-pi` MUST provide masked capture, bash override, read/write redaction, paste interception, `/vault` commands and a sidebar audit widget. See `GENTLE_SHELL_EXTENSION.md`.
-- R-HOST-02. Claude Code: `init` MUST register the MCP server (`claude mcp add` or `~/.claude/settings.json` merge), a `PreToolUse` hook on `Bash` that rewrites to `exec` and enforces the dump-command list, a `PostToolUse` hook on `Bash`/`Read` for redaction, a `UserPromptSubmit` hook for paste interception, and add `$QBIT_VAULT_HOME` to the `permissions.deny` read list.
+- R-HOST-01. *Status: Phase 4, not built; today `init` registers Pi's MCP entry and prints the extension install command.* Pi / Gentle Shell: the extension `qbit-vault-pi` MUST provide masked capture, bash override, read/write redaction, paste interception, `/vault` commands and a sidebar audit widget. See `GENTLE_SHELL_EXTENSION.md`.
+- R-HOST-02. Claude Code: `init` MUST register the MCP server (a `~/.claude.json` merge), a `PreToolUse` hook on `Bash`/`PowerShell` that rewrites to `exec` and enforces the dump-command list, a `PostToolUse` hook on `Bash`/`PowerShell`/`Read` for redaction, a `UserPromptSubmit` hook for paste interception, and add `$QBIT_VAULT_HOME` to the `permissions.deny` read list. *Status: built, except that the `PreToolUse` hook does not rewrite or apply the dump guard yet; it keeps user-only `qbit-vault` commands out of the agent's shell (R-SYNC-05).*
 - R-HOST-03. Codex: `init` MUST register the MCP server in `~/.codex/config.toml`. Capture uses the native dialog. Exec is through `secret_exec` only.
-- R-HOST-04. OpenCode: `init` MUST register the MCP server in the OpenCode config and, where the OpenCode plugin API offers `tool.execute.before/after`, install a plugin for bash rewrite and redaction; otherwise `secret_exec` only.
+- R-HOST-04. *Status: dropped (`odd/tasks/hosts.md` S8); no OpenCode adapter exists and none is planned for 0.1.* OpenCode: `init` MUST register the MCP server in the OpenCode config and, where the OpenCode plugin API offers `tool.execute.before/after`, install a plugin for bash rewrite and redaction; otherwise `secret_exec` only.
 - R-HOST-05. Every host registration MUST be reversible by `qbit-vault uninstall` using the snapshots taken at registration time.
 
 ### 5.8 Audit
@@ -142,15 +154,15 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 
 ### 5.9 Install, sync, doctor, uninstall
 
-- R-INS-01. `npx qbit-vault@latest init` MUST complete the whole setup (R-INS-02..06) with no further input on a machine with a working keychain; it MUST ask exactly one question (passphrase) where no keychain exists.
-- R-INS-02. The npm launcher MUST have no `postinstall`. Platform binaries MUST ship as `optionalDependencies` (`@qbit-vault/cli-darwin-arm64`, etc.) and be verified against a checksum embedded in the launcher before first run.
+- R-INS-01. `qbit-vault init` MUST complete the whole setup (R-INS-03..06) with no further input on a machine with a working keychain. Where no keychain exists, `init` fails until the user passes `--passphrase` (two prompts, or `--passphrase-stdin`); there is no automatic fallback. The `npx qbit-vault@latest init` form is Phase 5; today the binary comes from `go install`.
+- R-INS-02. *Status: Phase 5, not built (no `packages/`).* The npm launcher MUST have no `postinstall`. Platform binaries MUST ship as `optionalDependencies` (`@qbit-vault/cli-darwin-arm64`, etc.) and be verified against a checksum embedded in the launcher before first run.
 - R-INS-03. `init` MUST detect installed agents by their config directories and register only those present, unless `--agents` is given.
 - R-INS-04. Every config file `init` touches MUST be snapshotted first to `$QBIT_VAULT_HOME/backups/<timestamp>/<path>` and written atomically with a merge that preserves unrelated keys.
-- R-INS-05. `init` MUST add `$QBIT_VAULT_HOME/**` to each agent's file-read deny list where the agent supports one, and MUST verify that the Gentle AI permissions component's deny list, when present, is not weakened.
+- R-INS-05. `init` MUST add `$QBIT_VAULT_HOME/**` to each agent's file-read deny list where the agent supports one, and MUST verify that the Gentle AI permissions component's deny list, when present, is not weakened. *Status: Claude Code gets Read and Edit deny rules; Codex and Pi get none (their adapters write only the MCP entry). Existing entries survive because the merge touches only entries qbit-vault owns (golden and e2e tests); there is no separate verify-and-abort step.*
 - R-INS-06. `init` MUST finish by running `doctor` and printing its report.
-- R-INS-07. `doctor` MUST be read-only and report: binary version and signature status, vault present/locked/unlocked, keychain backend in use, per-agent registration status (MCP, hooks, deny-list), extension version for Pi, active grants count, audit chain validity, and with sync enabled the server, last sync, pending push, conflicts, generation and anchor state (without contacting the server).
+- R-INS-07. `doctor` MUST be read-only and report: binary version and signature status, vault present/locked/unlocked, keychain backend in use, per-agent registration status (MCP, hooks, deny-list), extension version for Pi, active grants count, audit chain validity, and with sync enabled the server, last sync, pending push, conflicts, generation and anchor state (without contacting the server). *Status: built are vault state and keychain mode, permissions, per-step host registration and drift, the audit chain and the grants store (the last two only when broken), and the sync line (server, devices, conflicts, pending push, last round). Not built: binary version/signature, Pi extension version, the active grants count, generation and anchor state.*
 - R-INS-08. `sync` MUST re-apply registrations idempotently after a host or qbit-vault upgrade.
-- R-INS-09. `uninstall` MUST restore all snapshots, remove the extension, and leave the vault in place unless `--purge` is given, which requires typing the word `purge`.
+- R-INS-09. `uninstall` MUST restore all snapshots, and leave the vault in place unless `--purge` is given, which requires typing the word `purge`.
 
 ### 5.10 Remote sync
 
@@ -173,7 +185,7 @@ Normative protocol: `REMOTE_SYNC.md`.
 
 - R-NFR-01 *Portability*: macOS (arm64, amd64), Linux (amd64, arm64, including WSL2 and headless without Secret Service), Windows 10+ (amd64). Headless Linux uses the passphrase fallback.
 - R-NFR-02 *Latency*: `exec` overhead ≤ 50 ms over running the command directly on a warm keychain; prompt round-trip is user-bound.
-- R-NFR-03 *Supply chain*: releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
+- R-NFR-03 *Supply chain* (*Phase 5, not built*): releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
 - R-NFR-04 *Observability*: `--json` on every command for host adapters; human output otherwise.
 - R-NFR-05 *Compatibility*: contract `gentle-ai.secrets-broker/v1` is frozen on first stable release; additive changes bump the minor capability version; consumers refuse unknown major versions.
 - R-NFR-06 *Testing*: leak tests on every tier (see `TESTING.md`); a PR touching exec/redact/prompt/mcp/hooks/remote/server without extending the leak test is rejected by CI.
@@ -183,11 +195,11 @@ Normative protocol: `REMOTE_SYNC.md`.
 
 - A user can go from nothing to "agent created a GitHub release using a token it never saw" in under 3 minutes on all three OSes.
 - A secret stored on one machine is usable on a second machine after `init`, `remote join` and one approval, in under 2 minutes, and the server's data directory contains no fixture value, secret name or project path.
-- The leak test battery passes with zero secret bytes in any captured transcript, log, session file or tool result across Pi, Claude Code, Codex and OpenCode.
+- The leak test battery passes with zero secret bytes in any captured transcript, log, session file or tool result across Pi, Claude Code and Codex.
 - Gentle AI maintainers can read `CONTRACT.md` and `ARCHITECTURE.md` and identify where it would slot into `internal/components/` without asking design questions.
 
 ## 8. Open questions
 
 - Q1. Should `project` grants and project layers be keyed by git remote URL instead of filesystem root, so a re-clone keeps them? (Decided for v1: root path. `qbit-vault relink OLD NEW` moves a project layer and its grants to a new checkout path. Remote keying stays a v2 candidate. With sync, project layers get a path-independent id and per-device roots (R-SYNC-11); the origin URL only produces a hint to run `link`.)
 - Q2. Should `secret_list` be hidden from the model entirely and exposed only to the user via `/vault list`? (Leaning: keep it; the agent needs to know which handles exist to avoid re-asking.)
-- Q3. Windows native prompt: PowerShell window vs. a tiny Go/Win32 dialog. (Leaning: PowerShell for v1, zero extra dependencies.)
+- Q3. Windows native prompt: PowerShell window vs. a tiny Go/Win32 dialog. (Decided and built: PowerShell, zero extra dependencies.)

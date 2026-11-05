@@ -2,7 +2,7 @@
 
 Status: **draft 1.0.0-draft.2** (draft.2: `request` takes several typed fields; `list` reports `kind` and `unlinked_match`; `capabilities` reports field kinds and sync). Frozen on the first stable release; afterwards only additive changes under the same major, published as capability rows (`capabilities: 1.1`, `1.2`, ...). Consumers MUST refuse envelopes whose `contract` major they do not implement.
 
-This contract defines the only surface through which a host (an agent runtime, its hooks or its extension) talks to the broker. It is transport-independent: the same JSON objects travel over MCP tool calls, over the CLI with `--json`, and over host hooks.
+This contract defines the only surface through which a host (an agent runtime, its hooks or its extension) talks to the broker. It is transport-independent: the same JSON objects travel over MCP tool calls and over the CLI (`broker --op`, `--json`); the Pi extension (planned, Phase 4) would use the CLI form. The Claude Code hooks do not carry contract traffic.
 
 ## Envelope
 
@@ -17,7 +17,7 @@ Every request and response carries:
 | `contract` | yes | Literal `gentle-ai.secrets-broker/v1` |
 | `op` | yes | One of `request`, `list`, `exec`, `manage`, `grant`, `revoke`, `capabilities` |
 | `v` | yes | Operation schema version, integer, currently `1` for all ops |
-| `session` | yes | Opaque host session id, `^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$` (prefix = host: `pi`, `claude`, `codex`, `opencode`, `cli`) |
+| `session` | yes | Opaque host session id, `^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$` (prefix = host: `pi`, `claude`, `codex`, `cli`; the MCP server generates `mcp`) |
 | `cwd` | yes | Absolute path of the working directory; used to resolve the repository root for the project layer and the `project` scope |
 | `host` | no | `{ "name": "gentle-shell", "version": "3.7.0" }` for audit |
 
@@ -172,7 +172,7 @@ Response:
 
 ### `grant` — create or widen a grant (**user-UI only, never model-callable**)
 
-Only the host UI (Pi extension prompt, native dialog) may send it, and only as the result of a user interaction. The MCP server does not expose it as a tool. The CLI accepts it only from an interactive TTY or with `--from-prompt-token <t>` issued by the broker's own prompt.
+Only the host UI (the planned Pi extension prompt, or the native dialog) may send it, and only as the result of a user interaction. The MCP server does not expose it as a tool. The CLI accepts it only from an interactive TTY or with `--from-prompt-token <t>` issued by the broker's own prompt.
 
 Request: `{ "op": "grant", "name": "GITHUB_TOKEN", "layer": "global", "scope": "session", "ttl_ms": 43200000 }`
 Response: `{ "ok": true, "grant": { "scope": "session", "expires_at": "…" } }`
@@ -236,4 +236,4 @@ These descriptions are shipped verbatim to every host so models see the same con
 
 ## Conformance
 
-A host adapter is conformant when it passes `e2e/contract-conformance` (see `docs/TESTING.md`): every op, every refusal, the no-value invariant on every byte returned, and the `grant`-over-MCP rejection.
+A host adapter is conformant when it passes the conformance harness (`internal/conformance` and `TestContractConformance` in `internal/cli`, see `docs/TESTING.md`): every op, every refusal, the no-value invariant on every byte returned, and the `grant`-over-MCP rejection.

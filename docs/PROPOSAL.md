@@ -1,3 +1,5 @@
+> **Historical document.** This is the original proposal, written when the product was called *gentle-vault* and framed as a possible Gentle AI component. It was renamed QBit Vault (`qbit-vault`) and is now an independent project (`odd/tasks/rename-qbit.md`). The body below is unchanged and is **not** the current state: the "Nothing built yet" status line is obsolete, and OpenCode and the npm-first install were later dropped or moved. The current state lives in `PRD.md`, `ARCHITECTURE.md`, `CLI.md`, `INSTALL.md` and `ROADMAP.md`.
+
 # Proposal: QBit Vault (`qbit-vault`) — a secrets broker so agents can *use* credentials without ever *seeing* them
 
 **Type:** Idea / design discussion (pre-issue, per the issue-first workflow)

@@ -17,7 +17,7 @@ Branch `feat/cli-skeleton` until T8. Spec authority: the code as built, docs/*, 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
 | T1 | S1, S2 | inline | repo cleanup: .gitignore (.codegraph), move the proposal under docs/, CI on main, delete old review branches after proving each is contained in feat/cli-skeleton | f734b75 | done |
-| T2 | S1, S4 | worker | docs audit: every doc and help text matches the code (ROADMAP status, INSTALL, CLI, ARCHITECTURE, PRD statuses) | | pending |
+| T2 | S1, S4 | worker | docs audit: every doc and help text matches the code (ROADMAP status, INSTALL, CLI, ARCHITECTURE, PRD statuses) | (T2) | done |
 | T3 | S2, S3 | design | visual identity: logo, banner, palette (gentle-design artboards), exported assets for README and TUI | | pending |
 | T4 | S2 | design | TUI design: screens and flows as artboards; user picks a direction | | pending |
 | T5 | S1, S2 | worker | README: visual, complete, accurate (banner, diagrams, quickstart, commands, security model, status) | | pending |
@@ -29,3 +29,4 @@ Branch `feat/cli-skeleton` until T8. Spec authority: the code as built, docs/*, 
 
 - L1. User request (S1) and choices (S2), 2026-11-05.
 - L2. Every old review branch (`feat/gentle-vault`, `feat/gentle-vault-01..22-*`) and `main` are ancestors of `feat/cli-skeleton` (`git merge-base --is-ancestor`), so deleting the branches loses no commit.
+- L3. T2 docs audit (gentle-ai-worker): ROADMAP and INSTALL rewritten to the real state, ~100 fixes across CLI, ARCHITECTURE, PRD (new implementation-status section), STORAGE, TESTING, THREAT_MODEL, AGENT_INTEGRATIONS, GENTLE_SHELL_EXTENSION, REMOTE_SYNC, AGENTS.md layout and CONTRACT.md; no claim was softened to hide a gap. Backlog of claims the code does not satisfy (now stated in the docs): (B1) `init` has no automatic passphrase fallback without a keychain; (B2) bindings.yaml/config.yaml are not loaded (budgets, TTLs are constants); (B3) pre-bash does not rewrite commands into `exec` nor deny grant_required/dump_command; (B4) Codex and Pi get no hook and no deny rule (only Claude Code does); (B5) no explicit Gentle AI deny-entry verification step (entries survive because only owned entries are touched); (B6) doctor lacks binary signature, Pi extension version, active-grant count, generation/anchor state; (B7) documented but missing commands `update`, `redact`, `set --fields`, `prompt --field/--confirm` (marked planned). vault-ops.md T4 status fixed (5d256a5).

@@ -16,46 +16,67 @@ These are tested, not just documented. A PR that breaks one is rejected regardle
 8. **No postinstall scripts. No network calls except downloading the signed binary during install, the optional update check (opt-out), and the sync server the user configured (opt-in), which only ever receives data sealed on the device and public keys.** No key that decrypts a vault object ever leaves the device; `exec` never uses the network.
 9. **The sync server is untrusted.** Every object downloaded from it is verified (AEAD, AAD account/generation/version, signatures) before use; it never stores or logs anything but ciphertext, public keys, counters and timestamps. Recovery keys and pairing confirmation codes are shown and read only through the prompt backend, never on stdout, stderr, `--json`, logs or arguments.
 
-## Repository layout (target)
+## Repository layout
+
+What exists on `feat/cli-skeleton`. Items marked *planned* do not exist yet (`docs/ROADMAP.md`).
 
 ```
-qbit-vault/
-├── cmd/qbit-vault/           Go main: CLI entry
-├── cmd/qbit-vault-server/    Go main: optional self-hosted sync server
+qbit-vault/                     (module github.com/QuBiit0/qbit-vault)
+├── cmd/qbit-vault/             Go main: CLI entry
+├── cmd/qbit-vault-server/      Go main: optional self-hosted sync server (serve, invite, health)
 ├── deploy/                     server Dockerfile and compose.yaml (Dokploy)
+├── defaults/                   bindings.yaml (not loaded yet), dumpguard.yaml (embedded copy in
+│                               internal/dumpguard, kept equal by a test), secret-patterns.yaml
 ├── internal/
-│   ├── vault/                  encrypted store, envelope format, atomic writes
-│   ├── keychain/               OS keychain + passphrase fallback
-│   ├── grants/                 grant store, TTL, scope evaluation
-│   ├── exec/                   child process runner, env injection, dump-command guard
-│   ├── redact/                 streaming redaction (raw, base64, url-encoded, JSON-escaped)
+│   ├── vault/                  encrypted store, layers, envelope users, atomic writes, backups,
+│   │                           schema 2 body, restore, rekey, sync state files
+│   ├── envelope/               AEAD envelope shared by vault.enc, grants.enc and remote files
+│   ├── keychain/               OS keychain + passphrase fallback, unlock cache
+│   ├── perm/                   owner-only permissions (POSIX modes, Windows DACL)
+│   ├── lockfile/               cross-process lock files
+│   ├── secret/                 Secret type that redacts on every output path
+│   ├── refusal/, exitcode/     typed contract refusals and exit codes
+│   ├── grants/                 grant model, TTL, scope evaluation, prompt tokens
+│   ├── runner/                 child process runner: env injection, shell choice, tree kill, caps
+│   ├── dumpguard/              dump-command guard and wrapper/segment parser
+│   ├── redact/                 streaming redaction (raw, base64, url-encoded, JSON-escaped, ...)
 │   ├── audit/                  hash-chained JSONL audit log
-│   ├── prompt/                 out-of-band capture: tty, osascript, powershell, zenity
-│   ├── broker/                 contract v1 handlers (request/grant/exec/list/revoke)
+│   ├── prompt/                 out-of-band capture: tty, osascript, powershell, zenity, kdialog
+│   │                           (scripted backend only in -tags e2eprompt builds)
+│   ├── broker/                 contract v1 handlers (request/list/exec/manage/grant/revoke)
 │   ├── mcp/                    stdio MCP server exposing the broker
-│   ├── adapters/               per-agent config writers (claude, codex, opencode, pi)
-│   ├── filemerge/              snapshot + atomic merge (mirror gentle-ai semantics)
+│   ├── conformance/            contract schema validation (tests only)
+│   ├── hook/                   Claude Code hooks: pre-bash, post-bash, post-read, user-prompt
+│   ├── hosts/                  Adapter interface, step runner, receipts; adapters in
+│   │                           claude/, codex/, pi/ (fake/ is test-only)
+│   ├── filemerge/              snapshot + atomic JSON/TOML merge and 3-way revert
+│   ├── doctor/                 read-only health report
+│   ├── dotenv/                 dotenv parser for import
 │   ├── merge/                  three-way per-record merge for sync (pure)
 │   ├── remote/                 sync client: keys, pairing, envelopes, rounds, anchors
 │   ├── server/                 qbit-vault-server: zero-knowledge store and HTTP API
-│   └── doctor/                 read-only health report
-├── contracts/secrets-broker/v1/ CONTRACT.md + schema (byte-pinned once released)
-├── packages/
-│   ├── qbit-vault/           npm launcher: resolves platform binary, `init` entrypoint
-│   └── qbit-vault-pi/        TypeScript Pi / Gentle Shell extension
-├── scripts/install.sh, install.ps1
-├── docs/
-└── e2e/                        docker-based leak tests and cross-agent battery
+│   └── cli/                    cobra commands, prompts, session and sync plumbing
+├── contracts/secrets-broker/v1/ CONTRACT.md + JSON schema (byte-pinned once released)
+├── docs/                       PRD, ARCHITECTURE, CLI, STORAGE, REMOTE_SYNC, THREAT_MODEL, TESTING,
+│                               AGENT_INTEGRATIONS, GENTLE_SHELL_EXTENSION, INSTALL, ROADMAP, PROPOSAL
+├── e2e/                        Docker batteries: docker-test.sh (sync), hosts-test.sh (hosts),
+│                               plus leakscan/, mcpclient/, proxy/ helpers
+├── tools/leakgrep/             CI leak grep over captured test output
+├── odd/tasks/                  work logs (what was built, decisions, commits)
+├── .github/workflows/ci.yml    build, vet, test on Linux/macOS/Windows, leak grep
+├── packages/qbit-vault-pi/     planned (Phase 4): TypeScript Pi / Gentle Shell extension
+├── packages/qbit-vault/        planned (Phase 5): npm launcher
+└── scripts/install.sh, install.ps1   planned (Phase 5)
 ```
 
 ## Conventions
 
-- Go 1.25+, module `github.com/<owner>/qbit-vault`. Standard library first; allowed third-party: `golang.org/x/crypto` (chacha20poly1305, argon2), `github.com/zalando/go-keyring`, an MCP SDK (`github.com/modelcontextprotocol/go-sdk`), `github.com/spf13/cobra`. Anything else needs a line in the PR explaining why. The MCP SDK (v1.8.0) compiles in, transitively: `github.com/google/jsonschema-go` (tool input schemas), `github.com/segmentio/asm` and `github.com/segmentio/encoding` (its JSON), `github.com/yosida95/uritemplate/v3`, `golang.org/x/oauth2` (its `auth` package, imported by `mcp` though qbit-vault uses no OAuth), `golang.org/x/sync` and `golang.org/x/time`. `github.com/google/jsonschema-go` is also imported directly, only by `internal/conformance`, which only tests import (it is not in the binary).
+- Go 1.26 (`go.mod`), module `github.com/QuBiit0/qbit-vault`. Standard library first; allowed third-party: `golang.org/x/crypto` (chacha20poly1305, argon2), `golang.org/x/sys` (Windows ACLs) and `golang.org/x/term` (echo-off terminal input), `github.com/zalando/go-keyring`, an MCP SDK (`github.com/modelcontextprotocol/go-sdk`), `github.com/spf13/cobra`. Anything else needs a line in the PR explaining why. The MCP SDK (v1.8.0) compiles in, transitively: `github.com/google/jsonschema-go` (tool input schemas), `github.com/segmentio/asm` and `github.com/segmentio/encoding` (its JSON), `github.com/yosida95/uritemplate/v3`, `golang.org/x/oauth2` (its `auth` package, imported by `mcp` though qbit-vault uses no OAuth), `golang.org/x/sync` and `golang.org/x/time`. `github.com/google/jsonschema-go` is also imported directly, only by `internal/conformance`, which only tests import (it is not in the binary).
 - TypeScript extension: peer-depends on `@mariozechner/pi-coding-agent`, `@mariozechner/pi-tui`, `@sinclair/typebox`; never bundles them. No hardcoded `~/.pi/agent` paths; use the paths Pi provides.
 - Conventional Commits. Branch `feat/...`, `fix/...`. PRs ≤ 400 changed lines; split into chained PRs otherwise (see `docs/ROADMAP.md` for the pre-sliced plan).
 - Work-unit commits: code + tests + docs for one behavior together.
 - Every refusal is typed (`contracts/.../CONTRACT.md` § Refusals). Never return a free-text error where a typed refusal exists.
-- Secrets in tests are fixtures with the prefix `TESTSECRET_` so a leak in CI output is greppable. The leak test (`docs/TESTING.md` § Leak tests) greps every captured byte of every tier for those fixtures.
+- Secrets in tests are fixtures with the prefix `TESTSECRET_` so a leak in CI output is greppable. The leak test (`docs/TESTING.md` § Leak battery) greps every captured byte of every tier for those fixtures.
 
 ## Definition of done for any feature
 

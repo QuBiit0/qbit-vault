@@ -21,7 +21,7 @@ backups (also those made under an earlier key). Branch `feat/cli-skeleton`.
 | T1 | S4 | inline | `lock`, `unlock` (keychain `Refresh`, CLI, docs) | b7ff436 | done |
 | T2 | S5, S6 | inline | retired keys store; `restore --list/--from`; resumable `vault.Rekey` (vault + CLI, docs) | 3a1e772 | done |
 | T3 | S3, S6, S7 | inline | crash-safe `rekey`: staged key, promote, recovery on open (keychain + CLI, docs) | 90e50b4 | done |
-| T4 | S2, S7 | inline | `import --from-env/--from-file` (dotenv parser + fuzz, one atomic write, CLI, docs) | next commit | in progress |
+| T4 | S2, S7 | inline | `import --from-env/--from-file` (dotenv parser + fuzz, one atomic write, CLI, docs) | 5d256a5 | done |
 
 ## Log
 

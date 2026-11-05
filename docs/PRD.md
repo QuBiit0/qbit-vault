@@ -10,7 +10,9 @@ Built and tested on `feat/cli-skeleton` (evidence in `ROADMAP.md`): the vault, l
 - the Claude Code `PreToolUse` rewrite of secret references into `exec` (R-EXEC-02) and its `grant_required` / `dump_command` denials; today `pre-bash` only keeps user-only commands out of the agent's shell;
 - the npm launcher, signed releases, `install.sh`/Homebrew and `qbit-vault update` (Phase 5): R-INS-01 as worded, R-INS-02, R-NFR-03, the binary-signature part of R-INS-07;
 - OpenCode (R-HOST-04): dropped by a recorded decision (`odd/tasks/hosts.md` S8);
-- the TUI (`ROADMAP.md`): planned, not a v1 requirement of this document.
+- self-update, in the TUI or as `qbit-vault update` (Phase 5): the TUI's Update section is a static *planned* screen.
+
+Also built, outside the numbered requirements of this document: the interactive TUI (`qbit-vault tui`, and `qbit-vault` with no arguments on a terminal; `CLI.md` § TUI, `ROADMAP.md`). It is a front end over the existing commands and keeps their invariants (no value shown, values typed only in the prompt backend, grants revoke-only). Not exercised: its suspend and resume around the masked prompt on a real terminal.
 
 Nothing is released. Install today: `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` (the repository is private) or build from source (`INSTALL.md`).
 

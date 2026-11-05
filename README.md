@@ -94,6 +94,9 @@ qbit-vault set GITHUB_TOKEN --global
 
 # 4. Check what was configured
 qbit-vault doctor
+
+# Or do all of it interactively (needs a terminal; same as `qbit-vault tui`)
+qbit-vault
 ```
 
 - `init` asks for nothing and never reads secrets from your environment. It creates an **empty** vault, stores the master key in the OS keychain (on a machine without one, run `init --passphrase`) and registers the hosts it detects. Every config file is snapshotted before it is touched.
@@ -127,7 +130,7 @@ Full reference with flags, JSON output and exit codes: [docs/CLI.md](docs/CLI.md
 
 | Group | Commands |
 | --- | --- |
-| Setup | `init`, `sync`, `doctor`, `uninstall`, `version` |
+| Setup | `init`, `sync`, `doctor`, `uninstall`, `version`, `tui` (also what bare `qbit-vault` runs in a terminal) |
 | Secrets | `set`, `rm`, `mv`, `list`, `describe`, `edit`, `link`, `relink`, `import`, `rekey`, `lock`, `unlock`, `restore` |
 | Grants | `grant`, `revoke`, `grants` |
 | Run | `exec` (run a command with granted secrets injected and the output redacted) |
@@ -183,7 +186,7 @@ Protocol, keys and failure modes: [docs/REMOTE_SYNC.md](docs/REMOTE_SYNC.md).
 
 ## Status / Roadmap
 
-**Built and tested** (on `feat/cli-skeleton`, see [docs/ROADMAP.md](docs/ROADMAP.md)): encrypted vault with global and project layers, grants, hash-chained audit log, redaction, `exec`, native prompts (Windows, macOS, Linux, terminal), the contract broker and MCP server, host registration for Claude Code, Codex and Pi, and remote sync with `qbit-vault-server`.
+**Built and tested** (on `feat/cli-skeleton`, see [docs/ROADMAP.md](docs/ROADMAP.md)): encrypted vault with global and project layers, grants, hash-chained audit log, redaction, `exec`, native prompts (Windows, macOS, Linux, terminal), the contract broker and MCP server, host registration for Claude Code, Codex and Pi, remote sync with `qbit-vault-server`, and the interactive TUI (`qbit-vault`, see [docs/CLI.md](docs/CLI.md#tui)): first-run setup, then three panes for secrets, grants, hosts, audit, sync status and doctor. Not exercised yet: the TUI's suspend and resume (for the masked value prompt) on a real terminal; its tests replace that step.
 
 **Planned, not built yet** — do not rely on these:
 
@@ -194,7 +197,7 @@ Protocol, keys and failure modes: [docs/REMOTE_SYNC.md](docs/REMOTE_SYNC.md).
 | Release binaries, signed checksums, npm launcher, Homebrew formula, install scripts, published server image | 5 |
 | `qbit-vault update` and the opt-out update check | 5 |
 | `qbit-vault redact` command (the redaction engine exists and is used by `exec`, hooks and the MCP server) | 4 (the Pi extension design calls it; no `redact` command exists) |
-| Interactive TUI (guided setup, configuration, secrets, grants, audit, hosts, sync, update); design in [design/qbitdev-vault-tui](design/qbitdev-vault-tui) | design done, implementation pending |
+| TUI self-update (the Update section is a static *planned* screen that shows the manual `go install` command) | 5, with `qbit-vault update` |
 
 Known gaps that the docs state openly: no automatic passphrase fallback when there is no keychain (use `init --passphrase`), `bindings.yaml` and `config.yaml` are not loaded yet (budgets and TTLs are constants), and Codex and Pi get no hooks or deny rules.
 

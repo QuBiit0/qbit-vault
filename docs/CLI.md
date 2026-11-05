@@ -19,6 +19,7 @@ Values are **never** accepted as arguments. `set` and `import` read from the mas
 | `sync [--agents a,b] [--json]` | Re-apply the registration steps of every host recorded in `state.json` (after an upgrade, a moved binary or a config the user edited), then print the doctor report. Only recorded hosts run: a host that is merely detected is never registered unless `--agents` names it. Idempotent: a run with nothing to change writes no config file, no snapshot and no `state.json`. One line per host, `host <name>: up to date`, `repaired (<steps>)`, `registered (<steps>)` (new via `--agents`), `failed at <step>` or `no adapter in this build; left as is` (the record is kept); `no hosts registered; run 'qbit-vault init'` when there is none. A failed host is `host_failed` (exit 1, as in `init`); any `warn`/`fail` in the report is exit 1. `--json`: `{"ok","hosts":[{"name","status":"up_to_date\|repaired\|registered\|failed\|no_adapter","steps"}],"doctor":{…}}`. Needs a vault; reads no secret. Not vault sync: that is `remote` (below). |
 | `doctor [--json]` | Read-only health report: no write, no prompt, no network. Exit 0 healthy, 1 when any check is `warn` or `fail`. Checks, in order: `vault` (state readable, then opened the way `remote status` opens it: `unlocked (keychain: <mode>)`, or `locked (…)` when the key needs a prompt, which is not a problem; `fail` when there is no vault, state.json is damaged or the vault cannot be opened), `permissions` (vault home and files owner-only, else `warn` naming the file), one `host.<name>.<step>` per step of each registered host (`registered`, or `warn`: `config changed since registration; run 'qbit-vault sync'`, `not registered; run 'qbit-vault sync'`; a recorded host this build has no adapter for is `host.<name>` `warn`), and, when the vault syncs, `sync` from the last round's summary in `state.json` (`<server>; <n> devices, <n> conflicts[, push pending]; last round <time>`, `<server>; no sync round yet`, or `warn`: `<n> sync conflicts; run 'qbit-vault remote conflicts'`). Human output is one line per check, `<status padded to 4>  <name padded>  <detail>`, then `healthy`, `1 problem` or `<n> problems`, on stdout. JSON: `{"ok":<healthy>,"checks":[{"name","status":"ok\|warn\|fail","detail"}]}` on stdout in both outcomes. Two more checks speak only when something is wrong, so a healthy report stays short: `audit` (`fail`: `audit chain broken at line <n> (<reason>); run 'qbit-vault audit --verify'`) and `grants` (`warn`: `grants.enc is unreadable or was rolled back; its grants are treated as none`). A drifted or unregistered step now points at `qbit-vault sync`. Hooks for Claude Code are the `host.claude-code.hooks` step; a moved or deleted binary shows up as drift of the steps that hold its path. Binary-signature and version checks arrive with packaging (Phase 5). |
 | `uninstall [--purge]` | User-only (prompt backend; `not_model_callable` without one; the pre-bash hook denies it in the agent's shell). Asks one yes/no, then reverts every host recorded in `state.json` with the `filemerge` revert rule: the config is restored byte for byte when it is still exactly what we wrote, otherwise only our entries are removed and the user's later edits stay. One line per host listing each step's outcome (`restored`, `stripped`, `deleted`, `absent`, `unchanged`), e.g. `host claude-code: deny restored, hooks stripped, mcp deleted`, then `vault kept at <home>`. A host is forgotten in `state.json` only when its revert succeeded; a failed one (`failed at <step>; kept in state.json`) or one this build has no adapter for is kept, and the command exits 1 with `host_revert_failed`. The vault, its key and the audit log stay (an `uninstall` audit record is appended). `--purge` asks instead to type the word `purge` (visible; anything else, a confirm or a cancel changes nothing), and only if every host reverted deletes the vault home and the key's OS keychain entry (`vault purged: <home>`); it deletes nothing else and refuses a directory that is not a plain vault home (`unsafe_purge`: the user's home or a parent, a root, a symlink). It refuses before asking while the vault syncs (`sync_configured`): run `remote logout` first. `--json`: `{"ok","home","purged","hosts":[{"name","status":"reverted\|failed\|no_adapter","steps":[{"name","outcome"}]}]}`. |
+| `tui` | Open the interactive terminal UI (see [TUI](#tui)). Needs a terminal on stdin and stdout; `--json` is a usage error. `qbit-vault` with no arguments opens it too, under the conditions listed there. |
 | `update [--check]` | *Planned (Phase 5), not in the binary yet.* Download, verify (Minisign + checksums) and replace the binary. The background check will be opt-out (`QBIT_VAULT_NO_UPDATE_CHECK=1`). Until releases exist, update with `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` (INSTALL.md). |
 
 ## Secrets
@@ -112,6 +113,63 @@ qbit-vault list                             # GITHUB_TOKEN (global), DATABASE_UR
 
 The same flow exists as `/vault set NAME` inside Pi / Gentle Shell. With Claude Code, Codex or Pi through MCP, run it in any other terminal. The terminal prompt reads the controlling terminal, not stdin, so a pipe cannot answer it; with a desktop session the prompt is a native dialog, not the terminal. When there is no controlling terminal (for example when launched by a host's shell escape without one) `set` fails with `no controlling terminal available; use --stdin`; on a machine with a desktop session the native dialog opens instead of the terminal (`AGENT_INTEGRATIONS.md` § Native capture dialog), so that case is rare.
 
+## TUI
+
+```
+qbit-vault tui
+qbit-vault            # no arguments: the same, only for a person at a terminal
+```
+
+An interactive app for the things you do by hand: first-run setup, secrets, grants, hosts, the audit log, sync status and the doctor report. It is a front end over the commands in this document: each action below runs the command shown, in-process, with the same `--home`, snapshots, atomic writes and audit records. `--home` is honored. It adds no new capability.
+
+**When it opens.**
+
+| Invocation | Result |
+| --- | --- |
+| `qbit-vault tui` on a terminal | Opens the TUI. |
+| `qbit-vault tui` without a terminal on both stdin and stdout | Usage error (exit 2): `the TUI needs an interactive terminal (stdin and stdout must be terminals)`. |
+| `qbit-vault tui --json` | Usage error: `the TUI does not support --json`. |
+| `qbit-vault` with no arguments, stdin and stdout both terminals, no `--json`, `QBIT_VAULT_NO_TUI` not `1` | Opens the TUI. |
+| `qbit-vault` with no arguments in any other case | Unchanged: prints the help (`--json` still gives the usage error `no command given`). Scripts and pipes never see the TUI. |
+
+`QBIT_VAULT_NO_TUI=1` only affects the no-arguments shortcut; `qbit-vault tui` still opens. An unexpected failure of the UI itself prints `the TUI stopped unexpectedly` (exit 1) with no further text.
+
+**First run.** With no vault at `--home` the TUI shows a splash, then a four-step wizard: vault location, key storage (OS keychain, or a passphrase), which detected hosts to register (claude-code, codex, pi), and a review. Nothing is written until you confirm the review; applying runs `init --agents <chosen|none> [--passphrase]`. With a passphrase the TUI suspends and `init` asks for it in the prompt backend. The wizard takes no text input and never asks for a secret. When it finishes it offers to add a first secret.
+
+**Home.** Three panes: sections (left), list (middle), detail (right), and a footer with the keys of the focused pane. A vault that exists but cannot be opened without a prompt (passphrase mode, no unlock cache) opens the home in a locked state.
+
+| Key | Effect |
+| --- | --- |
+| `1`-`7` | Jump to a section |
+| `up`/`down` or `k`/`j` | Move: sections when that pane is focused, otherwise the list |
+| `tab` / `shift+tab` | Next / previous pane |
+| `esc` | Back one level (a pane, an open form, a wizard step) |
+| `q` | Quit from the home or the splash |
+| `ctrl+c` | Quit from anywhere |
+
+| Section | Keys | Equivalent command |
+| --- | --- | --- |
+| 1 Secrets | `a` add; `d` edit info; `x` remove (asks `y`); `u` unlock when locked | Listing is `list` (names, layers, flags; never values). `a` is `set --global\|--project [--description=…] [--sensitive] -- NAME`: the form collects name, layer, description and the sensitive flag, then the TUI suspends and `set` asks for the value in the masked prompt. It never passes `--grant`. `d` is `edit` (the description is sent only if you changed it; the value is untouched). `x` is `rm --yes` after an inline confirmation that states the consequence. `u` is `unlock`. |
+| 2 Grants | `r` revoke the selected secret's grants in that layer; `R` revoke all (asks `y`) | Listing is `grants`. `r` is `revoke NAME` for one layer, `R` is `revoke --all`, both through the code behind `revoke` (audited). There is no per-grant revoke, as in the CLI. |
+| 3 Hosts | `s` repair the selected host; `S` repair all registered hosts; `x` uninstall the selected host (asks `y`); `a` register a detected host | Status per step is the data `doctor` uses (ok, drift, not registered, unreadable). `s`/`S` is `sync`. `x` reverts that one host as `uninstall` does, records an `uninstall` audit event, and never purges: the vault and key stay. `a` is `init --agents <host>`. |
+| 4 Audit | `v` verify the chain | Lists the newest 50 records, newest first: time, event, names, layer, by. `v` is `audit --verify --offline`: the local chain only; the check against server anchors stays in the CLI. |
+| 5 Sync | none | Read-only `remote status`: server, device, last round, conflicts, pending push, offline. It makes no network call. Linking, pairing and resolving are named in the detail pane and run in your shell (`remote register`, `remote join`, `remote sync`, `remote conflicts`, `remote resolve`, `remote approve`). |
+| 6 Doctor | `r` rerun | The report of `doctor`: same checks, no prompt, nothing written. |
+| 7 Update | none | *Planned.* A static screen: self-update does not exist yet (Phase 5). It shows the manual `go install …@latest` command and makes no network call. |
+
+In Grants, Hosts, Audit, Sync and Doctor a locked vault offers `u` to unlock, and a failed read offers `enter` to retry. A backend error is shown as one short line with a next action, never a stack trace.
+
+**Security rules.**
+
+- No secret value is ever shown, and the UI process never holds one. The detail pane shows `••••••••  never shown`. The data the screens receive has no field that can carry a value.
+- A value, and a passphrase, are typed only in the prompt backend (native dialog or masked terminal prompt) while the TUI is suspended, the same prompt `set` and `unlock` use. The add form has no value field; it warns not to paste a secret into the description. The TUI text inputs are only the secret name and the description.
+- Grants are revoke-only. No key or code path in the TUI creates or approves a grant (AGENTS.md invariant 6); `set` is never run with `--grant`. Grants are approved in the dialog an agent's request opens.
+- Pairing codes, confirmation codes and recovery keys are never shown or read by the TUI.
+- While the TUI is showing, the in-TUI commands run in a no-prompt mode: a passphrase vault with no unlock cache is reported as locked (offer `u`) instead of drawing a passphrase prompt over the screen. Only the commands the TUI suspends for (`set`, `unlock`, and `init --passphrase`) can prompt.
+- `edit` and `rm` from the TUI keep the CLI's behavior of pushing to a linked sync server afterwards.
+
+**Colors.** `--no-color` (or `NO_COLOR`) removes every color from the screens and shows the plain wordmark instead of the mark. Otherwise the TUI uses 24-bit color when it looks supported (always on Windows; elsewhere when `COLORTERM` is `truecolor` or `24bit`) and falls back to 256 colors, with a solid selection color instead of the gradient.
+
 ## Exec
 
 ```
@@ -178,4 +236,5 @@ Failures that are not typed refusals (usage errors, `not_initialized`, internal 
 | `QBIT_VAULT_PROMPT_TIMEOUT` | How long a prompt (terminal or native dialog) waits for an answer, a Go duration from `10s` to `1h` (default `5m`); anything else is a usage error naming the variable. On expiry the terminal is restored and the command fails with `prompt timed out` (exit 1, JSON code `cancelled`), leaving everything unchanged. It covers the whole prompt (all its questions). |
 | `QBIT_VAULT_NO_UPDATE_CHECK=1` | *Planned (Phase 5):* will disable the update check; nothing reads it yet |
 | `QBIT_VAULT_NO_REMOTE=1` | Skip every remote call for this process; changes are marked pending and `audit --verify` skips the anchors |
+| `QBIT_VAULT_NO_TUI=1` | Stop `qbit-vault` with no arguments from opening the TUI (it prints the help). `qbit-vault tui` still opens it. |
 | `NO_COLOR` | Honored |

@@ -13,7 +13,7 @@ Sliced so every PR stays ≤ 400 changed lines (Gentle AI's review budget), each
 | 3 hosts | done as scoped: Claude Code, Codex, Pi / Gentle Shell through MCP; OpenCode dropped; packaging moved to Phase 5 |
 | 4 Gentle Shell / Pi extension | pending |
 | 5 hardening and release 0.1.0 | pending (now includes the packaging dropped from Phase 3) |
-| TUI | planned, design first |
+| TUI | done (`odd/tasks/tui.md`); self-update inside it waits for Phase 5 |
 
 ## Phase 0 — alignment (no code)
 
@@ -113,9 +113,13 @@ Nothing of `packages/qbit-vault-pi` exists yet (there is no `packages/` director
 - Tag `v0.1.0`, publish npm with provenance, Homebrew tap formula.
 - Make the repository public (it is private today, so `go install` needs access to it).
 
-## TUI — planned
+## TUI — done
 
-User request (2026-11-05, `odd/tasks/polish.md` S5): an interactive terminal app like the ones in engram and gentle-ai: guided setup, configuration, self-update, and management of secrets, grants, audit, hosts and sync. Order of work: visual identity, TUI design (screens and flows as artboards), then the spec and the implementation (`polish.md` T3, T4, T7). It needs a new dependency (to be approved) and its self-update needs published releases (Phase 5) and the opt-out update check that AGENTS.md invariant 8 allows. Nothing of it is built; every command keeps working without it.
+User request (2026-11-05, `odd/tasks/polish.md` S5): an interactive terminal app like the ones in engram and gentle-ai. Built in `odd/tasks/tui.md` (T1 af04545, T2 a308062, T3 60f409c, docs T4), reference in `CLI.md` § TUI.
+
+- **Built.** `qbit-vault tui`, and `qbit-vault` with no arguments on a terminal (not with `--json` or `QBIT_VAULT_NO_TUI=1`). First-run splash and setup wizard (`init` with the chosen key storage and hosts). Three-pane home: Secrets (add, edit info, remove, unlock), Grants (list, revoke, revoke all; it cannot grant), Hosts (status, repair, uninstall, register), Audit (recent records, verify the local chain), Sync (status only), Doctor, and Update. Every action runs the real command path in-process; no value is ever shown and values and passphrases are typed only in the suspended prompt.
+- **Not exercised.** The suspend and resume of the TUI around the masked prompt on a real terminal: tests replace that step. Leak tests use a fake host adapter, not real host config files.
+- **Planned, not built.** Self-update: the Update section is a static screen that shows the manual `go install` command and makes no network call. `qbit-vault update` and the opt-out update check are Phase 5 and need published releases.
 
 ## v2 candidates (not scheduled)
 

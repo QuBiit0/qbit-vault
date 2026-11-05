@@ -34,6 +34,8 @@
 │                       hosts/claude, hosts/codex, hosts/pi (hosts/fake: tests) │
 │  internal/filemerge   snapshot + atomic JSON/TOML merge                       │
 │  internal/doctor      read-only report                                        │
+│  internal/tui         Bubble Tea app: Backend interface (metadata only);      │
+│                       the cli-side adapter runs the real commands in-process │
 │  internal/merge       pure three-way per-record merge (hlc, tombstones)       │
 │  internal/remote      sync client: keys, pairing, envelopes, rounds, anchors  │
 │  (also: envelope, secret, refusal, exitcode, perm, lockfile, dotenv,          │
@@ -52,6 +54,13 @@
 Built today: the Go binary, the MCP server, the Claude Code hooks and the registration of Claude Code, Codex and Pi / Gentle Shell (Pi through its MCP entry). Not built: the Pi extension (Phase 4), the npm launcher and the signed releases (Phase 5), OpenCode (dropped).
 
 With sync enabled, `internal/remote` talks HTTPS to **`qbit-vault-server`** (`cmd/qbit-vault-server`, `internal/server`): a self-hosted, zero-knowledge store of sealed vault versions, key envelopes, device public keys and audit anchors (`REMOTE_SYNC.md`). It is a separate deployment; the client stays daemon-free.
+
+**The TUI (`internal/tui`, `tui` command).** An interactive Bubble Tea app: a first-run wizard, then three panes (sections, list, detail). It is split in two so that no value can reach it:
+
+- `internal/tui` talks only to a `Backend` interface whose types are metadata (`Secret`, `Grant`, `HostInfo`, `AuditEntry`, `SyncStatus`, `DoctorReport`): none has a field for a secret value, a pairing or confirmation code or a recovery key, and the interface has no method that creates or approves a grant. Anything that needs a masked prompt (a secret value, a passphrase) is returned as an `Action` that the model runs with `tea.Exec`, suspending the UI while the prompt backend uses the terminal.
+- `internal/cli/tuibackend.go` is the adapter. It reads through the same session the commands use, opened without a prompt (a locked vault is `ErrLocked`), and runs each change as the real command in-process (`init`, `set`, `edit`, `rm`, `unlock`; revoke and the host operations through the code behind `revoke`, `sync`, `init --agents` and `uninstall`), so snapshots, atomic writes and audit records are the CLI's own. While the UI is showing, those commands run in a no-prompt mode that turns a missing passphrase into "locked" instead of a prompt. A listing loads values only to wipe them before anything is returned.
+
+`qbit-vault` with no arguments starts it only on a terminal (not with `--json` or `QBIT_VAULT_NO_TUI=1`); `qbit-vault tui` always does, or fails if there is no terminal. Reference: `CLI.md` § TUI.
 
 Two rules shape everything:
 

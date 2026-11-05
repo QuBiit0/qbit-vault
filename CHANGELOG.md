@@ -4,7 +4,9 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
-First public release, tagged `v0.1.0-beta.2` (the `v0.1.0-beta.1` tag exists but its release job failed before publishing anything).
+## [0.1.0-beta.2] - 2026-11-05
+
+First public release. The `v0.1.0-beta.1` tag exists but its release job failed before publishing anything; it is kept, not moved (published versions are never overridden).
 
 ### Added
 

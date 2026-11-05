@@ -75,7 +75,12 @@ func TestJSONEscapeMatchesEncodingJSON(t *testing.T) {
 	}
 	for _, v := range inputs {
 		for _, html := range []bool{false, true} {
-			if got, want := jsonEscape(v, html, false, false), std(v, html); !bytes.Equal(got, want) {
+			// Go 1.27 writes the replacement character for an invalid byte
+			// literally, Go 1.26 as an escape: the one this Go produces must be
+			// one of the two forms the redactor registers.
+			want := std(v, html)
+			if !bytes.Equal(jsonEscapeInvalid(v, html, false, false, false), want) &&
+				!bytes.Equal(jsonEscapeInvalid(v, html, false, false, true), want) {
 				t.Fatalf("json mismatch (html=%v) for input of len %d", html, len(v))
 			}
 		}

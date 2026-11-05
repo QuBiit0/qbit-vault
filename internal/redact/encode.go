@@ -84,6 +84,13 @@ func percent(v []byte, mode pctMode, lower bool) []byte {
 // upper selects uppercase hex digits in \u escapes. Invalid UTF-8 becomes
 // the replacement character (escaped when ascii). U+2028 and U+2029 are always escaped, as encoding/json does.
 func jsonEscape(v []byte, html, ascii, upper bool) []byte {
+	return jsonEscapeInvalid(v, html, ascii, upper, false)
+}
+
+// jsonEscapeInvalid is jsonEscape that, with escInvalid, writes the
+// replacement character for an invalid byte as an escape even when the rest of
+// the non-ASCII text stays literal (Go 1.26 encoding/json).
+func jsonEscapeInvalid(v []byte, html, ascii, upper, escInvalid bool) []byte {
 	digits := hexDigits(upper)
 	u := func(out []byte, r rune) []byte {
 		return append(out, '\\', 'u',
@@ -118,7 +125,7 @@ func jsonEscape(v []byte, html, ascii, upper bool) []byte {
 		switch {
 		case r == utf8.RuneError && size == 1:
 			// encoding/json substitutes the replacement character.
-			if ascii {
+			if ascii || escInvalid {
 				out = u(out, utf8.RuneError)
 			} else {
 				out = utf8.AppendRune(out, utf8.RuneError)

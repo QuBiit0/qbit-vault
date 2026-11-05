@@ -1,0 +1,96 @@
+# Release build for qbit-vault (docs/INSTALL.md § One-line install).
+# A `v*` tag runs .github/workflows/release.yml, which runs this file.
+# Local dry run: goreleaser release --snapshot --clean
+version: 2
+
+project_name: qbit-vault
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: qbit-vault
+    main: ./cmd/qbit-vault
+    binary: qbit-vault
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/QuBiit0/qbit-vault/internal/cli.Version={{ .Tag }}
+      - -X github.com/QuBiit0/qbit-vault/internal/cli.Commit={{ .ShortCommit }}
+  - id: qbit-vault-server
+    main: ./cmd/qbit-vault-server
+    binary: qbit-vault-server
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  # Names the install scripts rely on: qbit-vault_<os>_<arch>.tar.gz (.zip on
+  # Windows). They carry no version so a script can build the name alone.
+  - id: qbit-vault
+    ids: [qbit-vault]
+    name_template: "qbit-vault_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+  - id: qbit-vault-server
+    ids: [qbit-vault-server]
+    name_template: "qbit-vault-server_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    files:
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore\\(odd\\):"
+
+release:
+  github:
+    owner: QuBiit0
+    name: qbit-vault
+  # A tag with a suffix (v0.1.0-beta.1) is published as a pre-release.
+  prerelease: auto
+  footer: |
+    ## Install
+
+    Linux / macOS:
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh
+    ```
+
+    Windows (PowerShell):
+
+    ```powershell
+    irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+    ```
+
+    With Go 1.26+: `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@{{ .Tag }}`
+
+    Then run `qbit-vault` (guided setup) or `qbit-vault init`. Verify an archive's provenance with `gh attestation verify <file> --repo QuBiit0/qbit-vault`.

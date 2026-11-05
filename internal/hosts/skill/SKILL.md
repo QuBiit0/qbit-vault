@@ -2,7 +2,7 @@
 name: qbit-vault
 description: Use credentials (API keys, tokens, passwords, connection strings) without ever seeing them, through the qbit-vault MCP tools. Use whenever a command, script, test, deploy or API call needs a credential, when the user mentions a token, key, secret, password or .env value, or when you would otherwise ask the user to paste one.
 ---
-<!-- Managed by qbit-vault: 'qbit-vault sync' rewrites this file when a new version changes it. Do not edit it; put your own notes in another skill. -->
+<!-- Managed by qbit-vault: 'qbit-vault sync' rewrites this file when a new version changes it. Do not edit it; to use your own text instead, replace this file and remove this line. -->
 
 # qbit-vault
 

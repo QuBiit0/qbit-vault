@@ -154,7 +154,7 @@ Rules (step `skill`, `internal/hosts/skill`, written with `filemerge.WriteOwnedF
 
 - **Only where it is needed.** Only registered hosts get it, and the file is written only when its bytes differ from the skill this build carries: a current copy is never rewritten, snapshotted or re-recorded. The skill text has no version string, so a release that does not change it touches nothing.
 - **Always current.** `sync` rewrites a stale copy (snapshot first), and `install.sh` / `install.ps1` run `sync` after every upgrade, so each release installs its own skill. `doctor` reports a stale or missing copy as `host.<name>.skill` drift (`run 'qbit-vault sync'`).
-- **Whole file, ours only.** The file carries the marker `<!-- Managed by qbit-vault:`. A `SKILL.md` at that path without it is the user's: the step refuses with `filemerge: file exists and is not managed by qbit-vault` and changes nothing. Edits to our file are replaced by the next `sync`; keep your own notes in another skill.
+- **Whole file, ours only.** The file carries the marker `<!-- Managed by qbit-vault:`. A `SKILL.md` at that path without it is the user's own skill of that name and wins: the step records it without writing, `doctor` accepts it, and `uninstall` leaves it; registration does not fail because of it. Edits to our file are replaced by the next `sync`; keep your own notes in another skill.
 - **Uninstall.** `uninstall` deletes our copy (snapshot first) and its directory when empty; a copy the user replaced (no marker) stays. The shared Codex/Pi file stays while the other host is still registered. qbit-vault never writes `CLAUDE.md`, `AGENTS.md` or any other instruction file of the user.
 
 ## Native capture dialog (non-Pi hosts)

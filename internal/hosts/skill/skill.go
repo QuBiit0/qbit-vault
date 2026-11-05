@@ -4,8 +4,8 @@
 // so every release carries its own text and `sync` (run by the install
 // scripts after an upgrade) rewrites an installed copy that differs. A copy
 // that is already current is never written. The file is whole and ours,
-// recognized by Marker; a file at that path without it is the user's and is
-// refused, never replaced.
+// recognized by Marker; a file at that path without it is the user's own
+// skill of that name: it wins, and is never written, checked or removed.
 //
 // Claude Code reads ~/.claude/skills; Codex and Pi both read the Agent Skills
 // location ~/.agents/skills, so they share one file there (two copies would
@@ -64,7 +64,13 @@ func Step(host string, path func(hosts.Env) (string, error)) hosts.Step {
 			if err != nil {
 				return filemerge.Receipt{}, err
 			}
-			return filemerge.WriteOwnedFile(env.VaultHome, p, Content, Marker, prev)
+			r, err := filemerge.WriteOwnedFile(env.VaultHome, p, Content, Marker, prev)
+			if errors.Is(err, filemerge.ErrForeignFile) {
+				// The user's own skill: record it without writing, so the host
+				// registers; Revert and Check leave a file without Marker alone.
+				return filemerge.Receipt{Path: filepath.Clean(p), Snapshot: filemerge.Snapshot{Path: filepath.Clean(p), Existed: true}}, nil
+			}
+			return r, err
 		},
 		Revert: func(env hosts.Env, r filemerge.Receipt) (filemerge.Outcome, error) {
 			shared, err := sharedWith(env, host, r.Path)
@@ -87,6 +93,8 @@ func Step(host string, path func(hosts.Env) (string, error)) hosts.Step {
 				return fmt.Errorf("%w: file is missing", hosts.ErrDrift)
 			case err != nil:
 				return errors.New("skill: cannot read the skill file")
+			case !bytes.Contains(b, []byte(Marker)):
+				return nil // the user's own skill of that name
 			case !bytes.Equal(b, Content):
 				return fmt.Errorf("%w: skill is out of date", hosts.ErrDrift)
 			}

@@ -130,20 +130,31 @@ func TestAStaleSkillIsDriftAndApplyUpdatesIt(t *testing.T) {
 	}
 }
 
-func TestApplyRefusesTheUsersOwnSkillOfTheSameName(t *testing.T) {
+// A skill of the same name the user wrote wins: registration succeeds without
+// touching it, doctor accepts it, and uninstall leaves it.
+func TestTheUsersOwnSkillOfTheSameNameIsLeftAlone(t *testing.T) {
 	env := newEnv(t)
+	h := skillHost{"claude-code", skill.ClaudePath}
 	p, _ := skill.ClaudePath(env)
+	const mine = "---\nname: qbit-vault\n---\nmine\n"
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte("---\nname: qbit-vault\n---\nmine\n"), 0o600); err != nil {
+	if err := os.WriteFile(p, []byte(mine), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res := hosts.Apply(env, []hosts.Adapter{skillHost{"claude-code", skill.ClaudePath}})
-	if !errors.Is(res[0].Err(), filemerge.ErrForeignFile) || res[0].FailedStep() != skill.StepName {
-		t.Fatalf("result = %+v", res[0])
+	res := mustApply(t, env, h)
+	if res[0].Changed() {
+		t.Fatal("the user's skill was rewritten")
 	}
-	if b, _ := os.ReadFile(p); string(b) != "---\nname: qbit-vault\n---\nmine\n" {
+	st, _ := vault.ReadHosts(env.VaultHome)
+	if checks := hosts.Verify(env, h, st["claude-code"]); checks[0].Err != nil {
+		t.Fatalf("verify = %v, want ok", checks[0].Err)
+	}
+	if steps, err := hosts.RevertHost(env, h); err != nil || steps[0].Outcome != filemerge.Unchanged {
+		t.Fatalf("revert = %+v, %v", steps, err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != mine {
 		t.Fatalf("user's skill changed: %q", b)
 	}
 }

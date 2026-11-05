@@ -6,7 +6,7 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Added
 
-- The `qbit-vault` agent skill: `init` and `sync` install it for Claude Code (`~/.claude/skills`) and, as one shared file, for Codex and Pi (`~/.agents/skills`); it is rewritten only when a release changes it, `doctor` reports a stale copy, and `uninstall` removes it. A user's own `SKILL.md` at that path is never replaced.
+- The `qbit-vault` agent skill: `init` and `sync` install it for Claude Code (`~/.claude/skills`) and, as one shared file, for Codex and Pi (`~/.agents/skills`); it is rewritten only when a release changes it, `doctor` reports a stale copy, and `uninstall` removes it. A user's own `SKILL.md` at that path wins: it is never replaced, checked or removed.
 
 ### Fixed
 

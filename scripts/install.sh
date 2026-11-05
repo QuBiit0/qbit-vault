@@ -5,18 +5,22 @@
 #
 # Environment:
 #   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
-#   QBIT_VAULT_INSTALL_DIR  target directory (default: $HOME/.local/bin)
+#   QBIT_VAULT_INSTALL_DIR  target directory (default: where qbit-vault already is, else $HOME/.local/bin)
 #   QBIT_VAULT_RELEASE_URL  base download URL (default: the GitHub releases of QuBiit0/qbit-vault)
+#   QBIT_VAULT_NO_SYNC      set to 1 to skip `qbit-vault sync` after an upgrade
 #
 # It downloads one archive and checksums.txt, verifies the SHA-256, and copies
-# the binary. It never asks for, reads or stores a secret, and it does not run
+# the binary. An existing install is upgraded in place, and when the vault is
+# already set up it runs `qbit-vault sync` so your agents use the new binary.
+# It never asks for, reads or stores a secret, and it never runs
 # `qbit-vault init`: that stays your explicit step.
 set -eu
 
 REPO="QuBiit0/qbit-vault"
 RELEASE_URL="${QBIT_VAULT_RELEASE_URL:-https://github.com/$REPO/releases/download}"
-INSTALL_DIR="${QBIT_VAULT_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${QBIT_VAULT_INSTALL_DIR:-}"
 VERSION="${QBIT_VAULT_VERSION:-}"
+VAULT_HOME="${QBIT_VAULT_HOME:-$HOME/.qbit-vault}"
 
 say() { printf 'qbit-vault install: %s\n' "$*"; }
 die() { printf 'qbit-vault install: error: %s\n' "$*" >&2; exit 1; }
@@ -74,7 +78,27 @@ got="$(sha256 "$tmp/$archive")"
 [ "$want" = "$got" ] || die "checksum mismatch for $archive: nothing was installed"
 
 tar -xzf "$tmp/$archive" -C "$tmp" qbit-vault || die "the archive has no qbit-vault binary"
+
+# An existing install is upgraded where it is, so its path (and every agent
+# registration that holds it) stays the same.
 previous="$(command -v qbit-vault 2>/dev/null || true)"
+previous_version=""
+if [ -n "$previous" ]; then
+	previous_version="$("$previous" version 2>/dev/null | awk '{ print $2 }')" || previous_version=""
+fi
+if [ -z "$INSTALL_DIR" ]; then
+	INSTALL_DIR="$HOME/.local/bin"
+	if [ -n "$previous" ] && [ -w "$(dirname "$previous")" ]; then
+		INSTALL_DIR="$(dirname "$previous")"
+	fi
+fi
+if [ -n "$previous_version" ] && [ "$previous" = "$INSTALL_DIR/qbit-vault" ]; then
+	if [ "$previous_version" = "$VERSION" ]; then
+		say "qbit-vault $VERSION is already installed; reinstalling it"
+	else
+		say "upgrading qbit-vault $previous_version -> $VERSION"
+	fi
+fi
 mkdir -p "$INSTALL_DIR"
 # Copy beside the target then rename, so a running qbit-vault is never half-written.
 cp "$tmp/qbit-vault" "$INSTALL_DIR/.qbit-vault.new"
@@ -86,8 +110,21 @@ case ":$PATH:" in
 	*":$INSTALL_DIR:"*) ;;
 	*) say "$INSTALL_DIR is not on your PATH; add it, for example: export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
 esac
-if [ -n "$previous" ] && [ "$previous" != "$INSTALL_DIR/qbit-vault" ]; then
-	say "another qbit-vault is at $previous; remove it, then run 'qbit-vault sync' so your agents use the new path"
+active="$(command -v qbit-vault 2>/dev/null || true)"
+if [ -n "$active" ] && [ "$active" != "$INSTALL_DIR/qbit-vault" ]; then
+	say "another qbit-vault at $active comes first on your PATH; remove it so your shell runs the new one"
 fi
-say "next: run 'qbit-vault' (guided setup) or 'qbit-vault init', then 'qbit-vault doctor'"
-say "already set up? run 'qbit-vault sync' after an upgrade"
+
+if [ -f "$VAULT_HOME/state.json" ]; then
+	# Already set up: re-apply the recorded agent registrations, so they point at
+	# this binary. sync reads no secret and asks nothing.
+	if [ "${QBIT_VAULT_NO_SYNC:-}" = 1 ]; then
+		say "skipped 'qbit-vault sync' (QBIT_VAULT_NO_SYNC=1); run it yourself so your agents use this binary"
+	elif "$INSTALL_DIR/qbit-vault" sync; then
+		say "agent registrations are up to date; restart your agents to load the new version"
+	else
+		say "'qbit-vault sync' reported a problem (see above); run 'qbit-vault doctor', then restart your agents"
+	fi
+else
+	say "next: run 'qbit-vault' (guided setup) or 'qbit-vault init', then 'qbit-vault doctor'"
+fi

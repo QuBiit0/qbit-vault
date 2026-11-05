@@ -1,5 +1,6 @@
 # Tests scripts/install.ps1 against a fake local release (a directory, no
-# network). QBIT_VAULT_NO_PATH=1 keeps the real user PATH untouched.
+# network) whose binaries are tiny Go programs built here (Go is required).
+# QBIT_VAULT_NO_PATH=1 keeps the real user PATH untouched.
 #   pwsh -NoProfile -File scripts/install_test.ps1
 $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'install.ps1'
@@ -12,6 +13,40 @@ function Check($what, [bool]$cond) {
     if ($cond) { Write-Host "ok   $what" } else { Write-Host "FAIL $what"; $script:fails++ }
 }
 
+# A fake qbit-vault.exe: `version` prints its version, `sync` appends to
+# $env:QBV_TEST_SYNC_LOG, anything else prints fake-qbit-vault-<arch>.
+$fakeSrc = Join-Path $work 'fake'
+New-Item -ItemType Directory -Path $fakeSrc | Out-Null
+Set-Content -LiteralPath (Join-Path $fakeSrc 'go.mod') -Value 'module fake'
+Set-Content -LiteralPath (Join-Path $fakeSrc 'main.go') -Value @'
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+var version, arch string
+
+func main() {
+	switch {
+	case len(os.Args) > 1 && os.Args[1] == "version":
+		fmt.Println("qbit-vault " + version + " (abc1234, windows/" + arch + ")")
+	case len(os.Args) > 1 && os.Args[1] == "sync":
+		f, _ := os.OpenFile(os.Getenv("QBV_TEST_SYNC_LOG"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		fmt.Fprintln(f, "sync "+arch)
+		f.Close()
+	default:
+		fmt.Println("fake-qbit-vault-" + arch)
+	}
+}
+'@
+function New-Fake($file, $ver, $arch) {
+    Push-Location $fakeSrc
+    try { go build -o $file -ldflags "-X main.version=$ver -X main.arch=$arch" . } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { throw 'could not build the fake binary' }
+}
+
 function New-Release($dir) {
     $rel = Join-Path $dir 'v0.0.0-test'
     New-Item -ItemType Directory -Force -Path $rel | Out-Null
@@ -19,7 +54,7 @@ function New-Release($dir) {
     foreach ($arch in 'amd64', 'arm64') {
         $src = Join-Path $work "src-$arch"
         New-Item -ItemType Directory -Force -Path $src | Out-Null
-        Set-Content -NoNewline -LiteralPath (Join-Path $src 'qbit-vault.exe') -Value "fake-qbit-vault-$arch"
+        New-Fake (Join-Path $src 'qbit-vault.exe') 'v0.0.0-test' $arch
         $zip = Join-Path $rel "qbit-vault_windows_$arch.zip"
         Compress-Archive -Path (Join-Path $src 'qbit-vault.exe') -DestinationPath $zip -Force
         $sums += "$((Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant())  qbit-vault_windows_$arch.zip"
@@ -27,7 +62,14 @@ function New-Release($dir) {
     Set-Content -LiteralPath (Join-Path $rel 'checksums.txt') -Value $sums
 }
 
-function Invoke-Install($arch, $release, $dest) {
+$env:QBIT_VAULT_HOME = Join-Path $work 'home'
+$env:QBV_TEST_SYNC_LOG = Join-Path $work 'sync.log'
+$realPath = $env:Path
+
+function Invoke-Install($arch, $release, $dest, $prefixPath = $null, $noSync = $null) {
+    Set-Content -LiteralPath $env:QBV_TEST_SYNC_LOG -Value $null
+    $env:QBIT_VAULT_NO_SYNC = $noSync
+    $env:Path = if ($prefixPath) { "$prefixPath;$realPath" } else { $realPath }
     $env:PROCESSOR_ARCHITECTURE = $arch
     $env:QBIT_VAULT_VERSION = 'v0.0.0-test'
     $env:QBIT_VAULT_RELEASE_URL = $release
@@ -36,13 +78,17 @@ function Invoke-Install($arch, $release, $dest) {
     # Windows PowerShell turns a child's stderr into errors; keep them as output.
     $ErrorActionPreference = 'Continue'
     $out = & $shell -NoProfile -ExecutionPolicy Bypass -File $script 2>&1 | Out-String
-    return @{ Code = $LASTEXITCODE; Out = $out }
+    $code = $LASTEXITCODE
+    $env:Path = $realPath
+    return @{ Code = $code; Out = $out }
 }
 
 function Installed($dest) {
     $f = Join-Path $dest 'qbit-vault.exe'
-    if (Test-Path -LiteralPath $f) { Get-Content -Raw -LiteralPath $f } else { '' }
+    if (Test-Path -LiteralPath $f) { (& $f | Out-String).Trim() } else { '' }
 }
+
+function SyncLog { (Get-Content -Raw -LiteralPath $env:QBV_TEST_SYNC_LOG -ErrorAction SilentlyContinue | Out-String).Trim() }
 
 $realArch = $env:PROCESSOR_ARCHITECTURE
 try {
@@ -86,9 +132,47 @@ try {
     $r = Invoke-Install 'ARM64' (Join-Path $work 'good') (Join-Path $work 'dest1')
     Check 're-install replaces the binary' ((Installed (Join-Path $work 'dest1')) -eq 'fake-qbit-vault-arm64')
     Check 're-install leaves no .old file' (-not (Test-Path (Join-Path $work 'dest1\qbit-vault.exe.old')))
+
+    # 7. An existing install found on PATH is upgraded in place.
+    $prev = Join-Path $work 'prev'
+    New-Item -ItemType Directory -Path $prev | Out-Null
+    New-Fake (Join-Path $prev 'qbit-vault.exe') 'v0.0.0-old' 'amd64'
+    $r = Invoke-Install 'ARM64' (Join-Path $work 'good') '' $prev
+    Check 'upgrade exits 0' ($r.Code -eq 0)
+    Check 'upgrade replaces the binary where it was' ((Installed $prev) -eq 'fake-qbit-vault-arm64')
+    Check 'upgrade names both versions' ($r.Out -match [regex]::Escape('upgrading qbit-vault v0.0.0-old -> v0.0.0-test'))
+
+    # 8. The same version is reported as a reinstall.
+    $r = Invoke-Install 'ARM64' (Join-Path $work 'good') '' $prev
+    Check 'same version is a reinstall' ($r.Out -match [regex]::Escape('qbit-vault v0.0.0-test is already installed; reinstalling it'))
+
+    # 9. No vault yet: no sync, the next step is init.
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest9')
+    Check 'no vault: sync is not run' ((SyncLog) -eq '')
+    Check 'no vault: next step is init' ($r.Out -match [regex]::Escape("next: run 'qbit-vault' (guided setup) or 'qbit-vault init'"))
+
+    # 10. A set-up vault: the new binary runs sync, unless QBIT_VAULT_NO_SYNC=1.
+    New-Item -ItemType Directory -Force -Path $env:QBIT_VAULT_HOME | Out-Null
+    Set-Content -LiteralPath (Join-Path $env:QBIT_VAULT_HOME 'state.json') -Value '{}'
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest10')
+    Check 'set-up vault: the new binary runs sync' ((SyncLog) -eq 'sync amd64')
+    Check 'set-up vault: restart hint' ($r.Out -match [regex]::Escape('agent registrations are up to date; restart your agents'))
+    Check 'set-up vault: no init hint' ($r.Out -notmatch 'qbit-vault init')
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest10') $null '1'
+    Check 'QBIT_VAULT_NO_SYNC=1 skips sync' ((SyncLog) -eq '')
+    Check 'QBIT_VAULT_NO_SYNC=1 says so' ($r.Out -match [regex]::Escape("skipped 'qbit-vault sync' (QBIT_VAULT_NO_SYNC=1)"))
+    Remove-Item -Recurse -Force $env:QBIT_VAULT_HOME
+
+    # 11. An explicit directory leaves the old copy alone and warns that it shadows.
+    New-Fake (Join-Path $prev 'qbit-vault.exe') 'v0.0.0-old' 'amd64'
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest11') $prev
+    Check 'explicit dir installs there' ((Installed (Join-Path $work 'dest11')) -eq 'fake-qbit-vault-amd64')
+    Check 'explicit dir leaves the old copy' ((& (Join-Path $prev 'qbit-vault.exe') version) -match 'v0.0.0-old')
+    Check 'explicit dir warns about the shadowing copy' ($r.Out -match [regex]::Escape("another qbit-vault at $(Join-Path $prev 'qbit-vault.exe') comes first on your PATH"))
 } finally {
+    $env:Path = $realPath
     $env:PROCESSOR_ARCHITECTURE = $realArch
-    'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+    'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH', 'QBIT_VAULT_NO_SYNC', 'QBIT_VAULT_HOME', 'QBV_TEST_SYNC_LOG' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 

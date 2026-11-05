@@ -17,6 +17,20 @@ check() { # check DESCRIPTION CONDITION...
 
 sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
+# A fake qbit-vault: `version` prints VERSION, `sync` logs to $QBV_TEST_SYNC_LOG,
+# anything else prints fake-qbit-vault-ARCH.
+fakebin() { # fakebin FILE VERSION ARCH
+	cat >"$1" <<EOF
+#!/bin/sh
+case "\$1" in
+	version) echo "qbit-vault $2 (abc1234, linux/$3)" ;;
+	sync) echo "sync $3" >>"\$QBV_TEST_SYNC_LOG" ;;
+	*) echo fake-qbit-vault-$3 ;;
+esac
+EOF
+	chmod 755 "$1"
+}
+
 # A release v0.0.0-test with one archive per arch, each holding a fake binary.
 mkrelease() { # mkrelease DIR
 	local rel="$1/v0.0.0-test"
@@ -25,8 +39,7 @@ mkrelease() { # mkrelease DIR
 	for arch in amd64 arm64; do
 		local src="$work/src-$arch"
 		mkdir -p "$src"
-		printf '#!/bin/sh\necho fake-qbit-vault-%s\n' "$arch" >"$src/qbit-vault"
-		chmod 755 "$src/qbit-vault"
+		fakebin "$src/qbit-vault" v0.0.0-test "$arch"
 		tar -czf "$rel/qbit-vault_linux_$arch.tar.gz" -C "$src" qbit-vault
 		echo "$(sha "$rel/qbit-vault_linux_$arch.tar.gz")  qbit-vault_linux_$arch.tar.gz" >>"$rel/checksums.txt"
 	done
@@ -41,9 +54,16 @@ fakeuname() { # fakeuname DIR MACHINE
 # Git Bash on Windows hands file:// URLs to a native curl, which needs C:/ paths.
 fileurl() { if command -v cygpath >/dev/null 2>&1; then echo "file://$(cygpath -m "$1")"; else echo "file://$1"; fi; }
 
-run() { # run BIN_DIR RELEASE_DIR INSTALL_DIR: runs install.sh, output in $out, status in $code
-	out="$(PATH="$1:$PATH" QBIT_VAULT_VERSION=v0.0.0-test QBIT_VAULT_RELEASE_URL="$(fileurl "$2")" \
-		QBIT_VAULT_INSTALL_DIR="$3" sh "$here/install.sh" 2>&1)"
+# The vault home and sync log of every run; a test creates state.json to
+# play an already set-up vault.
+export QBIT_VAULT_HOME="$work/home" QBV_TEST_SYNC_LOG="$work/sync.log"
+
+run() { # run BIN_DIR RELEASE_DIR INSTALL_DIR [VAR=value...]: output in $out, status in $code
+	local bin="$1" rel="$2" dest="$3"
+	shift 3
+	: >"$QBV_TEST_SYNC_LOG"
+	out="$(env PATH="$bin:$PATH" QBIT_VAULT_VERSION=v0.0.0-test QBIT_VAULT_RELEASE_URL="$(fileurl "$rel")" \
+		QBIT_VAULT_INSTALL_DIR="$dest" "$@" sh "$here/install.sh" 2>&1)"
 	code=$?
 }
 
@@ -88,6 +108,43 @@ check "unsupported arch is reported" grep -q "unsupported architecture mips" <<<
 # 6. Re-running replaces the binary in place.
 run "$work/bin-arm" "$work/good" "$work/dest1"
 check "re-install replaces the binary" test "$("$work/dest1/qbit-vault" 2>/dev/null)" = fake-qbit-vault-arm64
+
+# 7. An existing install found on PATH is upgraded in place.
+mkdir -p "$work/prev"
+fakebin "$work/prev/qbit-vault" v0.0.0-old amd64
+run "$work/prev:$work/bin-arm" "$work/good" ""
+check "upgrade exits 0" test "$code" -eq 0
+check "upgrade replaces the binary where it was" test "$("$work/prev/qbit-vault" 2>/dev/null)" = fake-qbit-vault-arm64
+check "upgrade names both versions" grep -q "upgrading qbit-vault v0.0.0-old -> v0.0.0-test" <<<"$out"
+check "upgrade installs nothing in the default directory" test ! -e "$HOME/.local/bin/.qbit-vault.new"
+
+# 8. The same version is reported as a reinstall.
+run "$work/prev:$work/bin-arm" "$work/good" ""
+check "same version is a reinstall" grep -q "qbit-vault v0.0.0-test is already installed; reinstalling it" <<<"$out"
+
+# 9. No vault yet: no sync, the next step is init.
+run "$work/bin-x86" "$work/good" "$work/dest9"
+check "no vault: sync is not run" test ! -s "$QBV_TEST_SYNC_LOG"
+check "no vault: next step is init" grep -q "next: run 'qbit-vault' (guided setup) or 'qbit-vault init'" <<<"$out"
+
+# 10. A set-up vault: the new binary runs sync, unless QBIT_VAULT_NO_SYNC=1.
+mkdir -p "$QBIT_VAULT_HOME"
+echo '{}' >"$QBIT_VAULT_HOME/state.json"
+run "$work/bin-x86" "$work/good" "$work/dest10"
+check "set-up vault: the new binary runs sync" test "$(cat "$QBV_TEST_SYNC_LOG")" = "sync amd64"
+check "set-up vault: restart hint" grep -q "agent registrations are up to date; restart your agents" <<<"$out"
+check "set-up vault: no init hint" eval '! grep -q "qbit-vault init" <<<"$out"'
+run "$work/bin-x86" "$work/good" "$work/dest10" QBIT_VAULT_NO_SYNC=1
+check "QBIT_VAULT_NO_SYNC=1 skips sync" test ! -s "$QBV_TEST_SYNC_LOG"
+check "QBIT_VAULT_NO_SYNC=1 says so" grep -q "skipped 'qbit-vault sync' (QBIT_VAULT_NO_SYNC=1)" <<<"$out"
+rm -rf "$QBIT_VAULT_HOME"
+
+# 11. An explicit directory leaves the old copy alone and warns that it shadows.
+fakebin "$work/prev/qbit-vault" v0.0.0-old amd64
+run "$work/prev:$work/bin-x86" "$work/good" "$work/dest11"
+check "explicit dir installs there" test "$("$work/dest11/qbit-vault")" = fake-qbit-vault-amd64
+check "explicit dir leaves the old copy" grep -q v0.0.0-old <<<"$("$work/prev/qbit-vault" version)"
+check "explicit dir warns about the shadowing copy" grep -q "another qbit-vault at $work/prev/qbit-vault comes first on your PATH" <<<"$out"
 
 if [ "$fails" -ne 0 ]; then
 	echo "$fails check(s) failed"

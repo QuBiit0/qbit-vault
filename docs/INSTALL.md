@@ -25,14 +25,16 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 1. Pick the archive for your OS and architecture: `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows).
 2. Resolve the version: `QBIT_VAULT_VERSION` if set, else the newest release **including pre-releases** (GitHub's `releases/latest` skips them).
 3. Download the archive and `checksums.txt` over HTTPS and compare the SHA-256. On a mismatch, or an archive not listed, they stop with `checksum mismatch for <archive>: nothing was installed` (or `<archive> is not listed in checksums.txt`) and install nothing.
-4. Copy the binary to `~/.local/bin` (Linux, macOS) or `%LOCALAPPDATA%\Programs\qbit-vault` (Windows), replacing an older copy in place. On Windows the directory is added to your **user** `PATH` (open a new terminal); on Linux and macOS the script tells you if the directory is not on `PATH`.
-5. Print the next step. They never ask for, read or store a secret, never read your environment for values, and never run `init`.
+4. Choose the directory: `QBIT_VAULT_INSTALL_DIR` if set; else the directory of the `qbit-vault` already first on your `PATH`, when you can write to it (an upgrade in place, see below); else `~/.local/bin` (Linux, macOS) or `%LOCALAPPDATA%\Programs\qbit-vault` (Windows).
+5. Replace the binary atomically: the new file is written beside the old one and renamed over it, so a failed download or a full disk never leaves a half-written `qbit-vault`. On Windows a running `qbit-vault.exe` (an agent's MCP server) is renamed aside to `qbit-vault.exe.old` first, which Windows allows, so the upgrade works with your agents open; the `.old` file stays while that process runs and the next install removes it. On Windows the directory is added to your **user** `PATH` (open a new terminal); on Linux and macOS the script tells you if the directory is not on `PATH`.
+6. Finish: on a machine where the vault is already set up (`$QBIT_VAULT_HOME/state.json` exists, default `~/.qbit-vault`), run `qbit-vault sync` with the new binary so every registered agent points at it, and tell you to restart your agents; otherwise print the next step (`qbit-vault` or `qbit-vault init`). They never ask for, read or store a secret, never read your environment for values, and never run `init`; `sync` only re-applies the registrations you already made and reads no secret.
 
 | Variable | Effect |
 | --- | --- |
 | `QBIT_VAULT_VERSION` | Tag to install, for example `v0.1.0-beta.1` |
 | `QBIT_VAULT_INSTALL_DIR` | Target directory |
 | `QBIT_VAULT_NO_PATH=1` | Windows only: leave the user `PATH` unchanged |
+| `QBIT_VAULT_NO_SYNC=1` | Do not run `qbit-vault sync` after installing over a set-up vault |
 
 Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v0.1.0-beta.1 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v0.1.0-beta.1'; irm …/install.ps1 | iex`.
 
@@ -93,15 +95,18 @@ qbit-vault doctor    # read-only health report; exit 1 on any problem
 
 ## Update
 
-Re-run the same install command (the one-line script, the `go install …@latest` form, or `git pull` then `go install ./cmd/qbit-vault`), then:
+Re-run the one-line install. It is safe on a machine that already has QBit Vault:
 
-```bash
-qbit-vault version     # confirm the new build is the one on PATH
-qbit-vault sync        # re-apply host registrations (needed if the binary path changed)
-qbit-vault doctor
-```
+| You have | What the script does |
+| --- | --- |
+| An install from the script, first on `PATH` | Upgrades it in place: `upgrading qbit-vault <old> -> <new>` (or `… is already installed; reinstalling it` for the same tag). Same path, so the agents' registrations stay valid. |
+| A `go install` copy in `~/go/bin` (or any directory you can write) | Same: that copy is replaced in place by the release binary. |
+| A copy in a directory you cannot write (`/usr/local/bin` owned by root) | Installs to the default directory and warns `another qbit-vault at <path> comes first on your PATH; remove it so your shell runs the new one`. |
+| A vault already set up | Runs `qbit-vault sync` with the new binary, so every agent registration points at it, then `agent registrations are up to date; restart your agents to load the new version`. If `sync` finds a problem it says so and points at `qbit-vault doctor`; the binary is installed either way. |
 
-Close your agents first: a running `qbit-vault mcp` keeps the old executable open, and on Windows the replacement can fail while it runs. An agent that was open during the update still runs the old MCP server until you restart it. `qbit-vault update` does not exist yet (Phase 5).
+Your vault, keys, grants, backups and audit log live in `$QBIT_VAULT_HOME` and are never touched by the install. Restart your agents afterwards: an agent that was open during the update keeps running the old MCP server until it restarts.
+
+With Go, re-run `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` (or `git pull` then `go install ./cmd/qbit-vault`), then `qbit-vault sync` yourself; on Windows close your agents first, because `go install` cannot replace a running `.exe`. `qbit-vault update` does not exist yet (Phase 5).
 
 ## Uninstall
 

@@ -8,7 +8,7 @@ First version, to be tagged `v0.1.0-beta.1`.
 
 ### Added
 
-- One-line install: `scripts/install.sh` (Linux, macOS) and `scripts/install.ps1` (Windows) download a release archive and verify its SHA-256 before installing; GoReleaser release archives for linux, darwin and windows on amd64 and arm64 with `checksums.txt` and GitHub build provenance.
+- One-line install: `scripts/install.sh` (Linux, macOS) and `scripts/install.ps1` (Windows) download a release archive and verify its SHA-256 before installing. Re-running them upgrades an existing install in place (also a `go install` copy), atomically and with agents running, and runs `qbit-vault sync` when the vault is already set up; GoReleaser release archives for linux, darwin and windows on amd64 and arm64 with `checksums.txt` and GitHub build provenance.
 - `qbit-vault version` reports the module version of a `go install` build and the commit of a checkout build.
 
 - Encrypted local vault (XChaCha20-Poly1305) with the master key in the OS keychain or behind a passphrase; global and per-project layers; snapshots and restore.

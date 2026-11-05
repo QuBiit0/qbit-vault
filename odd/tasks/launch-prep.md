@@ -15,8 +15,8 @@ Get the private GitHub repo QuBiit0/qbit-vault ready for a future public launch 
 
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
-| T1 | S2 | inline | | in progress |
-| T2 | S5 | inline | | pending |
+| T1 | S2 | inline | c327bfe, e243808, 102ba1f | in progress |
+| T2 | S5 | inline | (T2) | done |
 | T3 | S3, S4, S6 | worker | | pending |
 | T4 | S2, S5 | inline | | pending |
 
@@ -29,3 +29,4 @@ Get the private GitHub repo QuBiit0/qbit-vault ready for a future public launch 
 
 - L1. User request verbatim in S1.
 - L2. CI on PR #1 and main failed: `internal/redact` TestJSONEscapeMatchesEncodingJSON and FuzzRedactStream/seed#3 on ubuntu and windows, `internal/hosts/claude` TestWindowsPathsAreEscaped and `internal/hosts/codex` TestWindowsPathsRenderAsValidTOML on ubuntu; macos cancelled. Cause: local Go is 1.27.3, CI installs Go 1.26 (go.mod `go 1.26.0`). For invalid UTF-8 bytes Go 1.26 encoding/json writes the escape `\ufffd`, Go 1.27 the literal U+FFFD; the redactor modeled only 1.27, so a value mixing literal non-ASCII text with an invalid byte, JSON-encoded by Go 1.26, survived redaction (the bytes around the invalid one would reach the agent). RED: TestJSONFormsOfInvalidUTF8AreReplaced failed on the Go 1.26 form. Fix: values with invalid UTF-8 also register the escaped variant (internal/redact/redact.go, encode.go jsonEscapeInvalid); TestJSONEscapeMatchesEncodingJSON accepts either real form. The host tests check Windows path escaping and now skip off Windows (on POSIX a `C:\` path is correctly refused as not absolute). GREEN: internal/redact with go1.26.4 and go1.27.3 on Windows, internal/redact and internal/hosts/... with go1.26.10 on Linux (Docker).
+- L3. License chosen by the user (verbatim choice): "MIT". Copyright holder: "Leandro Alvarez (qbitdev)" (from the account; the user may change it). T2 adds LICENSE (MIT), SECURITY.md (private reporting through GitHub Security Advisories, scope tied to the AGENTS.md invariants and the threat model, pre-release support policy), CONTRIBUTING.md (spec first, test first, ~400-line PRs, Conventional Commits, batteries, AI disclosure, MIT), CODE_OF_CONDUCT.md (Contributor Covenant 2.1 by reference), CHANGELOG.md (Keep a Changelog, Unreleased), issue forms (bug, feature; blank issues off; security link) and a PR template. Note for the launch: GitHub private vulnerability reporting must be enabled in the repository settings once the repo is public.

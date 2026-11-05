@@ -1,0 +1,50 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security problems do not go here.** Use Security → Report a vulnerability (see SECURITY.md).
+        Never paste a real secret value: use a fake one such as `TESTSECRET_example`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. qbit-vault init
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `qbit-vault version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Coding-agent host
+      options: [Claude Code, Codex, Gentle Shell / Pi, None (CLI or TUI only), Other]
+  - type: textarea
+    id: doctor
+    attributes:
+      label: qbit-vault doctor
+      description: Output of `qbit-vault doctor` (it never prints a value).
+      render: text

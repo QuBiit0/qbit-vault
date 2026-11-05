@@ -1,6 +1,6 @@
 # Install: one command, then `qbit-vault init`
 
-QBit Vault is a pre-release (`v0.1.0-beta.1` is the first tag). Each `v*` tag publishes a GitHub release with archives for Linux, macOS and Windows (amd64 and arm64), a `checksums.txt` and a build-provenance attestation (`.github/workflows/release.yml`, `.goreleaser.yaml`). There is no npm package and no Homebrew formula yet (Phase 5, `ROADMAP.md`).
+QBit Vault is a pre-release (`v0.1.0-beta.2` is the first published release; the `v0.1.0-beta.1` tag has no release). Each `v*` tag publishes a GitHub release with archives for Linux, macOS and Windows (amd64 and arm64), a `checksums.txt` and a build-provenance attestation (`.github/workflows/release.yml`, `.goreleaser.yaml`). There is no npm package and no Homebrew formula yet (Phase 5, `ROADMAP.md`).
 
 ## Quick path
 
@@ -31,12 +31,12 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 
 | Variable | Effect |
 | --- | --- |
-| `QBIT_VAULT_VERSION` | Tag to install, for example `v0.1.0-beta.1` |
+| `QBIT_VAULT_VERSION` | Tag to install, for example `v0.1.0-beta.2` |
 | `QBIT_VAULT_INSTALL_DIR` | Target directory |
 | `QBIT_VAULT_NO_PATH=1` | Windows only: leave the user `PATH` unchanged |
 | `QBIT_VAULT_NO_SYNC=1` | Do not run `qbit-vault sync` after installing over a set-up vault |
 
-Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v0.1.0-beta.1 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v0.1.0-beta.1'; irm …/install.ps1 | iex`.
+Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v0.1.0-beta.2 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v0.1.0-beta.2'; irm …/install.ps1 | iex`.
 
 **Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo QuBiit0/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. Minisign-signed checksums are still planned (Phase 5).
 
@@ -48,7 +48,7 @@ Requires Go 1.26 or newer (`go version`). No C compiler is needed.
 go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
 ```
 
-`@latest` is the newest release tag (pre-release tags are used only while no stable tag exists); pin one with `@v0.1.0-beta.1`. `qbit-vault version` reports the module version for a `go install` build and the commit for a checkout build.
+`@latest` is the newest release tag (pre-release tags are used only while no stable tag exists); pin one with `@v0.1.0-beta.2`. `qbit-vault version` reports the module version for a `go install` build and the commit for a checkout build.
 
 From a checkout:
 

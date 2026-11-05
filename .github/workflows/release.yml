@@ -24,13 +24,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # Logs go outside the checkout: GoReleaser refuses a dirty work tree.
       - name: test
         run: |
-          mkdir -p ci-logs
+          mkdir -p "$RUNNER_TEMP/ci-logs"
           set -o pipefail
-          go test -count=1 ./... 2>&1 | tee ci-logs/go-test.log
+          go test -count=1 ./... 2>&1 | tee "$RUNNER_TEMP/ci-logs/go-test.log"
       - name: leak grep
-        run: go run ./tools/leakgrep ci-logs
+        run: go run ./tools/leakgrep "$RUNNER_TEMP/ci-logs"
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

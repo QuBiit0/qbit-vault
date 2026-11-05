@@ -14,7 +14,7 @@ by **qbitdev**
 
 QBit Vault (`qbit-vault`) is a local secrets broker for coding agents. Claude Code, Codex and Pi / Gentle Shell can run commands that need a `GITHUB_TOKEN`, a `DATABASE_URL` or any API key, and the value never enters the model's context, the chat transcript, the session file or the provider's servers.
 
-> **Status: public beta (`v0.1.0-beta.1`).** The vault, the broker, the MCP server, host registration and multi-device sync are built and tested on Linux, macOS and Windows. Expect rough edges and report them in [Issues](https://github.com/QuBiit0/qbit-vault/issues). See [Status / Roadmap](#status--roadmap).
+> **Status: public beta (`v0.1.0-beta.2`).** The vault, the broker, the MCP server, host registration and multi-device sync are built and tested on Linux, macOS and Windows. Expect rough edges and report them in [Issues](https://github.com/QuBiit0/qbit-vault/issues). See [Status / Roadmap](#status--roadmap).
 
 ## Why
 

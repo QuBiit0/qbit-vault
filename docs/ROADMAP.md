@@ -1,6 +1,6 @@
 # Roadmap and delivery plan
 
-Sliced so every PR stays ≤ 400 changed lines (Gentle AI's review budget), each with code + tests + docs. Phases are sequential; slices within a phase are mostly parallelizable. IDs refer to `docs/PRD.md`.
+Sliced so every PR stays ≤ 400 changed lines (the review budget), each with code + tests + docs. Phases are sequential; slices within a phase are mostly parallelizable. IDs refer to `docs/PRD.md`.
 
 **Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *pending* = not built. Nothing is released: there is no tag, no published package and no published image. Today QBit Vault is installed with `go install` or built from source (`INSTALL.md`).
 
@@ -18,7 +18,7 @@ Sliced so every PR stays ≤ 400 changed lines (Gentle AI's review budget), each
 ## Phase 0 — alignment (no code)
 
 - [x] Original proposal written (`docs/PROPOSAL.md`, historical: the product was then called gentle-vault).
-- [x] Repo location decided: its own repository, `github.com/QuBiit0/qbit-vault` (private for now), not in-tree in gentle-ai. The product was renamed to QBit Vault and is independent of the hosts it integrates with (`odd/tasks/rename-qbit.md`, a78c03d).
+- [x] Repo location decided: its own repository, `github.com/QuBiit0/qbit-vault`. The product was renamed to QBit Vault and is independent of the hosts it integrates with (`odd/tasks/rename-qbit.md`, a78c03d).
 - [ ] Reserve names: npm `qbit-vault`, `qbit-vault-pi`, `@qbit-vault/cli-*` (Phase 5). The Go module path is `github.com/QuBiit0/qbit-vault`.
 
 ## Phase 1 — core vault (CLI only, no hosts) — done
@@ -106,7 +106,7 @@ Nothing of `packages/qbit-vault-pi` exists yet (there is no `packages/` director
 ## Phase 5 — hardening and release 0.1.0 — pending
 
 - Cross-agent battery green on macOS/Linux/Windows (today only the three Docker batteries exist, all on Linux: sync, hosts and install from scratch).
-- Packaging moved here from Phase 3 (slice 3.7): npm launcher and platform packages, goreleaser, Minisign-signed checksums, GitHub provenance, `install.sh` / `install.ps1`, Homebrew tap, `qbit-vault update` and its opt-out check.
+- Packaging moved here from Phase 3 (slice 3.7): npm launcher and platform packages, Minisign-signed checksums, Homebrew tap, `qbit-vault update` and its opt-out check. Done early (`odd/tasks/public-launch.md`): GoReleaser archives for Linux, macOS and Windows, `checksums.txt`, GitHub build provenance, the release workflow on `v*` tags, and `scripts/install.sh` / `install.ps1` with SHA-256 verification, tested in CI.
 - Sync battery green; `qbit-vault-server` image published and deployed once on Dokploy from `deploy/compose.yaml`.
 - Security review checklist (THREAT_MODEL.md) walked for every package.
 - Docs pass; `README` quickstart verified on a clean VM per OS in < 3 min.
@@ -130,6 +130,5 @@ User request (2026-11-05, `odd/tasks/polish.md` S5): an interactive terminal app
 - Biometric or OS-level confirmation (Touch ID, Windows Hello) for grants, against same-user UI automation (THREAT_MODEL R9).
 - Project grants and project layers keyed by git remote.
 - Keyed-hash secret names in the audit log (THREAT_MODEL R6).
-- `gentle-ai install --components vault` native integration; contract moved under gentle-ai `contracts/`.
 - Browser-based capture for remote/SSH sessions.
 - Secret-rotation hooks (`qbit-vault rotate NAME --via gh auth refresh`).

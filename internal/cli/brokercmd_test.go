@@ -14,7 +14,7 @@ const brokerSession = "pi:broker1234"
 // envelope builds a request for cwd with extra op fields.
 func envelope(op, cwd, extra string) string {
 	c, _ := json.Marshal(cwd)
-	s := `{"contract":"gentle-ai.secrets-broker/v1","op":"` + op + `","v":1,"session":"` + brokerSession + `","cwd":` + string(c)
+	s := `{"contract":"qbit-vault.secrets-broker/v1","op":"` + op + `","v":1,"session":"` + brokerSession + `","cwd":` + string(c)
 	if extra != "" {
 		s += "," + extra
 	}
@@ -42,7 +42,7 @@ func refusalType(m map[string]any) string {
 func TestBrokerCapabilities(t *testing.T) {
 	w := newWorld(t)
 	code, _, out := w.broker("capabilities", envelope("capabilities", w.outside, ""))
-	want := `{"ok":true,"contract":"gentle-ai.secrets-broker/v1","capabilities":"1.0","ops":["request","list","exec","manage","grant","revoke","capabilities"],"layers":["global","project"],"prompt_backends":[],"field_kinds":["secret","text"],"max_fields":8,"keychain":"` + osMode() + `","streaming":true,"sync":false}` + "\n"
+	want := `{"ok":true,"contract":"qbit-vault.secrets-broker/v1","capabilities":"1.0","ops":["request","list","exec","manage","grant","revoke","capabilities"],"layers":["global","project"],"prompt_backends":[],"field_kinds":["secret","text"],"max_fields":8,"keychain":"` + osMode() + `","streaming":true,"sync":false}` + "\n"
 	if code != exitcode.OK || out != want {
 		t.Fatalf("code=%d\n got %s\nwant %s", code, out, want)
 	}

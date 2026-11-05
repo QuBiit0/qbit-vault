@@ -1,4 +1,4 @@
-# Contract: `gentle-ai.secrets-broker/v1`
+# Contract: `qbit-vault.secrets-broker/v1`
 
 Status: **draft 1.0.0-draft.2** (draft.2: `request` takes several typed fields; `list` reports `kind` and `unlinked_match`; `capabilities` reports field kinds and sync). Frozen on the first stable release; afterwards only additive changes under the same major, published as capability rows (`capabilities: 1.1`, `1.2`, ...). Consumers MUST refuse envelopes whose `contract` major they do not implement.
 
@@ -9,12 +9,12 @@ This contract defines the only surface through which a host (an agent runtime, i
 Every request and response carries:
 
 ```json
-{ "contract": "gentle-ai.secrets-broker/v1", "op": "request", "v": 1, "session": "pi:2f1c…", "cwd": "/home/me/repo", ... }
+{ "contract": "qbit-vault.secrets-broker/v1", "op": "request", "v": 1, "session": "pi:2f1c…", "cwd": "/home/me/repo", ... }
 ```
 
 | Field | Req | Description |
 | --- | --- | --- |
-| `contract` | yes | Literal `gentle-ai.secrets-broker/v1` |
+| `contract` | yes | Literal `qbit-vault.secrets-broker/v1` |
 | `op` | yes | One of `request`, `list`, `exec`, `manage`, `grant`, `revoke`, `capabilities` |
 | `v` | yes | Operation schema version, integer, currently `1` for all ops |
 | `session` | yes | Opaque host session id, `^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$` (prefix = host: `pi`, `claude`, `codex`, `cli`; the MCP server generates `mcp`) |
@@ -187,7 +187,7 @@ Response: `{ "ok": true, "revoked": 2 }`
 Request: `{ "op": "capabilities" }`
 Response:
 ```json
-{ "ok": true, "contract": "gentle-ai.secrets-broker/v1", "capabilities": "1.0",
+{ "ok": true, "contract": "qbit-vault.secrets-broker/v1", "capabilities": "1.0",
   "ops": ["request","list","exec","manage","grant","revoke","capabilities"],
   "layers": ["global","project"],
   "prompt_backends": ["pi-ui","osascript","powershell","zenity","kdialog","tty"],

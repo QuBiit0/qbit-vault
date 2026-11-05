@@ -1,27 +1,96 @@
 # Install: `go install` and `qbit-vault init`
 
-Nothing is released yet: there is no tag, no npm package, no Homebrew formula and no install script (Phase 5, `ROADMAP.md`). Today QBit Vault is a Go program that you install with the Go toolchain (Go 1.26 or newer, see `go.mod`).
+While the repository is private, the install is a Go build from source. There is no release, no npm package, no Homebrew formula and no install script yet (Phase 5, `ROADMAP.md`).
 
-## The install today
+## Quick path
+
+1. Check the prerequisites below.
+2. Install the binary (option A or B).
+3. Run `qbit-vault` (guided setup) or `qbit-vault init`, then `qbit-vault doctor`.
+4. Restart your agent so it picks up the MCP server.
+
+## Prerequisites
+
+| Need | Why |
+| --- | --- |
+| Go 1.26 or newer (`go version`; `go.mod` names `go 1.26.0`) | The only build tool. No C compiler is needed. |
+| `git` with read access to `github.com/QuBiit0/qbit-vault` | The repository is private. |
+| macOS, Linux (including WSL2) or Windows 10+ | The unit suite and the leak grep run on all three in CI; the Docker batteries (`e2e/`) run on Linux. |
+| An OS keychain, or willingness to use `init --passphrase` | A headless Linux box or WSL without Secret Service has no keychain, and there is no automatic fallback. |
+
+## Option A: from a checkout (recommended while private)
 
 ```bash
+git clone https://github.com/QuBiit0/qbit-vault
+cd qbit-vault
+go install ./cmd/qbit-vault
+```
+
+`git clone` uses whatever GitHub login you already have (credential manager, `gh auth login`, an SSH key with `git@github.com:QuBiit0/qbit-vault.git`). Building from a checkout never touches the Go module proxy.
+
+## Option B: `go install` by module path
+
+```bash
+# bash / zsh
+export GOPRIVATE=github.com/QuBiit0/*
 go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
-qbit-vault init
 ```
 
-`go install` puts the binary in `$(go env GOPATH)/bin` (`%USERPROFILE%\go\bin` on Windows); that directory must be on your `PATH`. Without a release tag, `@latest` resolves to the newest commit of the repository's default branch.
+```powershell
+# PowerShell
+go env -w GOPRIVATE=github.com/QuBiit0/*
+go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
+```
 
-**The repository is private.** `go install` needs access to it: set `GOPRIVATE=github.com/QuBiit0/*` (so Go does not ask the public proxy) and make sure `git` can read the repository (a GitHub login or a token in your git credentials). Without access, the command fails with a "repository not found" style error from `git`.
+`GOPRIVATE` stops Go from asking the public proxy and checksum database about a private module; Go then fetches it with `git`, so your git credentials must work non-interactively. If `git` reaches GitHub over HTTPS and prompts, either store a credential (`gh auth setup-git`, or a credential manager) or route the path over SSH: `git config --global url."git@github.com:".insteadOf "https://github.com/"`. Without access the command fails with a "repository not found" style error from `git`. Without a release tag, `@latest` is the newest commit of the default branch.
 
-Or build from a checkout:
+## Where the binary goes
+
+`go install` writes `qbit-vault` to `$GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN` is unset. Check with `go env GOBIN GOPATH`.
+
+| OS | Default location | File |
+| --- | --- | --- |
+| Linux | `~/go/bin` | `qbit-vault` |
+| macOS | `~/go/bin` | `qbit-vault` |
+| Windows | `%USERPROFILE%\go\bin` | `qbit-vault.exe` |
+
+That directory must be on your `PATH`. Verify with `qbit-vault version`, and with `which -a qbit-vault` (`where qbit-vault` on Windows) that no older copy earlier on the `PATH` shadows the new one.
+
+To build without installing: `go build -o qbit-vault ./cmd/qbit-vault` (`qbit-vault.exe` on Windows).
+
+## First run
 
 ```bash
-git clone https://github.com/QuBiit0/qbit-vault && cd qbit-vault
-go build -o qbit-vault ./cmd/qbit-vault        # qbit-vault.exe on Windows
-./qbit-vault init
+qbit-vault           # in a terminal: the guided setup (same as `qbit-vault tui`)
+qbit-vault init      # or: the scripted path, no questions on a machine with a keychain
+qbit-vault doctor    # read-only health report; exit 1 on any problem
 ```
 
-Supported platforms: macOS, Linux (including WSL2) and Windows 10+. The unit suite and the leak grep run on all three in CI; the Docker batteries (`e2e/`) run on Linux.
+- The TUI wizard runs `init` with the key storage and hosts you pick. `QBIT_VAULT_NO_TUI=1` makes bare `qbit-vault` print the help instead.
+- `init` registers the hosts it detects: Claude Code (`~/.claude/` or a `claude` binary), Codex (`~/.codex/` or `codex`) and Pi / Gentle Shell (`~/.pi/` or a `pi` / `gentle-shell` binary). Choose them yourself with `init --agents claude-code,codex,pi` or skip them with `--agents none`.
+- The registered MCP entry holds the **absolute path** of the binary that ran `init`. Moving or reinstalling to another directory means running `qbit-vault sync` (below).
+- Store your first secret yourself: `qbit-vault set GITHUB_TOKEN --global` (masked prompt). `init` never asks for a value and never reads your environment.
+
+## Update
+
+Re-run the same install command (`git pull` then `go install ./cmd/qbit-vault`, or the `@latest` form), then:
+
+```bash
+qbit-vault version     # confirm the new build is the one on PATH
+qbit-vault sync        # re-apply host registrations (needed if the binary path changed)
+qbit-vault doctor
+```
+
+Close your agents first: a running `qbit-vault mcp` keeps the old executable open, and on Windows the replacement can fail while it runs. An agent that was open during the update still runs the old MCP server until you restart it. `qbit-vault update` does not exist yet (Phase 5).
+
+## Uninstall
+
+```bash
+qbit-vault uninstall           # revert each host's config from its snapshot; keeps the vault
+qbit-vault uninstall --purge   # also delete the vault and its keychain entry (you type `purge`)
+```
+
+`uninstall` does not delete the binary: remove `qbit-vault` (or `qbit-vault.exe`) from the directory above. Details of what it restores, and the `--purge` refusal while the vault syncs, are in § `uninstall` below.
 
 ### Planned for Phase 5 (not built)
 
@@ -137,8 +206,6 @@ From then on every change syncs by itself, and machines that were offline catch 
 2. The Pi extension (Phase 4, not built yet) would be installed by you (`pi install npm:qbit-vault-pi`), so you would remove it the same way (`pi remove`); `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from your `go/bin` directory.
 3. Leave `~/.qbit-vault/` intact. With `--purge` you type the literal word `purge` instead of confirming; after every host reverted it deletes the keychain item and the directory, and nothing else. `uninstall` never touches the sync server, so `--purge` refuses while this vault syncs: run `qbit-vault remote logout` (or revoke the device from another machine) first.
 
-## Updates
+## Self-update (planned)
 
-Today: run the `go install` command again (or `git pull` and rebuild), then `qbit-vault sync` to re-apply the host registrations if the binary moved.
-
-Planned (Phase 5, not built): `qbit-vault update` downloads the release, verifies Minisign + checksums and swaps the binary atomically. A background check at most once per 24 h would print a one-line notice and be opt-out (`QBIT_VAULT_NO_UPDATE_CHECK=1`); it is the optional update check AGENTS.md invariant 8 allows.
+Not built (Phase 5): `qbit-vault update` downloads the release, verifies Minisign + checksums and swaps the binary atomically. A background check at most once per 24 h would print a one-line notice and be opt-out (`QBIT_VAULT_NO_UPDATE_CHECK=1`); it is the optional update check AGENTS.md invariant 8 allows.

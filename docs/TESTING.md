@@ -1,6 +1,6 @@
 # Testing
 
-Three tiers, mirroring Gentle AI, plus a leak battery that runs on every tier. **Built today:** Tier 1 (`go test ./...`, run in CI on Linux, macOS and Windows with `tools/leakgrep` over the verbose output), the Docker sync battery (`e2e/docker-test.sh`) and the Docker hosts battery (`e2e/hosts-test.sh`), the Docker install-from-scratch battery (`e2e/install-test.sh`), the leak battery and the conformance harness. **Planned:** the rest of Tier 2 as separate images (items marked *planned* below), Tier 3, `qbit-vault-pi` tests (Phase 4) and a Windows/macOS e2e job. Package names below are the directories under `internal/`.
+Three tiers, mirroring Gentle AI, plus a leak battery that runs on every tier. **Built today:** Tier 1 (`go test ./...`, run in CI on Linux, macOS and Windows with `tools/leakgrep` over the verbose output; see § CI below), the Docker sync battery (`e2e/docker-test.sh`) and the Docker hosts battery (`e2e/hosts-test.sh`), the Docker install-from-scratch battery (`e2e/install-test.sh`), the leak battery and the conformance harness. **Planned:** the rest of Tier 2 as separate images (items marked *planned* below), Tier 3, `qbit-vault-pi` tests (Phase 4) and a Windows/macOS e2e job. Package names below are the directories under `internal/`.
 
 ## Tier 1 — unit (`go test ./...`, `pnpm test` in packages)
 
@@ -10,7 +10,7 @@ Three tiers, mirroring Gentle AI, plus a leak battery that runs on every tier. *
 | `keychain` | backend selection; passphrase mode KDF params; cached key TTL expiry |
 | `grants` | (name, layer) binding: a global grant never injects a project override and the reverse; `mv`/`replace`/`rm` drop grants; each scope; expiry purge; `once` consumed exactly once; project root resolution incl. worktrees; no inheritance across sessions |
 | `runner`, `dumpguard`, `cli` (`exec`) | env scrubbing (same-named parent var removed); injection present in child, absent in parent after; dump-guard list (every entry, plus negative cases like `env | grep PATH` being *allowed* when no secret is injected); binary allowlist with wrappers (`sudo`, `npx`, `uv run`); timeout kills the process group; exit code passthrough |
-| `redact` | raw, base64 std/url ±padding, percent (query/path/strict/Python `quote`/JS `encodeURIComponent`, either hex case), JSON-escaped (incl. `\/`), quoted; multi-line values (LF/CRLF translation, each line ≥ 16 bytes alone, whole PEM, interleaved with other output); base64 inner-substring at all three byte alignments (Basic auth `base64(user:value)`, 0–8 byte prefixes, ±padding, std/url); chunk boundaries at every offset of a value and one-byte writes; short-value warning and still redacted; overlapping values (longest wins), shared prefixes, adjacent occurrences; fail-closed after `Wipe`; never printed via `fmt`. `BenchmarkRedact` / `BenchmarkRedactStream` track 1 MiB against 16 secrets (about 130 MB/s on a Ryzen 7 7435HS) |
+| `redact` | raw, base64 std/url ±padding, percent (query/path/strict/Python `quote`/JS `encodeURIComponent`, either hex case), JSON-escaped (incl. `\/`; a value with invalid UTF-8 is also redacted in the form Go 1.26 `encoding/json` writes, the `\ufffd` escape beside literal text, which Go 1.27 writes as the literal U+FFFD; `TestJSONEscapeMatchesEncodingJSON` accepts either real form), quoted; multi-line values (LF/CRLF translation, each line ≥ 16 bytes alone, whole PEM, interleaved with other output); base64 inner-substring at all three byte alignments (Basic auth `base64(user:value)`, 0–8 byte prefixes, ±padding, std/url); chunk boundaries at every offset of a value and one-byte writes; short-value warning and still redacted; overlapping values (longest wins), shared prefixes, adjacent occurrences; fail-closed after `Wipe`; never printed via `fmt`. `BenchmarkRedact` / `BenchmarkRedactStream` track 1 MiB against 16 secrets (about 130 MB/s on a Ryzen 7 7435HS) |
 | `prompt` | each backend behind an interface with a fake; cancel/blank/whitespace paths; value never in argv or stdout; native backends: exact argv or script per helper and dialog kind, escaping tables (quotes, backslashes, `$`, backticks, `%`, newlines, NUL, ANSI, bidi, invalid UTF-8) proving request text cannot leave its literal, stdout parsing and cancel codes per tool, availability matrix and selection order through injected `GOOS`/env/`LookPath`, and (Windows) the real PowerShell parser over every script |
 | `audit` | hash chain; verify detects an edited middle line, a deleted line, a truncated file |
 | `broker` | every op; every refusal type reachable; `grant` or `manage` without prompt token → `not_model_callable`; every `manage` action applies only after confirmation and leaves the vault and grants byte-identical on decline; `manage` never creates a grant; `list` never shows another project; `policy` strings match `CONTRACT.md` verbatim; existence not disclosed in `request` responses |
@@ -64,6 +64,17 @@ The dialogs open on a real desktop and cannot run in CI; unit tests cover the co
 3. **Linux, GNOME (zenity) and KDE (kdialog).** With `DISPLAY` or `WAYLAND_DISPLAY` set, `set` opens the dialog; on a console login (no display) the terminal prompt is used; `QBIT_VAULT_PROMPT=kdialog` on a machine without it fails with `prompt backend kdialog is unavailable`.
 4. **Several fields.** A `secret_request` with a `text` and a `secret` field: PowerShell and zenity show one form (the text box visible, the secret box masked); osascript, kdialog and the terminal ask one box after the other with `field N of M`; Cancel on any box stores nothing.
 5. **Every OS.** The value is stored (`exec` with a grant prints it redacted); nothing of the value is in the process list command lines while the dialog is open; a dialog left open ends with `prompt timed out` after `QBIT_VAULT_PROMPT_TIMEOUT` and the helper process is gone.
+
+## CI (`.github/workflows/ci.yml`)
+
+Runs on every pull request and on pushes to `main`.
+
+| Job | Where | What |
+| --- | --- | --- |
+| `test` | ubuntu, macos and windows | Go version named by `go.mod` (`go-version-file`). `gofmt -l` (ubuntu only), `go vet ./...`, `go build ./...`, `go test -v -count=1 ./...` (with `-race` on ubuntu only) teed to `ci-logs/`, then `tools/leakgrep` over it |
+| `test-stable-go` | ubuntu | Latest stable Go. `go vet`, `go test -count=1 ./...`, leak grep. It exists because the redactor models `encoding/json`, whose output for invalid UTF-8 differs between Go versions; a change shows up on the pull request instead of after a toolchain upgrade |
+
+The Docker batteries are not in CI. Run them locally before a change that touches sync, host registration or the install path. Tests that check Windows path escaping (`internal/hosts/claude`, `internal/hosts/codex`) run on Windows only; on POSIX a `C:\` path is correctly refused as not absolute.
 
 ## Leak battery (every tier)
 

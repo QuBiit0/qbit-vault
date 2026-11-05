@@ -18,7 +18,7 @@ These are tested, not just documented. A PR that breaks one is rejected regardle
 
 ## Repository layout
 
-What exists on `feat/cli-skeleton`. Items marked *planned* do not exist yet (`docs/ROADMAP.md`).
+What exists on `main`. Items marked *planned* do not exist yet (`docs/ROADMAP.md`).
 
 ```
 qbit-vault/                     (module github.com/QuBiit0/qbit-vault)
@@ -31,7 +31,7 @@ qbit-vault/                     (module github.com/QuBiit0/qbit-vault)
 │   ├── vault/                  encrypted store, layers, envelope users, atomic writes, backups,
 │   │                           schema 2 body, restore, rekey, sync state files
 │   ├── envelope/               AEAD envelope shared by vault.enc, grants.enc and remote files
-│   ├── keychain/               OS keychain + passphrase fallback, unlock cache
+│   ├── keychain/               OS keychain or passphrase-wrapped key (key.enc), unlock cache
 │   ├── perm/                   owner-only permissions (POSIX modes, Windows DACL)
 │   ├── lockfile/               cross-process lock files
 │   ├── secret/                 Secret type that redacts on every output path
@@ -62,10 +62,12 @@ qbit-vault/                     (module github.com/QuBiit0/qbit-vault)
 ├── docs/                       PRD, ARCHITECTURE, CLI, STORAGE, REMOTE_SYNC, THREAT_MODEL, TESTING,
 │                               AGENT_INTEGRATIONS, GENTLE_SHELL_EXTENSION, INSTALL, ROADMAP, PROPOSAL
 ├── e2e/                        Docker batteries: docker-test.sh (sync), hosts-test.sh (hosts),
-│                               plus leakscan/, mcpclient/, proxy/ helpers
+│                               install-test.sh (install from scratch); helpers leakscan/, mcpclient/, proxy/
+├── design/                     identity and TUI artboards (HTML), system.md (tokens), system.html
+├── assets/brand/               banner, mark and icon SVGs, terminal marks (.ans), term-mark.py
 ├── tools/leakgrep/             CI leak grep over captured test output
 ├── odd/tasks/                  work logs (what was built, decisions, commits)
-├── .github/workflows/ci.yml    build, vet, test on Linux/macOS/Windows, leak grep
+├── .github/workflows/ci.yml    gofmt, vet, build, test on Linux/macOS/Windows, plus a latest-stable-Go job; leak grep
 ├── packages/qbit-vault-pi/     planned (Phase 4): TypeScript Pi / Gentle Shell extension
 ├── packages/qbit-vault/        planned (Phase 5): npm launcher
 └── scripts/install.sh, install.ps1   planned (Phase 5)

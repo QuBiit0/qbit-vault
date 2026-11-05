@@ -85,3 +85,19 @@ func plainTime(s string) string {
 	}
 	return s
 }
+
+// truncLeft cuts s to w columns from the left, keeping the end: a path is
+// recognized by its file name.
+func truncLeft(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+	r := []rune(s)
+	for len(r) > 0 && lipgloss.Width(string(r))+1 > w {
+		r = r[1:]
+	}
+	return "…" + string(r)
+}

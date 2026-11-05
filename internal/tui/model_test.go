@@ -174,13 +174,13 @@ func TestSectionSwitching(t *testing.T) {
 		want    []string // text the section's panes show
 	}{
 		{"jump to Grants", []tea.KeyMsg{digit('2')}, "Grants", []string{"Active grants"}},
-		{"jump to Hosts", []tea.KeyMsg{digit('3')}, "Hosts", []string{"Hosts list: coming in T3", "Hosts detail: coming in T3"}},
-		{"jump to Update", []tea.KeyMsg{digit('7')}, "Update", []string{"Update list: coming in T3", "Update detail: coming in T3"}},
-		{"down twice", []tea.KeyMsg{keyDown, keyDown}, "Hosts", []string{"Hosts list: coming in T3"}},
+		{"jump to Hosts", []tea.KeyMsg{digit('3')}, "Hosts", []string{"HOST", "claude-code", "STEPS"}},
+		{"jump to Update", []tea.KeyMsg{digit('7')}, "Update", []string{"Planned", "Update by hand"}},
+		{"down twice", []tea.KeyMsg{keyDown, keyDown}, "Hosts", []string{"HOST"}},
 		{"up stops at the first section", []tea.KeyMsg{keyUp}, "Secrets", []string{"GITHUB_TOKEN"}},
-		{"down stops at the last section", []tea.KeyMsg{digit('7'), keyDown}, "Update", []string{"Update list: coming in T3"}},
+		{"down stops at the last section", []tea.KeyMsg{digit('7'), keyDown}, "Update", []string{"Planned"}},
 		{"digit 8 is not a section", []tea.KeyMsg{digit('8')}, "Secrets", []string{"GITHUB_TOKEN"}},
-		{"jump works from another pane", []tea.KeyMsg{keyTab, digit('5')}, "Sync", []string{"Sync list: coming in T3"}},
+		{"jump works from another pane", []tea.KeyMsg{keyTab, digit('5')}, "Sync", []string{"does not sync"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

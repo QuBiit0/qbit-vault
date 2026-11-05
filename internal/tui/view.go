@@ -142,7 +142,8 @@ func (m Model) homeView() string {
 	}
 	listW, detailW := m.paneWidths()
 	sec := sections[m.section]
-	listTitle, list, detailTitle, detail := sec.title, m.placeholder(sec, sec.title+" list"), "Detail", m.placeholder(sec, sec.title+" detail")
+	listTitle, detailTitle := sec.title, "Detail"
+	var list, detail []string
 	switch sec.title {
 	case "Secrets":
 		detailTitle, detail = m.secretDetail(detailW - 3)
@@ -150,12 +151,30 @@ func (m Model) homeView() string {
 	case "Grants":
 		listTitle, list = "Active grants", m.grantsBody(listW-3)
 		detailTitle, detail = m.grantDetail(detailW - 3)
+	case "Hosts":
+		list = m.hostsBody(listW - 3)
+		detailTitle, detail = m.hostDetail(detailW - 3)
+	case "Audit":
+		listTitle, list = "Audit log · newest first", m.auditBody(listW-3)
+		detailTitle, detail = m.auditDetail(detailW - 3)
+	case "Sync":
+		listTitle, list = "Sync status", m.syncBody(listW-3)
+		detailTitle, detail = m.syncDetail(detailW - 3)
+	case "Doctor":
+		listTitle, list = "Doctor", m.doctorBody(listW-3)
+		detailTitle, detail = m.doctorDetail(detailW - 3)
+	case "Update":
+		listTitle, list = "Update · planned", m.updateBody(listW-3)
+		detailTitle, detail = m.updateDetail(detailW - 3)
 	}
 	panes := joinPanes(" ",
 		m.box("qbit-vault", sectionsW, m.sectionRows(sectionsW-4), m.focus == PaneSections),
 		m.box(listTitle, listW, list, m.focus == PaneList),
 		m.box(detailTitle, detailW, detail, m.focus == PaneDetail))
 	lines := []string{m.header(), "", panes, ""}
+	if sec.title == "Update" {
+		lines = append(lines, m.theme.Mist("Update today:"), "  "+m.theme.Frost(updateCommand), "")
+	}
 	keys := m.focusKeys()
 	switch {
 	case m.ask != nil:
@@ -192,11 +211,6 @@ func (m Model) sectionRows(w int) []string {
 		rows[i] = m.theme.Key(label[:1]) + m.theme.Frost(label[1:]) + pad + m.theme.Mist(badge)
 	}
 	return rows
-}
-
-// placeholder fills a pane until the task that builds it lands.
-func (m Model) placeholder(s section, what string) []string {
-	return []string{"", what + ": coming in " + s.task, m.theme.Mist("built in task " + s.task)}
 }
 
 // box draws a titled pane of outer width w and paneRows lines. The focused
@@ -264,6 +278,31 @@ func (m Model) sectionKeys() [][2]string {
 			return nil
 		}
 		return [][2]string{kv("r", "revoke"), kv("R", "revoke all")}
+	case "Hosts":
+		return m.stateKeysFor(m.hp.st, func() [][2]string {
+			if len(m.hp.items) == 0 {
+				return nil
+			}
+			return [][2]string{kv("s", "repair"), kv("S", "repair all"), kv("x", "uninstall"), kv("a", "register")}
+		})
+	case "Audit":
+		return m.stateKeysFor(m.au.st, func() [][2]string { return [][2]string{kv("v", "verify chain")} })
+	case "Sync":
+		return m.stateKeysFor(m.sy.st, func() [][2]string { return nil })
+	case "Doctor":
+		return m.stateKeysFor(m.dr.st, func() [][2]string { return [][2]string{kv("r", "rerun")} })
 	}
 	return nil
+}
+
+// stateKeysFor is the footer of a section that can be locked or failed: those
+// states offer unlock or retry, otherwise the section's own keys.
+func (m Model) stateKeysFor(st loadState, ok func() [][2]string) [][2]string {
+	switch st {
+	case loadLocked:
+		return [][2]string{kv("u", "unlock")}
+	case loadFailed:
+		return [][2]string{kv("enter", "retry")}
+	}
+	return ok()
 }

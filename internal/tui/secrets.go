@@ -257,6 +257,7 @@ type form struct {
 	at        int
 	err       string
 	projLabel string // label of the current repository, "" outside one
+	prefill   string // the description the edit form opened with, as shown
 }
 
 func newInput(v string) textinput.Model {
@@ -273,6 +274,7 @@ func newForm(edit bool, s Secret, projLabel string) *form {
 	if edit {
 		f.ref, f.label, f.project, f.sensitive = SecretRef{Name: s.Name, Project: s.Project}, s.Layer, s.Project, s.Sensitive
 		f.desc = newInput(s.Description)
+		f.prefill = f.desc.Value()
 		f.fields = []formField{fDesc, fSens}
 	}
 	f.focusCurrent()
@@ -338,7 +340,15 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 	f := m.form
 	desc := strings.TrimSpace(f.desc.Value())
 	if f.edit {
-		err := m.b.EditSecret(SecretEdit{SecretRef: f.ref, Description: desc, Sensitive: f.sensitive})
+		// An untouched field keeps the stored description: the form shows it
+		// on one line, so writing it back could rewrite it.
+		edit := SecretEdit{SecretRef: f.ref, Sensitive: f.sensitive}
+		if f.desc.Value() == f.prefill {
+			edit.KeepDescription = true
+		} else {
+			edit.Description = desc
+		}
+		err := m.b.EditSecret(edit)
 		m.form = nil
 		m.refreshAfter(err, "updated "+clean(f.ref.Name))
 		return m, nil
@@ -414,7 +424,8 @@ func (m Model) formView() string {
 	if f.edit {
 		rows = append(rows, " "+t.Mist("Changes metadata only. The value is not touched."))
 	} else {
-		rows = append(rows, " "+t.Mist("The value is asked next, in a masked prompt. It is never typed here."), " "+t.Mist("Saving does not grant anything: agents still have to ask."))
+		rows = append(rows, " "+t.Warn("The value is not typed here; do not paste a secret into the description."),
+			" "+t.Mist("The value is asked next, in a masked prompt."), " "+t.Mist("Saving does not grant anything: agents still have to ask."))
 	}
 	keys := [][2]string{kv("enter", "save"), kv("tab", "next field"), kv("esc", "cancel")}
 	w := m.width - len(indent) - 2
@@ -428,6 +439,7 @@ type askKind int
 const (
 	askRemove askKind = iota
 	askRevokeAll
+	askUninstall
 )
 
 // confirmation is a destructive key waiting for a "y": it states the
@@ -452,6 +464,9 @@ func (m Model) updateAsk(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case askRevokeAll:
 		n, err := m.b.RevokeAllGrants()
 		m.refreshAfter(err, "revoked "+plural(n, "grant"))
+	case askUninstall:
+		s, err := m.b.UninstallHost(c.ref.Name)
+		m.refreshAfter(err, s)
 	}
 	return m, nil
 }
@@ -469,6 +484,11 @@ func (m *Model) refreshAfter(err error, done string) {
 	}
 	m.loadSecrets()
 	m.loadGrants()
+	m.loadHosts()
+	switch sections[m.section].title {
+	case "Audit", "Sync", "Doctor":
+		m.enterSection() // an unlock may have opened what was locked
+	}
 	if err != nil {
 		m.notice = notice{text: errText(err), bad: true}
 		return

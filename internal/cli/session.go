@@ -61,7 +61,7 @@ func (g *globals) openSession() (*session, error) {
 	if err != nil {
 		return nil, mapErr(err, "")
 	}
-	key, mode, err := keychain.Unlock(home, id, keychain.Options{Passphrase: g.unlockPassphrase})
+	key, mode, err := keychain.Unlock(home, id, keychain.Options{Passphrase: g.passphraseSource()})
 	if err != nil {
 		return nil, mapErr(err, "")
 	}
@@ -71,6 +71,26 @@ func (g *globals) openSession() (*session, error) {
 		return nil, mapErr(err, "")
 	}
 	return &session{v: v, key: key, mode: mode, home: home}, nil
+}
+
+// noPromptKey is the internal switch of the no-prompt mode. It is read through
+// getenv, which the in-process runner wraps, and it is not a valid environment
+// variable name (it holds an "="): nothing in the real environment can set it.
+const noPromptKey = "QBIT_VAULT_INTERNAL=no-prompt"
+
+// noPrompt reports whether this command runs while the TUI owns the terminal,
+// where a prompt would be drawn over the screen. The vault then opens through
+// the OS keychain or an unexpired unlock cache only; anything else is the
+// refusal vault_locked.
+func (g *globals) noPrompt() bool { return g.getenv(noPromptKey) == "1" }
+
+// passphraseSource is where a vault in passphrase mode with no cached key may
+// get its passphrase: the prompt backend, or nowhere in the no-prompt mode.
+func (g *globals) passphraseSource() keychain.PassphraseFunc {
+	if g.noPrompt() {
+		return nil
+	}
+	return g.unlockPassphrase
 }
 
 // errSessionLocked: the vault cannot be opened without a prompt or a repair.
@@ -130,7 +150,7 @@ func (g *globals) openRecovering(home, id string, key secret.Secret) (*vault.Vau
 // It reports false, changing nothing, when no key is staged or the staged key
 // cannot be read. The caller owns the returned key.
 func (g *globals) finishRekey(home, id string, cur secret.Secret) (secret.Secret, bool) {
-	opts := keychain.Options{Passphrase: g.unlockPassphrase}
+	opts := keychain.Options{Passphrase: g.passphraseSource()}
 	if has, err := keychain.HasStaged(home, id, opts); err != nil || !has {
 		return secret.Secret{}, false
 	}

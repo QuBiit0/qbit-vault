@@ -6,9 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 	"github.com/QuBiit0/qbit-vault/internal/hosts/fake"
 	"github.com/QuBiit0/qbit-vault/internal/keychain"
 	"github.com/QuBiit0/qbit-vault/internal/prompt"
@@ -558,15 +563,25 @@ func TestTUIUnlockAsksThePassphraseThroughThePromptBackend(t *testing.T) {
 }
 
 // The tui package cannot reach the grant machinery; the adapter must not
-// expose a route to it either: its only grant entry points are the three reads
-// and revokes of the Backend interface.
+// expose a route to it either: its only grant entry points are the read and
+// the two revokes of the Backend interface. The pattern is the interface-level
+// one (tui.TestBackendHasNoMethodThatCreatesOrApprovesAGrant), so a method
+// named for approving, allowing, permitting or a token cannot slip in.
 func TestTUIBackendAdapterImplementsExactlyTheBackendInterface(t *testing.T) {
 	var _ tui.Backend = (*tuiBackend)(nil)
-	typ := reflect.TypeOf(&tuiBackend{})
-	for i := range typ.NumMethod() {
-		n := strings.ToLower(typ.Method(i).Name)
-		if strings.Contains(n, "grant") && n != "grants" && n != "revokegrant" && n != "revokeallgrants" {
-			t.Errorf("tuiBackend.%s looks like a grant-creating method", typ.Method(i).Name)
+	allowed := map[string]bool{"Grants": true, "RevokeGrant": true, "RevokeAllGrants": true}
+	suspicious := regexp.MustCompile(`(?i)grant|approve|allow|permit|authori|consent|token`)
+	for _, typ := range []reflect.Type{reflect.TypeOf(&tuiBackend{}), reflect.TypeOf((*tui.Backend)(nil)).Elem()} {
+		for i := range typ.NumMethod() {
+			if name := typ.Method(i).Name; suspicious.MatchString(name) && !allowed[name] {
+				t.Errorf("%s.%s looks like a grant-creating method", typ, name)
+			}
+		}
+	}
+	// The pattern must be able to fail: it matches names that approve or allow.
+	for _, bad := range []string{"ApproveGrant", "AllowOnce", "PermitHost", "Authorize", "GiveConsent", "NewToken"} {
+		if !suspicious.MatchString(bad) {
+			t.Errorf("the pattern misses %s", bad)
 		}
 	}
 }
@@ -673,5 +688,588 @@ func TestTUIDescriptionsThatLookLikeFlagsAreStoredAsText(t *testing.T) {
 	out := w.mustRun("", "describe", "D_KEY", "--global")
 	if !strings.Contains(out, "--sensitive") || strings.Contains(out, "sensitive:   yes") {
 		t.Errorf("describe:\n%s", out)
+	}
+}
+
+// ---- T3 F3: commands that run while the TUI owns the terminal never prompt ----
+
+// The window quiet() could not close: the vault opened without a prompt a
+// moment ago, then the unlock cache expired, and the command asked for the
+// passphrase over the screen. The no-prompt mode fails with ErrLocked instead.
+func TestTUINoPromptModeFailsLockedInsteadOfAskingForThePassphrase(t *testing.T) {
+	w := passphraseWorld(t)
+	f := withBackend(t, answers(val(fxPass), val(fxPass), val(fxPass)))
+	b := tuiOver(w)
+	for name, args := range map[string][]string{
+		"rm":     {"rm", "--global", "--yes", "--", "A_KEY"},
+		"edit":   {"edit", "--global", "--description=x", "--sensitive=false", "--", "A_KEY"},
+		"revoke": {"revoke", "--all"},
+	} {
+		err := b.g.runCommandNoPrompt(args...)
+		if !errors.Is(err, tui.ErrLocked) {
+			t.Errorf("%s: err = %v, want tui.ErrLocked", name, err)
+		}
+	}
+	if len(f.Calls) != 0 {
+		t.Fatalf("a no-prompt command prompted: %+v", f.Calls)
+	}
+	// The same command in the normal mode does ask: the mode is what changes it.
+	_ = b.g.runCommand("rm", "--global", "--yes", "--", "A_KEY")
+	if len(f.Calls) == 0 || f.Calls[0].Kind != "passphrase" {
+		t.Fatalf("the control did not prompt, so the test proves nothing: %+v", f.Calls)
+	}
+}
+
+func TestTUINoPromptModeStillRunsTheCommandOnAnOpenVault(t *testing.T) {
+	w := newWorld(t)
+	seed(w, "A_KEY", "--global")
+	f := withBackend(t, answers())
+	if err := tuiOver(w).g.runCommandNoPrompt("rm", "--global", "--yes", "--", "A_KEY"); err != nil {
+		t.Fatal(err)
+	}
+	if out := w.mustRun("", "list", "--layer", "all"); strings.Contains(out, "A_KEY") {
+		t.Errorf("the secret is still listed:\n%s", out)
+	}
+	if len(f.Calls) != 0 {
+		t.Errorf("prompted: %+v", f.Calls)
+	}
+}
+
+// The mutations of the TUI go through the no-prompt mode: with the quiet
+// pre-check gone, a locked vault is still ErrLocked and nothing prompts.
+func TestTUIMutationsUseTheNoPromptMode(t *testing.T) {
+	w := passphraseWorld(t)
+	f := withBackend(t, answers(val(fxPass), val(fxPass)))
+	b := tuiOver(w)
+	err := b.EditSecret(tui.SecretEdit{SecretRef: tui.SecretRef{Name: "A_KEY"}, KeepDescription: true})
+	if !errors.Is(err, tui.ErrLocked) || len(f.Calls) != 0 {
+		t.Errorf("edit: err = %v, calls = %+v", err, f.Calls)
+	}
+	if err := b.RemoveSecret(tui.SecretRef{Name: "A_KEY"}); !errors.Is(err, tui.ErrLocked) || len(f.Calls) != 0 {
+		t.Errorf("remove: err = %v, calls = %+v", err, f.Calls)
+	}
+}
+
+// ---- T3 F4: an unchanged description is kept as stored ----
+
+func TestTUIEditKeepsAMultiLineDescriptionWhenToldToKeepIt(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun(fxVal+"\n", "set", "M_KEY", "--global", "--stdin", "--description", "line one\nline two")
+	withBackend(t, answers())
+	b := tuiOver(w)
+	if err := b.EditSecret(tui.SecretEdit{SecretRef: tui.SecretRef{Name: "M_KEY"}, KeepDescription: true, Sensitive: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := storedDescription(t, w, "M_KEY"); got != "line one\nline two" {
+		t.Fatalf("description = %q, want it untouched", got)
+	}
+	if out := w.mustRun("", "describe", "M_KEY", "--global"); !strings.Contains(out, "sensitive:   yes") {
+		t.Errorf("the sensitive flag was not applied:\n%s", out)
+	}
+	if err := b.EditSecret(tui.SecretEdit{SecretRef: tui.SecretRef{Name: "M_KEY"}, Description: "new text"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := storedDescription(t, w, "M_KEY"); got != "new text" {
+		t.Fatalf("description = %q, want the new text", got)
+	}
+	// An explicit empty description clears it.
+	if err := b.EditSecret(tui.SecretEdit{SecretRef: tui.SecretRef{Name: "M_KEY"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := storedDescription(t, w, "M_KEY"); got != "" {
+		t.Fatalf("description = %q, want it cleared", got)
+	}
+}
+
+// storedDescription reads a secret's description from the vault itself, not
+// from the one-lined listing.
+func storedDescription(t *testing.T, w *world, name string) string {
+	t.Helper()
+	s, err := (&globals{getenv: envFrom(nil), home: w.home}).openSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	cwd, _ := os.Getwd()
+	es, err := s.v.List(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wipeEntries(es)
+	for _, e := range es {
+		if e.Name == name {
+			return e.Record.Description
+		}
+	}
+	t.Fatalf("%s is not stored", name)
+	return ""
+}
+
+// ---- T3: hosts ----
+
+// hostWorld is a vault with one registered fake host.
+func hostWorld(t *testing.T) (*world, *fake.Adapter) {
+	t.Helper()
+	w := newBareWorld(t)
+	h := fakeHost(t, w)
+	withHosts(t, h)
+	w.mustRun("", "init")
+	return w, h
+}
+
+// secondHost is a detected host that is not registered.
+func secondHost(t *testing.T, w *world, name string) *fake.Adapter {
+	t.Helper()
+	dir := filepath.Join(filepath.Dir(w.home), name)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return fake.New(name, dir)
+}
+
+func hostByName(t *testing.T, hs []tui.HostInfo, name string) tui.HostInfo {
+	t.Helper()
+	for _, h := range hs {
+		if h.Name == name {
+			return h
+		}
+	}
+	t.Fatalf("host %s is not listed: %+v", name, hs)
+	return tui.HostInfo{}
+}
+
+func TestTUIHostsListsEachStepWithItsFileAndStatus(t *testing.T) {
+	w, h := hostWorld(t)
+	hs, err := tuiOver(w).Hosts()
+	if err != nil || len(hs) != 1 {
+		t.Fatalf("hosts = %+v, err = %v", hs, err)
+	}
+	got := hs[0]
+	if got.Name != "fake" || !got.Registered || !got.Detected || got.NoAdapter || len(got.Steps) != 2 {
+		t.Fatalf("host = %+v", got)
+	}
+	for i, want := range []struct{ name, file string }{{"mcp", "config.json"}, {"hooks", "hooks.json"}} {
+		s := got.Steps[i]
+		if s.Name != want.name || s.Status != tui.StepOK || filepath.Base(s.File) != want.file || filepath.Base(filepath.Dir(s.File)) != filepath.Base(h.Dir) {
+			t.Errorf("step %d = %+v, want %s %s in %s", i, s, want.name, tui.StepOK, h.Dir)
+		}
+	}
+}
+
+// The statuses are the ones doctor reports: drift is warn, per step.
+func TestTUIHostsReportsDriftLikeDoctorDoes(t *testing.T) {
+	w, h := hostWorld(t)
+	if err := os.WriteFile(filepath.Join(h.Dir, "hooks.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b := tuiOver(w)
+	host := hostByName(t, mustHosts(t, b), "fake")
+	if host.Steps[0].Status != tui.StepOK || host.Steps[1].Status != tui.StepDrift {
+		t.Fatalf("steps = %+v, want mcp ok and hooks drift", host.Steps)
+	}
+	for _, c := range b.g.runDoctor().Checks {
+		switch c.Name {
+		case "host.fake.mcp":
+			if c.Status != "ok" {
+				t.Errorf("doctor says %s for mcp", c.Status)
+			}
+		case "host.fake.hooks":
+			if c.Status != "warn" || !strings.Contains(c.Detail, "changed since registration") {
+				t.Errorf("doctor says %s %q for hooks", c.Status, c.Detail)
+			}
+		}
+	}
+}
+
+func mustHosts(t *testing.T, b *tuiBackend) []tui.HostInfo {
+	t.Helper()
+	hs, err := b.Hosts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hs
+}
+
+func TestTUIHostsListsDetectedUnregisteredAndAdapterlessHosts(t *testing.T) {
+	w, h := hostWorld(t)
+	second := secondHost(t, w, "second")
+	ghost := fake.New("ghost", filepath.Join(filepath.Dir(w.home), "nowhere"))
+	withHosts(t, h, second, ghost)
+	hs := mustHosts(t, tuiOver(w))
+	if s := hostByName(t, hs, "second"); s.Registered || !s.Detected || len(s.Steps) != 2 || s.Steps[0].Status != tui.StepMissing || s.Steps[0].File != "" {
+		t.Errorf("second = %+v, want detected, not registered, steps missing", s)
+	}
+	if g := hostByName(t, hs, "ghost"); g.Registered || g.Detected {
+		t.Errorf("ghost = %+v, want not detected", g)
+	}
+	withHosts(t) // this build knows no host any more
+	if g := hostByName(t, mustHosts(t, tuiOver(w)), "fake"); !g.NoAdapter || !g.Registered {
+		t.Errorf("fake = %+v, want a registered host without an adapter", g)
+	}
+}
+
+func TestTUIRepairHostsReappliesTheRegistrationLikeSync(t *testing.T) {
+	w, h := hostWorld(t)
+	second := secondHost(t, w, "second")
+	withHosts(t, h, second)
+	f := withBackend(t, answers())
+	b := tuiOver(w)
+	if err := os.WriteFile(filepath.Join(h.Dir, "hooks.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := b.RepairHosts("fake")
+	if err != nil || !strings.Contains(sum, "fake") || !strings.Contains(sum, "hooks") {
+		t.Fatalf("summary = %q, err = %v", sum, err)
+	}
+	if st := hostByName(t, mustHosts(t, b), "fake").Steps[1].Status; st != tui.StepOK {
+		t.Errorf("hooks is %s after the repair", st)
+	}
+	if _, err := vault.ReadHosts(w.home); err != nil {
+		t.Fatal(err)
+	}
+	if hostByName(t, mustHosts(t, b), "second").Registered {
+		t.Error("a repair registered a host that was only detected")
+	}
+	// Nothing to repair: said plainly, and nothing is rewritten.
+	sum, err = b.RepairHosts("")
+	if err != nil || !strings.Contains(sum, "up to date") {
+		t.Errorf("summary = %q, err = %v", sum, err)
+	}
+	if len(f.Calls) != 0 {
+		t.Errorf("a repair prompted: %+v", f.Calls)
+	}
+}
+
+func TestTUIRepairHostsRefusesWhatIsNotRegistered(t *testing.T) {
+	w, h := hostWorld(t)
+	withHosts(t, h, secondHost(t, w, "second"))
+	b := tuiOver(w)
+	for _, name := range []string{"second", "nope"} {
+		if _, err := b.RepairHosts(name); err == nil || !strings.Contains(err.Error(), "not registered") {
+			t.Errorf("RepairHosts(%q) err = %v, want not registered", name, err)
+		}
+	}
+	if recorded, _ := vault.ReadHosts(w.home); len(recorded) != 1 {
+		t.Errorf("state.json records %d hosts, want only fake", len(recorded))
+	}
+}
+
+func TestTUIUninstallHostRevertsOneHostAndKeepsTheVault(t *testing.T) {
+	w, h := hostWorld(t)
+	second := secondHost(t, w, "second")
+	withHosts(t, h, second)
+	w.mustRun("", "sync", "--agents", "second")
+	seed(w, "KEEP_KEY", "--global")
+	f := withBackend(t, answers())
+	b := tuiOver(w)
+	sum, err := b.UninstallHost("fake")
+	if err != nil || !strings.Contains(sum, "fake") {
+		t.Fatalf("summary = %q, err = %v", sum, err)
+	}
+	if _, err := os.Stat(filepath.Join(h.Dir, "config.json")); !os.IsNotExist(err) {
+		t.Errorf("the config file we created is still there: %v", err)
+	}
+	recorded, _ := vault.ReadHosts(w.home)
+	if _, still := recorded["fake"]; still || len(recorded) != 1 {
+		t.Errorf("state.json records %v, want only second", recorded)
+	}
+	if w.value("KEEP_KEY") != fxVal {
+		t.Error("uninstalling a host touched the vault")
+	}
+	if !w.auditHas(`"uninstall"`) {
+		t.Error("the uninstall was not audited")
+	}
+	if len(f.Calls) != 0 {
+		t.Errorf("an uninstall prompted: %+v", f.Calls)
+	}
+	for _, name := range []string{"fake", "nope", ""} {
+		if _, err := b.UninstallHost(name); err == nil {
+			t.Errorf("UninstallHost(%q) succeeded", name)
+		}
+	}
+	if _, err := os.Stat(w.home); err != nil {
+		t.Fatalf("the vault home is gone: %v", err)
+	}
+}
+
+func TestTUIRegisterHostRegistersADetectedHostWithoutSecretsOrPrompts(t *testing.T) {
+	w, h := hostWorld(t)
+	second := secondHost(t, w, "second")
+	ghost := fake.New("ghost", filepath.Join(filepath.Dir(w.home), "nowhere"))
+	withHosts(t, h, second, ghost)
+	f := withBackend(t, answers())
+	b := tuiOver(w)
+	sum, err := b.RegisterHost("second")
+	if err != nil || !strings.Contains(sum, "second") {
+		t.Fatalf("summary = %q, err = %v", sum, err)
+	}
+	if _, err := os.Stat(filepath.Join(second.Dir, "config.json")); err != nil {
+		t.Errorf("the host config was not written: %v", err)
+	}
+	if s := hostByName(t, mustHosts(t, b), "second"); !s.Registered || s.Steps[0].Status != tui.StepOK {
+		t.Errorf("second = %+v", s)
+	}
+	for name, want := range map[string]string{"second": "already registered", "ghost": "not found", "nope": "unknown host"} {
+		if _, err := b.RegisterHost(name); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("RegisterHost(%q) err = %v, want %q", name, err, want)
+		}
+	}
+	if len(f.Calls) != 0 {
+		t.Errorf("registering prompted: %+v", f.Calls)
+	}
+}
+
+// ---- T3: audit ----
+
+func TestTUIAuditListsRecentRecordsWithNamesAndNoValues(t *testing.T) {
+	w := newWorld(t)
+	seed(w, "A_KEY", "--global")
+	seed(w, "B_KEY", "--global")
+	log, err := tuiOver(w).Audit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if log.Total < 3 || len(log.Entries) != log.Total {
+		t.Fatalf("log = %+v, want every record (init and two captures)", log)
+	}
+	names := map[string]bool{}
+	for _, e := range log.Entries {
+		if e.Time == "" || e.Event == "" || e.By == "" {
+			t.Errorf("incomplete entry %+v", e)
+		}
+		for _, n := range e.Names {
+			names[n] = true
+		}
+	}
+	if !names["A_KEY"] || !names["B_KEY"] {
+		t.Errorf("names = %v", names)
+	}
+	noFixtures(t, "the audit listing", fmt.Sprintf("%+v", log))
+	if log.Entries[0].Time > log.Entries[len(log.Entries)-1].Time {
+		t.Error("the backend must return the oldest record first")
+	}
+}
+
+func TestTUIAuditReturnsOnlyTheNewestRecordsButCountsAll(t *testing.T) {
+	w := newWorld(t)
+	for i := range defaultAuditTail + 10 {
+		if err := audit.Append(w.home, audit.Record{Event: audit.EventWarning, Session: "cli", By: "user", Detail: fmt.Sprintf("n%d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	log, err := tuiOver(w).Audit()
+	if err != nil || len(log.Entries) != defaultAuditTail || log.Total < defaultAuditTail+10 {
+		t.Fatalf("entries = %d, total = %d, err = %v", len(log.Entries), log.Total, err)
+	}
+}
+
+func TestTUIAuditOfAVaultWithoutALogIsEmpty(t *testing.T) {
+	w := newBareWorld(t)
+	if err := os.MkdirAll(w.home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	log, err := tuiOver(w).Audit()
+	if err != nil || len(log.Entries) != 0 || log.Total != 0 {
+		t.Fatalf("log = %+v, err = %v", log, err)
+	}
+}
+
+func TestTUIVerifyAuditReportsAnIntactChain(t *testing.T) {
+	w := newWorld(t)
+	seed(w, "A_KEY", "--global")
+	v, err := tuiOver(w).VerifyAudit()
+	if err != nil || !v.Valid || v.Records < 2 || v.Line != 0 {
+		t.Fatalf("verdict = %+v, err = %v", v, err)
+	}
+}
+
+func TestTUIVerifyAuditNamesTheFirstBrokenLine(t *testing.T) {
+	w := newWorld(t)
+	seed(w, "A_KEY", "--global")
+	seed(w, "B_KEY", "--global")
+	path := w.auditFile()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitAfter(string(raw), "\n")
+	lines[1] = strings.Replace(lines[1], `"event":"`, `"event":"x`, 1)
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v, err := tuiOver(w).VerifyAudit()
+	if err != nil || v.Valid || v.Line != 2 || v.Reason == "" {
+		t.Fatalf("verdict = %+v, err = %v, want a break at line 2", v, err)
+	}
+	// It is the verdict `audit --verify` gives.
+	code, out, _ := w.run("", "audit", "--verify", "--offline")
+	if code == exitcode.OK || !strings.Contains(out, fmt.Sprintf("line %d", v.Line)) {
+		t.Errorf("audit --verify: code=%d out=%q", code, out)
+	}
+}
+
+// ---- T3: sync status ----
+
+func TestTUISyncStatusOfAVaultThatDoesNotSync(t *testing.T) {
+	w := newWorld(t)
+	st, err := tuiOver(w).SyncStatus()
+	if err != nil || st.Linked || st.Server != "" {
+		t.Fatalf("status = %+v, err = %v", st, err)
+	}
+}
+
+func linkedWorld(t *testing.T, w *world) {
+	t.Helper()
+	rem := &vault.Remote{
+		Server: "https://vault.example", AccountID: "0123456789abcdef0123456789abcdef", Generation: 2, LastVersion: 9,
+		PendingPush: true, LastPullAt: "2026-11-04T10:00:00Z",
+		Summary: vault.RemoteSummary{At: "2026-11-04T10:00:00Z", Conflicts: 2, Devices: 3},
+	}
+	if err := vault.WriteRemote(w.home, rem); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTUISyncStatusOfALinkedVault(t *testing.T) {
+	w := newWorld(t)
+	linkedWorld(t, w)
+	st, err := tuiOver(w).SyncStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Unlocked: the conflicts are counted from the vault itself (none), not
+	// taken from the summary of the last round.
+	id, _ := vault.ReadDeviceID(w.home)
+	want := tui.SyncStatus{Linked: true, Server: "https://vault.example", Device: short(id), LastRound: "2026-11-04T10:00:00Z", PendingPush: true, Conflicts: 0}
+	if st != want {
+		t.Fatalf("status = %+v, want %+v", st, want)
+	}
+}
+
+func TestTUISyncStatusOfALockedVaultUsesTheLastRoundAndNeverPrompts(t *testing.T) {
+	w := passphraseWorld(t)
+	linkedWorld(t, w)
+	f := withBackend(t, answers(val(fxPass)))
+	st, err := tuiOver(w).SyncStatus()
+	if err != nil || !st.Linked || !st.Cached || st.Conflicts != 2 {
+		t.Fatalf("status = %+v, err = %v, want the cached count of the last round", st, err)
+	}
+	if len(f.Calls) != 0 {
+		t.Fatalf("prompted: %+v", f.Calls)
+	}
+	// Locked and no round yet: the count is unknown, not zero.
+	rem, _ := vault.ReadRemote(w.home)
+	rem.Summary = vault.RemoteSummary{}
+	if err := vault.WriteRemote(w.home, rem); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := tuiOver(w).SyncStatus(); st.Conflicts != -1 || st.Cached {
+		t.Errorf("status = %+v, want unknown conflicts", st)
+	}
+}
+
+func TestTUISyncStatusSaysWhenRemoteCallsAreOff(t *testing.T) {
+	w := newWorld(t)
+	linkedWorld(t, w)
+	b := &tuiBackend{g: &globals{getenv: envFrom(map[string]string{envNoRemote: "1"}), home: w.home}}
+	if st, err := b.SyncStatus(); err != nil || !st.Offline {
+		t.Fatalf("status = %+v, err = %v, want offline", st, err)
+	}
+}
+
+// ---- T3: doctor ----
+
+func TestTUIDoctorIsTheDoctorReport(t *testing.T) {
+	w, h := hostWorld(t)
+	if err := os.WriteFile(filepath.Join(h.Dir, "hooks.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b := tuiOver(w)
+	rep, err := b.Doctor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := b.g.runDoctor()
+	if rep.OK != want.OK || len(rep.Checks) != len(want.Checks) || rep.OK {
+		t.Fatalf("report = %+v, want the doctor's %+v (unhealthy)", rep, want)
+	}
+	for i, c := range rep.Checks {
+		if c.Name != want.Checks[i].Name || c.Status != string(want.Checks[i].Status) || c.Detail != want.Checks[i].Detail {
+			t.Errorf("check %d = %+v, want %+v", i, c, want.Checks[i])
+		}
+	}
+}
+
+// ---- T3 S7: no fixture through any adapter method or frame ----
+
+// A vault that holds a TESTSECRET_ value, a grant, a host and an audit trail:
+// nothing the adapter returns, and no frame of the real model over it, holds
+// the value.
+func TestTUIAdapterResultsNeverHoldAFixtureWhileTheVaultDoes(t *testing.T) {
+	w := grantFixture(t)
+	h := fakeHost(t, w)
+	withHosts(t, h)
+	w.mustRun("", "sync", "--agents", "fake")
+	linkedWorld(t, w)
+	b := tuiOver(w)
+	var seen []string
+	add := func(v any, err error) {
+		seen = append(seen, fmt.Sprintf("%+v %v", v, err))
+	}
+	add(b.Status())
+	add(b.SetupPlan())
+	add(b.Secrets())
+	add(b.Grants())
+	add(b.Hosts())
+	add(b.Audit())
+	add(b.VerifyAudit())
+	add(b.SyncStatus())
+	add(b.Doctor())
+	add(b.RepairHosts(""))
+	add(b.RepairHosts("nope"))
+	add(b.UninstallHost("nope"))
+	add(b.RegisterHost("nope"))
+	add(b.RevokeGrant(tui.GrantRef{Name: "A_KEY", Key: "global"}))
+	if w.value("A_KEY") != fxVal {
+		t.Fatal("the fixture is not in the vault: the test proves nothing")
+	}
+	for i, s := range seen {
+		noFixtures(t, fmt.Sprintf("adapter result %d", i), s)
+	}
+}
+
+func TestTUIFramesOverTheRealAdapterNeverHoldAFixture(t *testing.T) {
+	w := grantFixture(t)
+	withHosts(t, fakeHost(t, w))
+	w.mustRun("", "sync", "--agents", "fake")
+	linkedWorld(t, w)
+	m := tui.New(tuiOver(w), tui.Options{Version: "t", Profile: tui.Profile{Color: true, TrueColor: true}})
+	key := func(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
+	var keys []tea.KeyMsg
+	for r := rune('1'); r <= '7'; r++ {
+		keys = append(keys, key(r), tea.KeyMsg{Type: tea.KeyTab}, tea.KeyMsg{Type: tea.KeyDown}, key('v'), key('r'), tea.KeyMsg{Type: tea.KeyEsc})
+	}
+	keys = append(keys, key('1'), key('a'))
+	for _, r := range "SENTRY" {
+		keys = append(keys, key(r))
+	}
+	keys = append(keys, tea.KeyMsg{Type: tea.KeyEsc}, key('d'), tea.KeyMsg{Type: tea.KeyEsc})
+	// Stray typing where no field is open, as if a value were pasted: the
+	// Update section ignores every key.
+	keys = append(keys, key('7'))
+	for _, r := range fxVal {
+		keys = append(keys, key(r))
+	}
+	frames := []string{m.View()}
+	for _, k := range keys {
+		next, _ := m.Update(k) // commands (suspended prompts) are never run
+		m = next.(tui.Model)
+		frames = append(frames, m.View())
+	}
+	if w.value("A_KEY") != fxVal {
+		t.Fatal("the fixture is not in the vault: the test proves nothing")
+	}
+	for i, f := range frames {
+		noFixtures(t, fmt.Sprintf("frame %d", i), f)
 	}
 }

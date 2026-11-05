@@ -52,21 +52,11 @@ func (p Pane) String() string {
 	return "unknown"
 }
 
-// section is one entry of the sections pane; task names the work item that
-// builds its list and detail panes (odd/tasks/tui.md) until they exist.
-type section struct {
-	title string
-	task  string
-}
+// section is one entry of the sections pane.
+type section struct{ title string }
 
 var sections = []section{
-	{"Secrets", "T2"},
-	{"Grants", "T2"},
-	{"Hosts", "T3"},
-	{"Audit", "T3"},
-	{"Sync", "T3"},
-	{"Doctor", "T3"},
-	{"Update", "T3"},
+	{"Secrets"}, {"Grants"}, {"Hosts"}, {"Audit"}, {"Sync"}, {"Doctor"}, {"Update"},
 }
 
 // Options configure the app.
@@ -95,6 +85,10 @@ type Model struct {
 	wiz    wizard
 	sec    secretsPane
 	gr     grantsPane
+	hp     hostsPane
+	au     auditPane
+	sy     syncPane
+	dr     doctorPane
 	form   *form         // the add or edit form, while open
 	ask    *confirmation // a destructive key waiting for "y"
 	notice notice        // the result of the last action
@@ -197,6 +191,14 @@ func (m *Model) enterSection() {
 		m.loadSecrets()
 	case "Grants":
 		m.loadGrants()
+	case "Hosts":
+		m.loadHosts()
+	case "Audit":
+		m.loadAudit()
+	case "Sync":
+		m.loadSync()
+	case "Doctor":
+		m.loadDoctor()
 	}
 }
 
@@ -245,6 +247,14 @@ func (m Model) updateHome(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		next, cmd, ok = m.secretsKey(key)
 	case "Grants":
 		next, cmd, ok = m.grantsKey(key)
+	case "Hosts":
+		next, cmd, ok = m.hostsKey(key)
+	case "Audit":
+		next, cmd, ok = m.auditKey(key)
+	case "Sync":
+		next, cmd, ok = m.syncKey(key)
+	case "Doctor":
+		next, cmd, ok = m.doctorKey(key)
 	}
 	if ok {
 		return next, cmd

@@ -10,8 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuBiit0/qbit-vault/internal/audit"
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 	"github.com/QuBiit0/qbit-vault/internal/grants"
+	"github.com/QuBiit0/qbit-vault/internal/hosts"
 	"github.com/QuBiit0/qbit-vault/internal/keychain"
 	"github.com/QuBiit0/qbit-vault/internal/tui"
 	"github.com/QuBiit0/qbit-vault/internal/vault"
@@ -206,35 +208,20 @@ func (b *tuiBackend) AddSecret(n tui.NewSecret) tui.Action {
 	return tuiAction{func() error { return b.g.runCommand(args...) }}
 }
 
-// quiet fails with tui.ErrLocked unless the vault opens without a prompt. The
-// commands that run while the TUI owns the terminal check it first, so they
-// can never reach a passphrase prompt over the screen.
-func (b *tuiBackend) quiet() error {
-	s, err := b.open()
-	if err != nil {
-		if errors.Is(err, tui.ErrLocked) {
-			return fmt.Errorf("%w: unlock it first", err)
-		}
-		return tuiError(err.Error(), exitcode.Failure)
-	}
-	s.close()
-	return nil
-}
-
-// EditSecret is `edit`.
+// EditSecret is `edit`. The description is passed only when the user changed
+// it: the form shows it on one line, so an unchanged one stays as stored.
 func (b *tuiBackend) EditSecret(e tui.SecretEdit) error {
-	if err := b.quiet(); err != nil {
-		return err
+	args := []string{"edit", layerArg(e.Project)}
+	if !e.KeepDescription {
+		args = append(args, "--description="+e.Description)
 	}
-	return b.g.runCommand("edit", layerArg(e.Project), "--description="+e.Description, fmt.Sprintf("--sensitive=%t", e.Sensitive), "--", e.Name)
+	args = append(args, fmt.Sprintf("--sensitive=%t", e.Sensitive), "--", e.Name)
+	return b.g.runCommandNoPrompt(args...)
 }
 
 // RemoveSecret is `rm --yes`: the TUI has already asked.
 func (b *tuiBackend) RemoveSecret(r tui.SecretRef) error {
-	if err := b.quiet(); err != nil {
-		return err
-	}
-	return b.g.runCommand("rm", layerArg(r.Project), "--yes", "--", r.Name)
+	return b.g.runCommandNoPrompt("rm", layerArg(r.Project), "--yes", "--", r.Name)
 }
 
 // Unlock is `unlock`: it asks the passphrase through the prompt backend.
@@ -327,17 +314,45 @@ func (tuiAction) SetStderr(io.Writer) {}
 // runCommand runs one CLI command in-process, with the same --home and
 // session, and turns a failure into the one safe line the command printed.
 // Callers put text the user typed (a secret name) after "--", so it is never
-// parsed as a flag, and pass flag values in the --flag=value form.
+// parsed as a flag, and pass flag values in the --flag=value form. It may
+// prompt: only the commands that run suspended (tea.Exec) use it.
 func (g *globals) runCommand(args ...string) error {
+	if code, stderr := g.execIn(g.getenv, args); code != exitcode.OK {
+		return tuiError(stderr, code)
+	}
+	return nil
+}
+
+// runCommandNoPrompt is runCommand for the commands that run while the TUI is
+// showing: it can never prompt, so a passphrase that is not cached is
+// tui.ErrLocked (unlock first) instead of a prompt drawn over the screen. The
+// mode closes the window between checking that the vault opens quietly and
+// running the command, in which an unlock cache can expire.
+func (g *globals) runCommandNoPrompt(args ...string) error {
+	env := func(k string) string {
+		if k == noPromptKey {
+			return "1"
+		}
+		return g.getenv(k)
+	}
+	code, stderr := g.execIn(env, args)
+	switch code {
+	case exitcode.OK:
+		return nil
+	case exitcode.Locked:
+		return fmt.Errorf("%w: unlock it first", tui.ErrLocked)
+	}
+	return tuiError(stderr, code)
+}
+
+func (g *globals) execIn(getenv func(string) string, args []string) (int, string) {
 	full := []string{"--home", g.Home()}
 	if g.Session != "" {
 		full = append(full, "--session", g.Session)
 	}
 	var out, errb bytes.Buffer
-	if code := execute(append(full, args...), &out, &errb, g.getenv); code != exitcode.OK {
-		return tuiError(errb.String(), code)
-	}
-	return nil
+	code := execute(append(full, args...), &out, &errb, getenv)
+	return code, errb.String()
 }
 
 // tuiError is the first line of a command's stderr without its "error: "
@@ -353,4 +368,311 @@ func tuiError(stderr string, code int) error {
 		line = string(r[:maxTUIError-1]) + "…"
 	}
 	return errors.New(line)
+}
+
+// ---- hosts ----
+
+// stepStatus is a step's verdict in the words of the TUI, from the same
+// hosts.Verify result `doctor` words as ok, drift or "not registered".
+func stepStatus(err error) string {
+	switch {
+	case err == nil:
+		return tui.StepOK
+	case errors.Is(err, hosts.ErrDrift):
+		return tui.StepDrift
+	case errors.Is(err, hosts.ErrNotRegistered):
+		return tui.StepMissing
+	}
+	return tui.StepUnreadable
+}
+
+// Hosts lists the coding agents of this build, in registry order, then the
+// recorded ones it has no adapter for. Registered hosts are checked with
+// hosts.Verify, the check behind doctor's host lines; it reads state.json and
+// the host config files and writes nothing.
+func (b *tuiBackend) Hosts() ([]tui.HostInfo, error) {
+	home := b.g.Home()
+	if _, err := vault.ReadID(home); err != nil {
+		return nil, mapTUIErr(err)
+	}
+	recorded, err := vault.ReadHosts(home)
+	if err != nil {
+		return nil, tuiError("the hosts section of state.json is damaged; try 'qbit-vault restore'", exitcode.Failure)
+	}
+	env, reg := b.g.hostEnv(), hostRegistry(b.g)
+	var out []tui.HostInfo
+	for _, a := range reg.All() {
+		state, isRecorded := recorded[a.Name()]
+		info := tui.HostInfo{Name: a.Name(), Registered: isRecorded, Detected: a.Detect(env)}
+		if isRecorded {
+			for _, c := range hosts.Verify(env, a, state) {
+				step := tui.HostStep{Name: c.Step, Status: stepStatus(c.Err)}
+				if r, ok := state.Receipts[c.Step]; ok {
+					step.File = oneLine(r.Path)
+				}
+				info.Steps = append(info.Steps, step)
+			}
+		} else {
+			for _, s := range a.Steps(env) {
+				info.Steps = append(info.Steps, tui.HostStep{Name: s.Name, Status: tui.StepMissing})
+			}
+		}
+		out = append(out, info)
+	}
+	for _, e := range recordedHosts(reg, recorded) {
+		if e.adapter == nil {
+			out = append(out, tui.HostInfo{Name: oneLine(e.name), Registered: true, NoAdapter: true})
+		}
+	}
+	return out, nil
+}
+
+// mapTUIErr shows a mapped command error as the one safe line the CLI would.
+func mapTUIErr(err error) error {
+	return tuiError(mapErr(err, "").Error(), exitcode.Failure)
+}
+
+// changedSteps names what Apply did to one host: the steps that changed a file.
+func changedSteps(r hosts.Result) string {
+	var names []string
+	for _, s := range r.Steps {
+		if s.Changed {
+			names = append(names, s.Name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// applyFailures turns the failed hosts of an Apply into the CLI's message.
+func applyFailures(results []hosts.Result, what string) error {
+	var failed []string
+	for _, r := range results {
+		if r.Err() == nil {
+			continue
+		}
+		step := r.FailedStep()
+		if step == "" {
+			step = "state"
+		}
+		failed = append(failed, r.Host+" ("+step+")")
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return tuiError(what+" failed: "+strings.Join(failed, ", "), exitcode.Failure)
+}
+
+// RepairHosts is `sync` for one recorded host, or for every recorded host
+// when name is empty: hosts.Apply re-applies the registration steps, which
+// repairs drift, and writes a file only when something differs. A host that
+// is only detected is never registered by it.
+func (b *tuiBackend) RepairHosts(name string) (string, error) {
+	home := b.g.Home()
+	if _, err := vault.ReadID(home); err != nil {
+		return "", mapTUIErr(err)
+	}
+	recorded, err := vault.ReadHosts(home)
+	if err != nil {
+		return "", mapTUIErr(err)
+	}
+	reg := hostRegistry(b.g)
+	var run []hosts.Adapter
+	for _, e := range recordedHosts(reg, recorded) {
+		if e.adapter != nil && (name == "" || e.name == name) {
+			run = append(run, e.adapter)
+		}
+	}
+	switch {
+	case len(run) == 0 && name != "":
+		return "", errors.New(oneLine(name) + " is not registered")
+	case len(run) == 0:
+		return "no hosts registered", nil
+	}
+	results := hosts.Apply(b.g.hostEnv(), run)
+	if err := applyFailures(results, "host registration"); err != nil {
+		return "", err
+	}
+	var parts []string
+	for _, r := range results {
+		if r.Changed() {
+			parts = append(parts, "repaired "+r.Host+" ("+changedSteps(r)+")")
+		}
+	}
+	switch {
+	case len(parts) > 0:
+		return strings.Join(parts, "; "), nil
+	case name != "":
+		return name + " is up to date", nil
+	}
+	return "every registered host is up to date", nil
+}
+
+// UninstallHost reverts one host's registration, as `uninstall` does for
+// each host (hosts.RevertHost: a file we created goes back to its snapshot,
+// otherwise only our entries are removed) and audits it. It never purges: the
+// vault and its key stay. The TUI has already asked.
+func (b *tuiBackend) UninstallHost(name string) (string, error) {
+	home := b.g.Home()
+	if _, err := vault.ReadID(home); err != nil {
+		return "", mapTUIErr(err)
+	}
+	recorded, err := vault.ReadHosts(home)
+	if err != nil {
+		return "", mapTUIErr(err)
+	}
+	if _, ok := recorded[name]; !ok || name == "" {
+		return "", errors.New(oneLine(name) + " is not registered")
+	}
+	a, ok := hostRegistry(b.g).Get(name)
+	if !ok {
+		return "", errors.New(oneLine(name) + ": this build has no adapter for it, so it is kept in state.json")
+	}
+	done, err := hosts.RevertHost(b.g.hostEnv(), a)
+	if err != nil {
+		step := "state"
+		var re *hosts.RevertError
+		if errors.As(err, &re) {
+			step = re.Step
+		}
+		return "", errors.New(name + ": failed at " + step + "; it is kept in state.json")
+	}
+	var parts []string
+	for _, d := range done {
+		parts = append(parts, d.Step+" "+string(d.Outcome))
+	}
+	if len(parts) == 0 {
+		parts = []string{"nothing to revert"}
+	}
+	b.g.record(io.Discard, audit.Record{Event: audit.EventUninstall, Detail: fmt.Sprintf("reverted 1 of %d hosts", len(recorded))})
+	return "uninstalled " + name + " (" + strings.Join(parts, ", ") + ")", nil
+}
+
+// RegisterHost registers one detected host that is not recorded yet, the same
+// hosts.Apply that `init --agents` runs. It never asks for or stores a secret.
+func (b *tuiBackend) RegisterHost(name string) (string, error) {
+	home := b.g.Home()
+	if _, err := vault.ReadID(home); err != nil {
+		return "", mapTUIErr(err)
+	}
+	recorded, err := vault.ReadHosts(home)
+	if err != nil {
+		return "", mapTUIErr(err)
+	}
+	a, ok := hostRegistry(b.g).Get(name)
+	switch {
+	case !ok:
+		return "", errors.New("unknown host")
+	case recorded[name].Receipts != nil:
+		return "", errors.New(name + " is already registered")
+	case !a.Detect(b.g.hostEnv()):
+		return "", errors.New(name + " was not found on this machine")
+	}
+	results := hosts.Apply(b.g.hostEnv(), []hosts.Adapter{a})
+	if err := applyFailures(results, "host registration"); err != nil {
+		return "", err
+	}
+	return "registered " + name + " (" + changedSteps(results[0]) + ")", nil
+}
+
+// ---- audit ----
+
+// Audit reads the newest records, oldest first, and the size of the log
+// (the head's seq, which counts every record). Only the fields the screen
+// shows leave this function: no command text, reason or detail.
+func (b *tuiBackend) Audit() (tui.AuditLog, error) {
+	home := b.g.Home()
+	if _, err := os.Stat(home); err != nil {
+		return tui.AuditLog{}, mapTUIErr(err)
+	}
+	recs, err := audit.Read(home, audit.Filter{Tail: defaultAuditTail})
+	if err != nil {
+		return tui.AuditLog{}, tuiError(err.Error(), exitcode.Failure)
+	}
+	log := tui.AuditLog{Total: len(recs)}
+	if seq, _, ok := audit.ReadHead(home); ok {
+		log.Total = max(int(seq), len(recs))
+	}
+	for _, r := range recs {
+		log.Entries = append(log.Entries, tui.AuditEntry{
+			Time: oneLine(r.TS), Event: oneLine(r.Event), Names: oneLines(r.Names),
+			Layer: auditLayerText(r.Layer), By: oneLine(r.By),
+		})
+	}
+	return log, nil
+}
+
+// auditLayerText is a record's layer with a project shown by its folder name.
+func auditLayerText(layer string) string {
+	if root, ok := grants.ProjectRootOf(layer); ok {
+		return "project:" + oneLine(filepath.Base(root))
+	}
+	return oneLine(layer)
+}
+
+// VerifyAudit is `audit --verify` for the local chain: the same audit.Verify.
+// The comparison with the server's anchors (a network call) is left to the
+// command.
+func (b *tuiBackend) VerifyAudit() (tui.AuditVerdict, error) {
+	res, err := audit.Verify(b.g.Home())
+	if err != nil {
+		return tui.AuditVerdict{}, tuiError(err.Error(), exitcode.Failure)
+	}
+	v := tui.AuditVerdict{Valid: res.Valid, Records: res.Records}
+	if res.Problem != nil {
+		v.Line, v.Reason = res.Problem.Line, oneLine(res.Problem.Reason)
+	}
+	return v, nil
+}
+
+// ---- sync status ----
+
+// SyncStatus is `remote status` without its output: state.json for the link,
+// and the vault for the conflict count when it opens without a prompt; a
+// locked vault shows the count of the last round, or none. It never contacts
+// the server and never touches a code or a key.
+func (b *tuiBackend) SyncStatus() (tui.SyncStatus, error) {
+	home := b.g.Home()
+	if _, err := vault.ReadID(home); err != nil {
+		return tui.SyncStatus{}, mapTUIErr(err)
+	}
+	rem, err := vault.ReadRemote(home)
+	switch {
+	case err != nil:
+		return tui.SyncStatus{}, mapTUIErr(err)
+	case rem == nil:
+		return tui.SyncStatus{}, nil
+	}
+	id, _ := vault.ReadDeviceID(home)
+	st := tui.SyncStatus{Linked: true, Server: oneLine(rem.Server), Device: short(id), LastRound: oneLine(rem.LastPullAt),
+		PendingPush: rem.PendingPush, Offline: b.g.remoteOff()}
+	s, err := b.open()
+	switch {
+	case errors.Is(err, tui.ErrLocked):
+		if rem.Summary.At != "" {
+			st.Conflicts, st.Cached = rem.Summary.Conflicts, true
+		} else {
+			st.Conflicts = -1
+		}
+	case err != nil:
+		return tui.SyncStatus{}, err
+	default:
+		defer s.close()
+		if st.Conflicts, err = s.v.ConflictCount(); err != nil {
+			return tui.SyncStatus{}, mapTUIErr(err)
+		}
+	}
+	return st, nil
+}
+
+// ---- doctor ----
+
+// Doctor is the report of `qbit-vault doctor`: the same checks, run the same
+// way (no prompt, nothing written).
+func (b *tuiBackend) Doctor() (tui.DoctorReport, error) {
+	rep := b.g.runDoctor()
+	out := tui.DoctorReport{OK: rep.OK, Checks: make([]tui.DoctorCheck, len(rep.Checks))}
+	for i, c := range rep.Checks {
+		out.Checks[i] = tui.DoctorCheck{Name: oneLine(c.Name), Status: string(c.Status), Detail: oneLine(c.Detail)}
+	}
+	return out, nil
 }

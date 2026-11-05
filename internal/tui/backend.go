@@ -94,11 +94,15 @@ type NewSecret struct {
 	Sensitive   bool
 }
 
-// SecretEdit replaces the description and sensitive flag of a secret.
+// SecretEdit replaces the description and sensitive flag of a secret. With
+// KeepDescription the stored description is left exactly as it is (the form
+// shows it on one line, so writing that back could alter it) and Description
+// is ignored.
 type SecretEdit struct {
 	SecretRef
-	Description string
-	Sensitive   bool
+	Description     string
+	KeepDescription bool
+	Sensitive       bool
 }
 
 // Grant is one active grant, read-only.
@@ -115,6 +119,84 @@ type Grant struct {
 type GrantRef struct {
 	Name string
 	Key  string
+}
+
+// Host step states, as the doctor report words them.
+const (
+	StepOK         = "ok"         // the config still holds our registration
+	StepDrift      = "drift"      // the config changed since registration
+	StepMissing    = "missing"    // no receipt for the step: not registered
+	StepUnreadable = "unreadable" // the config file could not be read
+)
+
+// HostStep is one registration step of a host (mcp, hooks, deny-list).
+type HostStep struct {
+	Name   string
+	Status string // one of the Step* constants
+	File   string // the config file the step edits, "" until it is registered
+}
+
+// HostInfo is one coding agent: registered or not, with its steps. Steps of a
+// host that is not registered are the ones registering would perform.
+type HostInfo struct {
+	Name       string
+	Registered bool
+	Detected   bool // the agent looks installed on this machine
+	NoAdapter  bool // recorded in state.json, but this build cannot manage it
+	Steps      []HostStep
+}
+
+// AuditEntry is one audit record as the TUI shows it: when, what, which
+// secret names, which layer and who. Nothing else of the record is exposed:
+// no command text, reason or value.
+type AuditEntry struct {
+	Time  string // RFC 3339
+	Event string
+	Names []string
+	Layer string
+	By    string
+}
+
+// AuditLog is the newest records, oldest first, and how many exist.
+type AuditLog struct {
+	Entries []AuditEntry
+	Total   int
+}
+
+// AuditVerdict is the result of verifying the hash chain. Valid is true when
+// the chain is intact; otherwise Line is the first broken line.
+type AuditVerdict struct {
+	Valid   bool
+	Records int
+	Line    int
+	Reason  string
+}
+
+// SyncStatus is the remote status of this vault, read-only. Linked is false
+// for a vault that does not sync. No pairing code or recovery key can be
+// carried here.
+type SyncStatus struct {
+	Linked      bool
+	Server      string
+	Device      string // short device id
+	LastRound   string // RFC 3339, "" before the first round
+	Conflicts   int    // -1 when unknown
+	PendingPush bool
+	Offline     bool // remote calls are disabled (QBIT_VAULT_NO_REMOTE)
+	Cached      bool // the counts come from the last round: the vault is locked
+}
+
+// DoctorCheck is one line of the doctor report; Status is ok, warn or fail.
+type DoctorCheck struct {
+	Name   string
+	Status string
+	Detail string
+}
+
+// DoctorReport is the doctor report.
+type DoctorReport struct {
+	OK     bool
+	Checks []DoctorCheck
 }
 
 // Backend is everything the screens need. It grows with the screens that
@@ -142,4 +224,26 @@ type Backend interface {
 	Grants() ([]Grant, error)
 	RevokeGrant(GrantRef) (int, error)
 	RevokeAllGrants() (int, error)
+
+	// Hosts lists the coding agents with the status of each step, from the
+	// same data `doctor` uses.
+	Hosts() ([]HostInfo, error)
+	// RepairHosts is `sync` for one host, or for every registered host when
+	// name is empty. It returns a one-line summary.
+	RepairHosts(name string) (string, error)
+	// UninstallHost reverts one host's registration (`uninstall`, never
+	// --purge). The vault stays.
+	UninstallHost(name string) (string, error)
+	// RegisterHost registers a detected host (`init --agents`).
+	RegisterHost(name string) (string, error)
+
+	// Audit reads the newest records; VerifyAudit is `audit --verify`.
+	Audit() (AuditLog, error)
+	VerifyAudit() (AuditVerdict, error)
+
+	// SyncStatus is `remote status`, read-only.
+	SyncStatus() (SyncStatus, error)
+
+	// Doctor is `doctor`.
+	Doctor() (DoctorReport, error)
 }

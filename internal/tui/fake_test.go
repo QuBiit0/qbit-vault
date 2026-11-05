@@ -60,6 +60,24 @@ type fakeBackend struct {
 	revokeErr    error
 	revokeResult int
 
+	hosts       []tui.HostInfo
+	hostsErr    error
+	hostOpErr   error
+	repaired    []string // names passed to RepairHosts ("" is all)
+	uninstalled []string
+	registered  []string
+	hostsCalls  int
+	audit       tui.AuditLog
+	auditErr    error
+	verdict     tui.AuditVerdict
+	verifyErr   error
+	verifyCalls int
+	syncStatus  tui.SyncStatus
+	syncErr     error
+	doctor      tui.DoctorReport
+	doctorErr   error
+	doctorCalls int
+
 	ran []string // names of the actions that ran, in order
 }
 
@@ -113,7 +131,7 @@ func (f *fakeBackend) Unlock() tui.Action {
 	return &fakeAction{name: "unlock", ran: &f.ran, err: f.unlockErr, onRun: func() {
 		if f.afterUnlk != nil {
 			f.status = *f.afterUnlk
-			f.secretsErr, f.grantsErr = nil, nil
+			f.secretsErr, f.grantsErr, f.hostsErr, f.auditErr, f.syncErr, f.doctorErr = nil, nil, nil, nil, nil, nil
 		}
 	}}
 }
@@ -148,6 +166,87 @@ func (f *fakeBackend) RevokeAllGrants() (int, error) {
 	return n, nil
 }
 
+func (f *fakeBackend) Hosts() ([]tui.HostInfo, error) {
+	f.hostsCalls++
+	return f.hosts, f.hostsErr
+}
+
+func (f *fakeBackend) setHost(name string, fn func(*tui.HostInfo)) {
+	for i := range f.hosts {
+		if f.hosts[i].Name == name {
+			steps := append([]tui.HostStep(nil), f.hosts[i].Steps...)
+			f.hosts[i].Steps = steps
+			fn(&f.hosts[i])
+		}
+	}
+}
+
+func (f *fakeBackend) RepairHosts(name string) (string, error) {
+	f.repaired = append(f.repaired, name)
+	if f.hostOpErr != nil {
+		return "", f.hostOpErr
+	}
+	for i := range f.hosts {
+		if name != "" && f.hosts[i].Name != name {
+			continue
+		}
+		if !f.hosts[i].Registered {
+			continue
+		}
+		f.setHost(f.hosts[i].Name, func(h *tui.HostInfo) {
+			for j := range h.Steps {
+				h.Steps[j].Status = tui.StepOK
+			}
+		})
+	}
+	if name == "" {
+		return "repaired every registered host", nil
+	}
+	return "repaired " + name, nil
+}
+
+func (f *fakeBackend) UninstallHost(name string) (string, error) {
+	f.uninstalled = append(f.uninstalled, name)
+	if f.hostOpErr != nil {
+		return "", f.hostOpErr
+	}
+	f.setHost(name, func(h *tui.HostInfo) {
+		h.Registered = false
+		for j := range h.Steps {
+			h.Steps[j].Status, h.Steps[j].File = tui.StepMissing, ""
+		}
+	})
+	return "uninstalled " + name, nil
+}
+
+func (f *fakeBackend) RegisterHost(name string) (string, error) {
+	f.registered = append(f.registered, name)
+	if f.hostOpErr != nil {
+		return "", f.hostOpErr
+	}
+	f.setHost(name, func(h *tui.HostInfo) {
+		h.Registered = true
+		for j := range h.Steps {
+			h.Steps[j].Status = tui.StepOK
+		}
+	})
+	return "registered " + name, nil
+}
+
+func (f *fakeBackend) Audit() (tui.AuditLog, error) { return f.audit, f.auditErr }
+
+func (f *fakeBackend) VerifyAudit() (tui.AuditVerdict, error) {
+	f.verifyCalls++
+	return f.verdict, f.verifyErr
+}
+
+func (f *fakeBackend) SyncStatus() (tui.SyncStatus, error) { return f.syncStatus, f.syncErr }
+
+func (f *fakeBackend) Doctor() (tui.DoctorReport, error) {
+	f.doctorCalls++
+	return f.doctor, f.doctorErr
+}
+
 var (
 	noVault = tui.Status{State: tui.StateNone, Home: "~/.qbit-vault"}
 	ready   = tui.Status{State: tui.StateUnlocked, Home: "~/.qbit-vault", KeyStore: "keychain", Secrets: 6, Hosts: 3}
@@ -175,7 +274,45 @@ func sampleGrants() []tui.Grant {
 
 // newReady is a backend with an open vault, secrets and grants.
 func newReady() *fakeBackend {
-	return &fakeBackend{status: ready, secrets: sampleSecrets(), grants: sampleGrants()}
+	return &fakeBackend{status: ready, secrets: sampleSecrets(), grants: sampleGrants(),
+		hosts: sampleHosts(), audit: sampleAudit(), verdict: tui.AuditVerdict{Valid: true, Records: 412},
+		syncStatus: tui.SyncStatus{Conflicts: -1}, doctor: sampleDoctor()}
+}
+
+// sampleHosts is claude-code with a drifted hook, a healthy codex and a pi
+// that is installed but not registered, plus nothing else.
+func sampleHosts() []tui.HostInfo {
+	return []tui.HostInfo{
+		{Name: "claude-code", Registered: true, Detected: true, Steps: []tui.HostStep{
+			{Name: "mcp", Status: tui.StepOK, File: "/home/u/.claude.json"},
+			{Name: "hooks", Status: tui.StepDrift, File: "/home/u/.claude/settings.json"},
+			{Name: "deny-list", Status: tui.StepOK, File: "/home/u/.claude/settings.json"},
+		}},
+		{Name: "codex", Registered: true, Detected: true, Steps: []tui.HostStep{
+			{Name: "mcp", Status: tui.StepOK, File: "/home/u/.codex/config.toml"},
+		}},
+		{Name: "pi", Registered: false, Detected: true, Steps: []tui.HostStep{
+			{Name: "mcp", Status: tui.StepMissing},
+		}},
+	}
+}
+
+// sampleAudit is a short log; the entries carry no value.
+func sampleAudit() tui.AuditLog {
+	return tui.AuditLog{Total: 412, Entries: []tui.AuditEntry{
+		{Time: "2026-11-05T09:14:02Z", Event: "grant", Names: []string{"NPM_TOKEN"}, Layer: "global", By: "user"},
+		{Time: "2026-11-05T10:12:03Z", Event: "refusal", Names: []string{"STRIPE_SECRET_KEY"}, Layer: "project:/work/shop-api", By: "agent"},
+		{Time: "2026-11-05T10:31:07Z", Event: "exec", Names: []string{"GITHUB_TOKEN"}, Layer: "global", By: "agent"},
+	}}
+}
+
+// sampleDoctor has one of each status.
+func sampleDoctor() tui.DoctorReport {
+	return tui.DoctorReport{Checks: []tui.DoctorCheck{
+		{Name: "vault", Status: "ok", Detail: "unlocked (keychain: keychain)"},
+		{Name: "permissions", Status: "warn", Detail: "vault.enc: group-readable"},
+		{Name: "audit", Status: "fail", Detail: "audit chain broken at line 3 (bad_hash); run 'qbit-vault audit --verify'"},
+	}}
 }
 
 // setupPlan is a machine where claude-code and codex are installed.

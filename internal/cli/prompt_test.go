@@ -592,12 +592,10 @@ func TestPromptWithValueWritesFD3AndFeedsSet(t *testing.T) {
 }
 
 func TestPromptValueNeedsFD3(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		if f := os.NewFile(3, "fd3"); f != nil {
-			if _, err := f.Stat(); err == nil {
-				t.Skip("fd 3 is open in this environment")
-			}
-		}
+	// Never wrap fd 3 in an *os.File here: on macOS it is often the runtime's
+	// kqueue, and the file's finalizer would close it.
+	if runtime.GOOS != "windows" && valueFDKindOK(valueFD) {
+		t.Skip("fd 3 is a usable descriptor in this environment")
 	}
 	w := newWorld(t)
 	f := withBackend(t, answers(val(fxVal), pick(0)))

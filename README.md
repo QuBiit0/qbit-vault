@@ -1,108 +1,223 @@
+<p align="center">
+  <img src="assets/brand/qbit-vault-banner.svg" alt="QBit Vault: agents use your secrets, they never see them" width="100%">
+</p>
+
 # QBit Vault
 
-**A secrets broker for coding agents: the agent *uses* your credentials, it never *sees* them.**
+**Agents use your secrets. They never see them.**  
+by **qbitdev**
 
-QBit Vault (`qbit-vault`) lets Pi / Gentle Shell, Claude Code, Codex and OpenCode run commands that need a `GITHUB_TOKEN`, a `DATABASE_URL` or any API key, without the value ever entering the model's context, the chat transcript, the session file or the provider's servers.
+QBit Vault (`qbit-vault`) is a local secrets broker for coding agents. Claude Code, Codex and Pi / Gentle Shell can run commands that need a `GITHUB_TOKEN`, a `DATABASE_URL` or any API key, and the value never enters the model's context, the chat transcript, the session file or the provider's servers.
 
-- The agent asks for a **handle** (`GITHUB_TOKEN`, with a reason).
-- You type the value **out of band** (masked input in the shell, never in the chat).
-- The value is stored in an **encrypted local vault**, key in your OS keychain.
-- The runtime **injects** it into one child process, **redacts** the output, and returns `{ ok }` to the model.
+> **Status: pre-release.** The vault, the broker, the MCP server, host registration and multi-device sync are built and tested. Nothing is released yet: you install it with `go install`. See [Status / Roadmap](#status--roadmap).
 
-It integrates with existing agent hosts, including the [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) setup, and keeps their conventions (deny list, no credentials at install time, versioned contracts, atomic writes with backups, signed releases). QBit Vault is an independent project of the QBit brand; it is not affiliated with or endorsed by the authors of those hosts. Status: the vault, the broker and MCP server, and multi-device sync through the self-hosted `qbit-vault-server` are implemented and tested; host registration (`init` for each agent), the Pi extension and the first release are in progress (docs/ROADMAP.md).
+## Why
 
-## Install (one command)
+The usual ways to give an agent a credential all leak it: the value sits in the shell environment where `env` can read it, or you paste it into the chat and it lands in the transcript. QBit Vault gives the agent a third way: it asks for a **name**, you provide the **value** out of band, and the runtime uses the value for one command without handing it back.
 
-```bash
-npx qbit-vault@latest init
+| The agent | You | QBit Vault |
+| --- | --- | --- |
+| Asks for `GITHUB_TOKEN` with a reason | Type the value in a native dialog, never in the chat | Stores it encrypted, key in the OS keychain |
+| Runs a command that needs it | Pick the grant (once, session or project) | Injects it into one child process and redacts the output |
+| Sees names and redacted results | | Never returns the value |
+
+## How it works
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Human
+    participant Agent as Agent (model)
+    participant MCP as qbit-vault mcp
+    participant Dialog as Native dialog
+    participant Child as Child process
+
+    Agent->>MCP: secret_request(GITHUB_TOKEN, reason)
+    MCP->>Dialog: ask for the value and a grant
+    Dialog->>Human: masked input, scope choice
+    Human-->>Dialog: value + approve
+    Dialog-->>MCP: stored encrypted (value stays here)
+    MCP-->>Agent: ok, secret://GITHUB_TOKEN
+    Agent->>MCP: secret_exec(gh release create ..., GITHUB_TOKEN)
+    MCP->>Child: start one process with the value in its environment
+    Child-->>MCP: stdout / stderr
+    MCP->>MCP: redact every active value and its encodings
+    MCP-->>Agent: redacted output and exit code
 ```
 
-That single command, on macOS, Linux and Windows:
+The model sees tool names, secret **names** and redacted results. The value exists only in the dialog, the encrypted vault and the environment of that one child process.
 
-1. Installs the signed `qbit-vault` binary for your platform (no postinstall scripts, checksum-verified).
-2. Creates an **empty** encrypted vault at `~/.qbit-vault/` and stores the master key in the OS keychain (passphrase fallback).
-3. Detects your agents (`~/.pi/agent`, `~/.gentle-shell/agent`, `~/.claude`, `~/.codex`, OpenCode) and registers the MCP server, hooks and deny-list entries for each one, snapshotting every config file before touching it.
-4. Installs the Gentle Shell / Pi extension (`gentle-shell install npm:qbit-vault-pi`).
-5. Prints `qbit-vault doctor` so you can see exactly what was configured.
+## Architecture
 
-Nothing is asked for at install time. No secret is read from your environment. See [docs/INSTALL.md](docs/INSTALL.md).
+```mermaid
+flowchart LR
+    subgraph Host["Agent host"]
+        A["Claude Code / Codex / Pi"]
+    end
+    subgraph Local["Your machine"]
+        MCP["qbit-vault mcp<br/>(stdio MCP server)"]
+        HK["qbit-vault hook ...<br/>(Claude Code hooks)"]
+        CLI["qbit-vault CLI<br/>(you: set, grant, audit, doctor)"]
+        V[("vault.enc<br/>encrypted, XChaCha20-Poly1305")]
+        K["OS keychain<br/>(master key)"]
+        P["Native dialog<br/>(capture and grants)"]
+    end
+    S["qbit-vault-server<br/>(optional, self-hosted)<br/>ciphertext only"]
 
-Alternatives: `brew install <tap>/qbit-vault`, `curl -fsSL .../install.sh | bash`, `go install github.com/<owner>/qbit-vault/cmd/qbit-vault@latest`.
+    A -- "4 tools" --> MCP
+    A -. "hook events" .-> HK
+    MCP --> V
+    HK --> V
+    CLI --> V
+    V --- K
+    MCP --> P
+    CLI --> P
+    CLI -. "opt-in sync, sealed on device" .-> S
+```
 
-## Use it from the agent
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/STORAGE.md](docs/STORAGE.md).
 
-Just ask for the work. The agent sees four tools:
+## Quickstart
+
+Requires Go 1.26 or newer. The repository is private, so `go install` needs access to it (details in [docs/INSTALL.md](docs/INSTALL.md)).
+
+```bash
+# 1. Install (no release exists yet; @latest is the newest commit of the default branch)
+export GOPRIVATE=github.com/QuBiit0/*
+go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
+
+# 2. Create an empty vault and register the agents it finds on this machine
+qbit-vault init
+
+# 3. Store a secret yourself (masked prompt; --global or --project)
+qbit-vault set GITHUB_TOKEN --global
+
+# 4. Check what was configured
+qbit-vault doctor
+```
+
+- `init` asks for nothing and never reads secrets from your environment. It creates an **empty** vault, stores the master key in the OS keychain (on a machine without one, run `init --passphrase`) and registers the hosts it detects. Every config file is snapshotted before it is touched.
+- Choose hosts explicitly with `qbit-vault init --agents claude-code,codex,pi` (or `--agents none`). Re-run `qbit-vault sync` to re-apply the registrations after an upgrade.
+- Restart your agent afterwards so it picks up the MCP server.
+- To undo: `qbit-vault uninstall` reverts each host's config from its snapshot; `--purge` also deletes the vault.
+
+Secrets are **global** (usable everywhere) or belong to **one project**; a project secret overrides a global one with the same name. Both live in the same encrypted vault under `~/.qbit-vault/`, never in the repository.
+
+Build from a checkout instead:
+
+```bash
+git clone https://github.com/QuBiit0/qbit-vault && cd qbit-vault
+go build -o qbit-vault ./cmd/qbit-vault
+```
+
+## What the agent sees
 
 | Tool | What the model gets back |
 | --- | --- |
-| `secret_request(name, reason)` | `{ ok, ref: "secret://GITHUB_TOKEN" }` after you typed the value in a masked prompt. Never the value. |
-| `secret_list()` | Names, layers, descriptions, scopes, plus the rules of what the agent can and cannot do. Never values. |
-| `secret_exec(command, secrets)` or the shell tool itself | Redacted stdout/stderr. The value only existed inside that child process. |
+| `secret_request(name, reason)` | `ok` and a `secret://NAME` reference, after you typed the value in the dialog. Never the value. |
+| `secret_list()` | Names, layers, descriptions, scopes and the rules the agent must follow. Never values. |
+| `secret_exec(command, secrets)` | Redacted stdout and stderr plus the exit code. |
+| `secret_manage(action, name, ...)` | Proposes remove, edit, move or replace. You confirm outside the chat; the agent gets `ok`. |
 
-Example session in Gentle Shell:
+There is no `grant` tool: only you grant access, in the dialog. Contract: [contracts/secrets-broker/v1/CONTRACT.md](contracts/secrets-broker/v1/CONTRACT.md).
 
-```
-you   > create a release on GitHub for v1.2.0
-agent > I need GITHUB_TOKEN to call gh. Requesting it.
-        [secret_request GITHUB_TOKEN  reason: "gh release create v1.2.0"]
-shell > ┌ qbit-vault ───────────────────────────────┐
-        │ GITHUB_TOKEN  for: gh release create v1.2.0 │
-        │ value: ●●●●●●●●●●●●●●●●●●●●                 │
-        │ grant: [this command] [30 min] [this repo]  │
-        └─────────────────────────────────────────────┘
-agent > [bash gh release create v1.2.0 --notes-file CHANGELOG.md]   ← runs via qbit-vault exec
-        Release created: https://github.com/you/repo/releases/tag/v1.2.0
-```
+## Commands
 
-| `secret_manage(action, name, ...)` | Proposes remove / edit / move / replace. You confirm or decline outside the chat; the agent gets `{ ok }`. |
+Full reference with flags, JSON output and exit codes: [docs/CLI.md](docs/CLI.md). Most commands take `--json`.
 
-Next time the agent needs `GITHUB_TOKEN` it asks only for a **grant**, not the value. See [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md).
+| Group | Commands |
+| --- | --- |
+| Setup | `init`, `sync`, `doctor`, `uninstall`, `version` |
+| Secrets | `set`, `rm`, `mv`, `list`, `describe`, `edit`, `link`, `relink`, `import`, `rekey`, `lock`, `unlock`, `restore` |
+| Grants | `grant`, `revoke`, `grants` |
+| Run | `exec` (run a command with granted secrets injected and the output redacted) |
+| Audit | `audit` (`--tail`, `--since`, `--name`, `--event`), `audit --verify` |
+| Remote sync | `remote register`, `join`, `approve`, `sync`, `status`, `devices`, `revoke-device`, `recovery-key --rotate`, `conflicts`, `resolve`, `history`, `restore`, `logout` |
+| Host plumbing (not for humans) | `mcp`, `hook pre-bash\|post-bash\|post-read\|user-prompt`, `prompt`, `broker --op` |
 
-## Global and project secrets
+## Security model
 
-Every secret is **global** (usable everywhere) or belongs to **one project** (repository). A project secret overrides a global one with the same name, so `DATABASE_URL` can differ per repo. Project secrets live in the same encrypted vault in `~/.qbit-vault/`, never inside the repository.
+These are the invariants the code is tested against ([AGENTS.md](AGENTS.md)); the full analysis is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
-You can always add them yourself, no agent needed:
+1. **The model never gets a value.** No tool result, MCP response, hook output, log line, error or panic carries a secret value. Errors name the secret only.
+2. **Nothing sensitive touches disk in the clear.** Not temp files, not shell history, not the audit log.
+3. **Install never asks for a secret.** `init` creates an empty vault and does not read your environment.
+4. **Injection is per child process.** The value goes into one command's environment, not the agent's, not your shell's.
+5. **Output is redacted.** Raw values and their common encodings are removed from stdout, stderr and file content read while a grant is active.
+6. **You approve every capture and every grant.** No auto-approval; "remember" only if you choose it in the dialog.
+7. **Config edits are reversible.** Every change to a host config is snapshotted first and written atomically.
+8. **No surprise network.** No postinstall scripts, no network calls except the sync server you configured. Nothing that decrypts the vault ever leaves your device.
+9. **The sync server is untrusted.** Everything downloaded from it is verified before use, and recovery keys and pairing codes are shown only through the dialog, never on stdout or in logs.
+
+Also in place: tamper-evident audit log (`audit --verify`), grants bound to one record with a scope and a TTL, a guard that refuses `env`/`printenv`-style dump commands while secrets are injected, and per-secret allowlists of binaries and hosts.
+
+## Supported hosts
+
+`init` registers each host it detects. Today every host uses the MCP server; only Claude Code gets hooks and deny rules.
+
+| Host | MCP tools | Hooks | Deny rules | Notes |
+| --- | --- | --- | --- | --- |
+| Claude Code | yes | `pre-bash`, `post-bash`, `post-read`, `user-prompt` | `Read` / `Edit` of the vault directory | `post-*` redact tool output; `user-prompt` blocks a prompt that carries a secret; `pre-bash` keeps user-only commands out of the agent's shell |
+| Codex | yes | no | no | `secret_exec` output is already redacted |
+| Pi / Gentle Shell | yes | no | no | via `mcp.json`; the native extension is planned |
+
+OpenCode is not supported. Per-host files and the hook protocol: [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md).
+
+## Remote sync (optional)
+
+Keep one vault on several machines with `qbit-vault-server`, a small service you host yourself.
+
+- **Zero-knowledge.** The server stores ciphertext, public keys and counters. It has nothing that decrypts them, and the client verifies every object it downloads.
+- **Opt-in.** A vault that never runs `qbit-vault remote register` makes no network call.
+- **Recovery key.** Shown once at registration; keep it offline. Devices join by pairing codes confirmed on both machines, and a lost device can be revoked (which rotates the keys).
+- **Grants and the audit log stay local.** Secrets, metadata and the device roster sync, encrypted.
+- **Deploy.** `deploy/Dockerfile` and `deploy/compose.yaml` build the server image from this repository (no image is published yet), for example behind Dokploy:
 
 ```bash
-qbit-vault set GITHUB_TOKEN --global     # masked prompt
-cd ~/code/shop-api && qbit-vault set DATABASE_URL --project
-qbit-vault list                          # what this directory sees, never values
+docker compose -f deploy/compose.yaml up -d --build
+docker compose -f deploy/compose.yaml exec server /qbit-vault-server invite --ttl 24h
+qbit-vault remote register --server https://vault.example.com
 ```
 
-In Pi / Gentle Shell the same is `/vault set NAME`.
+Protocol, keys and failure modes: [docs/REMOTE_SYNC.md](docs/REMOTE_SYNC.md).
 
-## What makes it hold
+## Status / Roadmap
 
-1. **Transcript**: values never appear in tool results, messages or session files.
-2. **Output**: every stdout/stderr passes a redaction filter; `env`, `printenv`, `set`, `/proc/*/environ` are refused while secrets are injected.
-3. **Disk**: the vault, project paths and grants are encrypted at rest with a key that lives in your OS keychain; a copied `~/.qbit-vault/` is useless without it. Writing a literal secret through the agent's write/edit tools is blocked or rewritten to a reference.
-4. **Prompt injection**: grants have scope and TTL; per-secret allowlists of binaries/hosts; first use per session always confirms.
-5. **Accidental paste**: secret-shaped text typed into the chat is intercepted before it reaches the model and offered to the vault instead.
+**Built and tested** (on `feat/cli-skeleton`, see [docs/ROADMAP.md](docs/ROADMAP.md)): encrypted vault with global and project layers, grants, hash-chained audit log, redaction, `exec`, native prompts (Windows, macOS, Linux, terminal), the contract broker and MCP server, host registration for Claude Code, Codex and Pi, and remote sync with `qbit-vault-server`.
 
-Full analysis: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+**Planned, not built yet** — do not rely on these:
 
-## Documentation map
+| Item | Phase |
+| --- | --- |
+| Pi / Gentle Shell extension (`qbit-vault-pi`): inline capture, shell-tool override, redaction hook | 4 |
+| Claude Code `PreToolUse` rewrite of secret references into `exec`, and its `grant_required` / `dump_command` denials | 4 |
+| Release binaries, signed checksums, npm launcher, Homebrew formula, install scripts, published server image | 5 |
+| `qbit-vault update` and the opt-out update check | 5 |
+| `qbit-vault redact` command (the redaction engine exists and is used by `exec`, hooks and the MCP server) | 4 (the Pi extension design calls it; no `redact` command exists) |
+| Interactive TUI (guided setup, configuration, secrets, grants, audit, hosts, sync, update); design in [design/qbitdev-vault-tui](design/qbitdev-vault-tui) | design done, implementation pending |
+
+Known gaps that the docs state openly: no automatic passphrase fallback when there is no keychain (use `init --passphrase`), `bindings.yaml` and `config.yaml` are not loaded yet (budgets and TTLs are constants), and Codex and Pi get no hooks or deny rules.
+
+## Documentation
 
 | Document | What it is |
 | --- | --- |
-| [docs/PRD.md](docs/PRD.md) | Requirements with stable IDs (R-xxx), scope, non-goals |
+| [docs/PRD.md](docs/PRD.md) | Requirements with stable IDs, scope, non-goals, implementation status |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Assets, attackers, leak paths, controls, residual risk |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flows, process model, decisions |
-| [contracts/secrets-broker/v1/CONTRACT.md](contracts/secrets-broker/v1/CONTRACT.md) | The `gentle-ai.secrets-broker/v1` wire contract and refusals |
 | [docs/STORAGE.md](docs/STORAGE.md) | Vault file format, crypto, keychain, grants, audit log |
 | [docs/CLI.md](docs/CLI.md) | Every command, flag and exit code |
-| [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md) | MCP server, hooks and capture path per agent |
-| [docs/GENTLE_SHELL_EXTENSION.md](docs/GENTLE_SHELL_EXTENSION.md) | The Pi / Gentle Shell extension (`qbit-vault-pi`) |
-| [docs/INSTALL.md](docs/INSTALL.md) | What `init` does, step by step, and how to undo it |
-| [docs/TESTING.md](docs/TESTING.md) | Test tiers, leak tests, cross-agent battery |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phased delivery in ≤400-line PR slices |
+| [docs/INSTALL.md](docs/INSTALL.md) | Install today, what `init` does step by step, uninstall |
+| [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md) | MCP server, hooks and capture path per host |
+| [docs/GENTLE_SHELL_EXTENSION.md](docs/GENTLE_SHELL_EXTENSION.md) | The planned Pi / Gentle Shell extension |
+| [docs/REMOTE_SYNC.md](docs/REMOTE_SYNC.md) | Multi-device sync protocol and server |
+| [docs/TESTING.md](docs/TESTING.md) | Test tiers, leak battery, cross-agent battery |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phased delivery |
+| [docs/PROPOSAL.md](docs/PROPOSAL.md) | The original proposal (historical) |
+| [contracts/secrets-broker/v1/CONTRACT.md](contracts/secrets-broker/v1/CONTRACT.md) | The wire contract and typed refusals |
+| [design/system.md](design/system.md) | Visual identity and design tokens |
 | [AGENTS.md](AGENTS.md) | Instructions for the coding agent building this repo |
 
-## Status and relationship to Gentle AI
+## Independence
 
-Proposed to the Gentle AI maintainers as a companion package first (`qbit-vault` Go core + `qbit-vault-pi` Gentle Shell extension), with a later `gentle-ai install --components vault` path if adopted. The proposal text is in [qbit-vault-proposal.md](qbit-vault-proposal.md).
-
-## License
-
-MIT. "Gentle AI" and "Gentle Shell" are trademarks of their respective owner; this project is a community companion and implies no endorsement.
+QBit Vault is a personal tool by **qbitdev**. It is not part of Gentle AI and is not affiliated with or endorsed by the authors of Claude Code, Codex, Pi, Gentle AI or Gentle Shell; those names belong to their respective owners. It integrates with them through their public extension points.

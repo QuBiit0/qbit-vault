@@ -21,8 +21,8 @@ Branch `feat/cli-skeleton` until T8. Spec authority: the code as built, docs/*, 
 | T1 | S1, S2 | inline | repo cleanup: .gitignore (.codegraph), move the proposal under docs/, CI on main, delete old review branches after proving each is contained in feat/cli-skeleton | f734b75 | done |
 | T2 | S1, S4 | worker | docs audit: every doc and help text matches the code (ROADMAP status, INSTALL, CLI, ARCHITECTURE, PRD statuses) | 8df3d3b | done |
 | T3 | S2, S3, S6 | design | visual identity from the qbitdev brand: logo, banner, palette (gentle-design artboards), exported assets for README and TUI | (T3) | done |
-| T4 | S2 | design | TUI design: screens and flows as artboards; user picks a direction | | pending |
-| T5 | S1, S2 | worker | README: visual, complete, accurate (banner, diagrams, quickstart, commands, security model, status) | | pending |
+| T4 | S2 | design | TUI design: screens and flows as artboards; user picks a direction | a456626 | done |
+| T5 | S1, S2 | worker | README: visual, complete, accurate (banner, diagrams, quickstart, commands, security model, status) | (T5) | done |
 | T6 | S1 | worker | full-flow control: install-from-scratch e2e in a container (go install, init, set, agent MCP flow, uninstall) + every battery green | | pending |
 | T7 | S2 | later | TUI spec + implementation, after the design is chosen and the dependency is approved | | pending |
 | T8 | S2 | inline | PR feat/cli-skeleton -> main, merge, default branch main | | pending |
@@ -40,3 +40,6 @@ Branch `feat/cli-skeleton` until T8. Spec authority: the code as built, docs/*, 
 - L9. A canvas handoff asked to implement design/qbit-vault-identity/02-dial.html (the superseded Dial direction). The user confirmed it was a mistake ("Fue un error, seguimos con qbitdev"); nothing implemented, T3 stays done on 01 Atom keyhole. T4 starts.
 - L10. The Dial handoff arrived a second time from the canvas; the user chose to delete the old folder ("Borrarla"): `design/qbit-vault-identity/` removed (history in git). Nothing implemented from Dial.
 - L11. T4 (gentle-ai-worker): `design/qbitdev-vault-tui/` 01-panes (lazygit-style three panes), 02-launcher (splash with the orbit mark, step-by-step setup wizard, action menu), 03-command (fzf/k9s-style palette with fuzzy filter); each covers first-run setup, secrets (values only as bullets, masked add form), grants (revoke only, no grant key: invariant 6), hosts drift and repair, audit verify, sync, update (planned), and empty, locked, error and loading states; the logo is term-mark.py output. Playwright at 1440 and 390 px: no overflow, no console errors. Waiting for the user's pick.
+- L12. User on the TUI pick: "el que recomiendes tu que sea como engram y gentle-ai". Recommended and recorded: `design/qbitdev-vault-tui/02-launcher.html` (splash, one-question wizard, action menu), the model of the gentle-ai and engram installers. T7 implements it.
+- L13. T7 dependency approval, user's choice verbatim: "Sí, las tres" (Bubble Tea, Lip Gloss, Bubbles). T7 is tracked in `odd/tasks/tui.md`.
+- L14. T5 (gentle-ai-worker): README rewritten (banner, Mermaid flow and architecture diagrams, quickstart with `go install`, command table, security model, hosts table, sync, status/roadmap, docs index, independence note). The unbacked "MIT" license line was dropped (no LICENSE file). Parent check: every relative link resolves; the TUI and `update` are listed as pending. Mermaid rendering not checked locally.

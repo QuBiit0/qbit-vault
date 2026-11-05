@@ -1,24 +1,54 @@
-# Install: `go install` and `qbit-vault init`
+# Install: one command, then `qbit-vault init`
 
-While the repository is private, the install is a Go build from source. There is no release, no npm package, no Homebrew formula and no install script yet (Phase 5, `ROADMAP.md`).
+QBit Vault is a pre-release (`v0.1.0-beta.1` is the first tag). Each `v*` tag publishes a GitHub release with archives for Linux, macOS and Windows (amd64 and arm64), a `checksums.txt` and a build-provenance attestation (`.github/workflows/release.yml`, `.goreleaser.yaml`). There is no npm package and no Homebrew formula yet (Phase 5, `ROADMAP.md`).
 
 ## Quick path
 
-1. Check the prerequisites below.
-2. Install the binary (option A or B).
-3. Run `qbit-vault` (guided setup) or `qbit-vault init`, then `qbit-vault doctor`.
-4. Restart your agent so it picks up the MCP server.
+1. Install the binary with one command (below).
+2. Run `qbit-vault` (guided setup) or `qbit-vault init`, then `qbit-vault doctor`.
+3. Restart your agent so it picks up the MCP server.
 
-## Prerequisites
+## One-line install
 
-| Need | Why |
+```bash
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell 5.1 or 7)
+irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+```
+
+What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them before piping them to a shell):
+
+1. Pick the archive for your OS and architecture: `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows).
+2. Resolve the version: `QBIT_VAULT_VERSION` if set, else the newest release **including pre-releases** (GitHub's `releases/latest` skips them).
+3. Download the archive and `checksums.txt` over HTTPS and compare the SHA-256. On a mismatch, or an archive not listed, they stop with `checksum mismatch for <archive>: nothing was installed` (or `<archive> is not listed in checksums.txt`) and install nothing.
+4. Copy the binary to `~/.local/bin` (Linux, macOS) or `%LOCALAPPDATA%\Programs\qbit-vault` (Windows), replacing an older copy in place. On Windows the directory is added to your **user** `PATH` (open a new terminal); on Linux and macOS the script tells you if the directory is not on `PATH`.
+5. Print the next step. They never ask for, read or store a secret, never read your environment for values, and never run `init`.
+
+| Variable | Effect |
 | --- | --- |
-| Go 1.26 or newer (`go version`; `go.mod` names `go 1.26.0`) | The only build tool. No C compiler is needed. |
-| `git` with read access to `github.com/QuBiit0/qbit-vault` | The repository is private. |
-| macOS, Linux (including WSL2) or Windows 10+ | The unit suite and the leak grep run on all three in CI; the Docker batteries (`e2e/`) run on Linux. |
-| An OS keychain, or willingness to use `init --passphrase` | A headless Linux box or WSL without Secret Service has no keychain, and there is no automatic fallback. |
+| `QBIT_VAULT_VERSION` | Tag to install, for example `v0.1.0-beta.1` |
+| `QBIT_VAULT_INSTALL_DIR` | Target directory |
+| `QBIT_VAULT_NO_PATH=1` | Windows only: leave the user `PATH` unchanged |
 
-## Option A: from a checkout (recommended while private)
+Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v0.1.0-beta.1 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v0.1.0-beta.1'; irm …/install.ps1 | iex`.
+
+**Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo QuBiit0/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. Minisign-signed checksums are still planned (Phase 5).
+
+## With Go
+
+Requires Go 1.26 or newer (`go version`). No C compiler is needed.
+
+```bash
+go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
+```
+
+`@latest` is the newest release tag (pre-release tags are used only while no stable tag exists); pin one with `@v0.1.0-beta.1`. `qbit-vault version` reports the module version for a `go install` build and the commit for a checkout build.
+
+From a checkout:
 
 ```bash
 git clone https://github.com/QuBiit0/qbit-vault
@@ -26,25 +56,15 @@ cd qbit-vault
 go install ./cmd/qbit-vault
 ```
 
-`git clone` uses whatever GitHub login you already have (credential manager, `gh auth login`, an SSH key with `git@github.com:QuBiit0/qbit-vault.git`). Building from a checkout never touches the Go module proxy.
+## Prerequisites
 
-## Option B: `go install` by module path
+| Need | Why |
+| --- | --- |
+| macOS, Linux (including WSL2) or Windows 10+, amd64 or arm64 | The unit suite, the install-script tests and the leak grep run on all three in CI; the Docker batteries (`e2e/`) run on Linux. |
+| `curl` or `wget`, `tar` and `sha256sum` or `shasum` (Linux, macOS) | Used by `install.sh`; present on stock systems. |
+| An OS keychain, or willingness to use `init --passphrase` | A headless Linux box or WSL without Secret Service has no keychain, and there is no automatic fallback. |
 
-```bash
-# bash / zsh
-export GOPRIVATE=github.com/QuBiit0/*
-go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
-```
-
-```powershell
-# PowerShell
-go env -w GOPRIVATE=github.com/QuBiit0/*
-go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
-```
-
-`GOPRIVATE` stops Go from asking the public proxy and checksum database about a private module; Go then fetches it with `git`, so your git credentials must work non-interactively. If `git` reaches GitHub over HTTPS and prompts, either store a credential (`gh auth setup-git`, or a credential manager) or route the path over SSH: `git config --global url."git@github.com:".insteadOf "https://github.com/"`. Without access the command fails with a "repository not found" style error from `git`. Without a release tag, `@latest` is the newest commit of the default branch.
-
-## Where the binary goes
+## Where `go install` puts the binary
 
 `go install` writes `qbit-vault` to `$GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN` is unset. Check with `go env GOBIN GOPATH`.
 
@@ -73,7 +93,7 @@ qbit-vault doctor    # read-only health report; exit 1 on any problem
 
 ## Update
 
-Re-run the same install command (`git pull` then `go install ./cmd/qbit-vault`, or the `@latest` form), then:
+Re-run the same install command (the one-line script, the `go install …@latest` form, or `git pull` then `go install ./cmd/qbit-vault`), then:
 
 ```bash
 qbit-vault version     # confirm the new build is the one on PATH
@@ -94,13 +114,9 @@ qbit-vault uninstall --purge   # also delete the vault and its keychain entry (y
 
 ### Planned for Phase 5 (not built)
 
-These were the original install paths. They are kept as the design target and do not work today:
-
 ```bash
 npx qbit-vault@latest init                                    # planned
 brew install <tap>/qbit-vault && qbit-vault init             # planned
-curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | bash   # planned; scripts/ does not exist yet
-irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex          # planned
 ```
 
 ## npm launcher design (planned, Phase 5)
@@ -126,7 +142,7 @@ There is no `packages/` directory yet. The design is a tiny JS launcher with no 
 - `bin/qbit-vault.mjs` resolves the platform package, verifies the binary's SHA-256 against the checksum **embedded in the launcher at release time**, then `execFileSync`s it with all arguments. No download at runtime, no `postinstall`, no network beyond npm itself.
 - If the platform package is missing (unsupported platform or `--no-optional`), the launcher prints the `go install` alternative and exits 2.
 
-The Go releases would be produced by goreleaser with Minisign-signed `checksums.txt` and GitHub provenance.
+The release archives are already produced by GoReleaser with `checksums.txt` and GitHub build provenance; Minisign signatures are planned.
 
 ## `init` step by step
 
@@ -142,7 +158,7 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 6 | Extension | Pi: `init` **prints** `host pi: to add the extension, run: pi install npm:qbit-vault-pi` for you to run and never runs it, because installing needs the network (AGENTS.md invariant 8). The extension itself does not exist yet (Phase 4); until it does, Pi uses the MCP entry from step 5 | no |
 | 7 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 
-Total questions on a machine with a keychain: **zero**. Not built: verifying a binary signature, a separate check that Gentle AI deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`), and a "restart your agent" next-steps message.
+Total questions on a machine with a keychain: **zero**. Not built: verifying a binary signature, a separate check that other tools' deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`), and a "restart your agent" next-steps message.
 
 ## Example output
 
@@ -189,7 +205,7 @@ A dialog asks for the invite, then shows your **recovery key** once. Write it do
 **3. Every other machine:**
 
 ```bash
-go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest && qbit-vault init
+curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh && qbit-vault init
 qbit-vault remote join --server https://vault.example.com   # prints a pairing code
 # on the first machine:
 qbit-vault remote approve                                   # type the pairing code, read the confirmation code

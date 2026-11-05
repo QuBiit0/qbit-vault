@@ -4,9 +4,12 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
-First version, not yet tagged.
+First version, to be tagged `v0.1.0-beta.1`.
 
 ### Added
+
+- One-line install: `scripts/install.sh` (Linux, macOS) and `scripts/install.ps1` (Windows) download a release archive and verify its SHA-256 before installing; GoReleaser release archives for linux, darwin and windows on amd64 and arm64 with `checksums.txt` and GitHub build provenance.
+- `qbit-vault version` reports the module version of a `go install` build and the commit of a checkout build.
 
 - Encrypted local vault (XChaCha20-Poly1305) with the master key in the OS keychain or behind a passphrase; global and per-project layers; snapshots and restore.
 - Grants (once, session with a 12-hour default, project), approved only by the user in a native dialog or the terminal; revocation.
@@ -17,6 +20,10 @@ First version, not yet tagged.
 - Zero-knowledge self-hosted sync with `qbit-vault-server` (Docker image): device pairing, three-way merge, conflicts, history and restore, account rekey and device revocation.
 - Interactive TUI (`qbit-vault tui`, or `qbit-vault` with no arguments in a terminal): first-run wizard and a three-pane home for secrets, grants, hosts, audit, sync and doctor. It never holds a secret value.
 - `doctor` health report.
+
+### Changed
+
+- The broker contract is `qbit-vault.secrets-broker/v1` (was `gentle-ai.secrets-broker/v1` before any release).
 
 ### Fixed
 

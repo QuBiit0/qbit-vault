@@ -49,6 +49,14 @@ jobs:
       - name: leak grep
         if: always()
         run: go run ./tools/leakgrep ci-logs
+      - name: install script
+        if: matrix.os != 'windows-latest'
+        run: bash scripts/install_test.sh
+      - name: install script (PowerShell 7 and Windows PowerShell)
+        if: matrix.os == 'windows-latest'
+        run: |
+          pwsh -NoProfile -File scripts/install_test.ps1
+          env -u PSModulePath powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install_test.ps1
 
   # The matrix above builds with the Go version go.mod names. This job builds
   # with the latest stable Go, so a behavior change between versions (such as

@@ -16,13 +16,13 @@ The interactive terminal app for QBit Vault: first run follows the splash and se
 
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
-| T1 | S2, S3, S5, S7 | worker | (T1) | done |
+| T1 | S2, S3, S5, S7 | worker | af04545 | done |
 | T2 | S4, S6, S7 | worker | | pending |
 | T3 | S4, S6, S7 | worker | | pending |
 | T4 | S1, S6 | inline | | pending |
 
 - T1: dependencies + AGENTS.md; `internal/tui` shell (model, router, theme from tokens, Go mark rasterizer with tests), splash + three-pane home skeleton (sections pane, empty list/detail placeholders naming the task that fills them), `Backend` interface + fake, `qbit-vault tui` and the no-args TTY rule.
-- T2: setup wizard and secrets/grants screens through a `cli`-side backend adapter over the existing command code (init, host registration, list, set via suspended capture, rm, describe, grants list, revoke).
+- T2: (also the T1 follow-ups F1-F2 in L6) setup wizard and secrets/grants screens through a `cli`-side backend adapter over the existing command code (init, host registration, list, set via suspended capture, rm, describe, grants list, revoke).
 - T3: hosts, audit, sync, doctor, update (planned) screens + empty/locked/error states + leak test.
 - T4: docs (docs/CLI.md, README status, INSTALL) and close.
 
@@ -33,3 +33,4 @@ The interactive terminal app for QBit Vault: first run follows the splash and se
 - L3. Decision: values never enter the TUI process; capture is delegated to the existing prompt backends by suspending the TUI (Bubble Tea strings cannot be wiped).
 - L4. Direction revised by the user: "creo que la primera panes esa esta mejor" → chose "Panes + wizard del Launcher" (recommended when asked "cual es la que vos recomendas?"): guided first run from 02-launcher, daily three-pane home from 01-panes.
 - L5. T1 (gentle-ai-worker): bubbletea v1.3.10, lipgloss v1.1.0, termenv v0.16.0 direct (color profile pinning); bubbles is allowed in AGENTS.md but enters go.mod with T2, its first import. internal/tui: Go port of term-mark (pinned pixels within ±2 of the Python reference), theme, splash, three-pane home skeleton, backend-error screen; `qbit-vault tui` and the no-args TTY rule (help = baseline + exactly the tui line; --json and QBIT_VAULT_NO_TUI unchanged). gofmt, go vet, go test internal/tui and internal/cli green (cli 473 s). Home-screen tests were written after the code (direction changed mid-task): no RED observed for them. Parent check: rendered real View() frames (splash, home, hosts focus, locked) to HTML and screenshotted: they match 01-panes/02-launcher.
+- L6. T1 verification. Independent verify (gentle-ai-verify): S3 pass, S4 pass, S2 partial (bubbles deferred to its first import in T2; termenv became a direct import: it was already a transitive module of the approved lipgloss and is used only to pin the color profile, recorded in AGENTS.md), S5 partial (the #1C6E9E / ANSI256 fallback is not tested), S7 partial (the frame leak test belongs to T3). Native review at the user's request ("hacelo y cerralo"): the accumulated branch candidate exceeded the lens context budget (no authority created), so the work-unit commit af04545 was reviewed alone (lineage review-4d7a1b71a9ab4dac, lenses risk + reliability): approved, acknowledged, authority burned. Non-blocking findings, carried as follow-ups: F1 `R3-ansi256-fallback-untested` (internal/tui/theme.go:136-142) and F2 `R3-status-branches-untested` (internal/cli/tuicmd.go:97-123: locked and unlocked paths and the wipe). Also noted: ListAll materializes values only to count them; a count method would avoid it.

@@ -159,7 +159,7 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 2 | Master key | Keychain mode (default): generate the key and store it in the OS keychain (`keychain: macos-keychain`, `windows-credential-manager` or `secret-service`). With `--passphrase`, wrap it with a passphrase (asked twice on the controlling terminal, or `--passphrase-stdin`) into `key.enc`. **There is no automatic fallback:** on a machine without a keychain (headless Linux, WSL without Secret Service) plain `init` fails and you run `init --passphrase` | only with `--passphrase` |
 | 3 | Empty vault | Write `vault.enc` with an empty body. **Never** reads `process.env` or any `.env` | no |
 | 4 | Detect hosts | `claude-code` (`~/.claude/` or a `claude` binary on `PATH`), `codex` (`~/.codex/` or `codex`), `pi` (the Pi agent directory, `~/.pi/`, or a `pi` or `gentle-shell` binary); `--agents` names hosts explicitly. There is no OpenCode adapter (dropped, `ROADMAP.md`) | no |
-| 5 | Register hosts | Per `AGENT_INTEGRATIONS.md`, receipts to `state.json`. Claude Code: `mcpServers.qbit-vault` in `~/.claude.json`, four hooks and the `Read`/`Edit` deny rules for the vault home in `~/.claude/settings.json`. Codex: the `[mcp_servers.qbit-vault]` table in `~/.codex/config.toml`. Pi / Gentle Shell: `mcpServers.qbit-vault` in `<Pi agent dir>/mcp.json` (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`) | no |
+| 5 | Register hosts | Per `AGENT_INTEGRATIONS.md`, receipts to `state.json`. Claude Code: `mcpServers.qbit-vault` in `~/.claude.json`, four hooks and the `Read`/`Edit` deny rules for the vault home in `~/.claude/settings.json`. Codex: the `[mcp_servers.qbit-vault]` table in `~/.codex/config.toml`. Pi / Gentle Shell: `mcpServers.qbit-vault` in `<Pi agent dir>/mcp.json` (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`). Every host also gets the `qbit-vault` agent skill: `~/.claude/skills/qbit-vault/SKILL.md` for Claude Code, one shared `~/.agents/skills/qbit-vault/SKILL.md` for Codex and Pi (`AGENT_INTEGRATIONS.md` § Agent skill) | no |
 | 6 | Extension | Pi: `init` **prints** `host pi: to add the extension, run: pi install npm:qbit-vault-pi` for you to run and never runs it, because installing needs the network (AGENTS.md invariant 8). The extension itself does not exist yet (Phase 4); until it does, Pi uses the MCP entry from step 5 | no |
 | 7 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 
@@ -171,8 +171,8 @@ Illustrative, on a Linux machine with all three hosts present:
 
 ```
 vault initialized at /home/ana/.qbit-vault (keychain: secret-service)
-host claude-code: registered (mcp, hooks, deny)
-host codex: registered (mcp)
+host claude-code: registered (mcp, hooks, deny, skill)
+host codex: registered (mcp, skill)
 host pi: registered (mcp)
 host pi: to add the extension, run: pi install npm:qbit-vault-pi
 ok    vault                    unlocked (keychain: secret-service)

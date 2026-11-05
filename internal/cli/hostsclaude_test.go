@@ -57,10 +57,10 @@ func TestInitRegistersClaudeCodeAndDoctorIsHealthy(t *testing.T) {
 	w := newBareWorld(t)
 	withHosts(t, claudeHost(uh))
 	code, out, errs := w.run("", "init", "--agents", "claude-code")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host claude-code: registered (mcp, hooks, deny)\n") || !strings.HasSuffix(out, "healthy\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host claude-code: registered (mcp, hooks, deny, skill)\n") || !strings.HasSuffix(out, "healthy\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	for _, step := range []string{"mcp", "hooks", "deny"} {
+	for _, step := range []string{"mcp", "hooks", "deny", "skill"} {
 		if s := doctorStatus(out, "host.claude-code."+step); s != "ok" {
 			t.Fatalf("host.claude-code.%s is %q:\n%s", step, s, out)
 		}
@@ -124,7 +124,7 @@ func TestInitDetectsClaudeCodeByItsConfigDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs = w.run("", "init")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host claude-code: registered (mcp, hooks, deny)\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host claude-code: registered (mcp, hooks, deny, skill)\n") {
 		t.Fatalf("installed: code=%d out=%q err=%q", code, out, errs)
 	}
 }

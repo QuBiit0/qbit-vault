@@ -4,6 +4,14 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- The `qbit-vault` agent skill: `init` and `sync` install it for Claude Code (`~/.claude/skills`) and, as one shared file, for Codex and Pi (`~/.agents/skills`); it is rewritten only when a release changes it, `doctor` reports a stale copy, and `uninstall` removes it. A user's own `SKILL.md` at that path is never replaced.
+
+### Fixed
+
+- Registering a host whose config already held the qbit-vault entry (for example after `state.json` was lost) no longer fails with `vault: invalid host record`.
+
 ## [0.1.0-beta.2] - 2026-11-05
 
 First public release. The `v0.1.0-beta.1` tag exists but its release job failed before publishing anything; it is kept, not moved (published versions are never overridden).

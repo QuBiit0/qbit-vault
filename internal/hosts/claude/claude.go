@@ -1,10 +1,11 @@
 // Package claude is the Claude Code host adapter (docs/AGENT_INTEGRATIONS.md
-// § Registration written by init, PRD R-HOST-02, R-INS-05). Three steps, each
-// an edit of one JSON file through internal/filemerge:
+// § Registration written by init, PRD R-HOST-02, R-INS-05). Four steps, each
+// one file through internal/filemerge:
 //
 //	mcp    ~/.claude.json            mcpServers.qbit-vault (user scope MCP server)
 //	hooks  ~/.claude/settings.json   four hook entries running `qbit-vault hook …`
 //	deny   ~/.claude/settings.json   permissions.deny entries for the vault home
+//	skill  ~/.claude/skills/qbit-vault/SKILL.md   the agent skill (internal/hosts/skill)
 //
 // Claude Code keeps user-scoped MCP servers in ~/.claude.json, not in
 // settings.json (https://code.claude.com/docs/en/mcp.md § User scope).
@@ -23,6 +24,7 @@ import (
 
 	"github.com/QuBiit0/qbit-vault/internal/filemerge"
 	"github.com/QuBiit0/qbit-vault/internal/hosts"
+	"github.com/QuBiit0/qbit-vault/internal/hosts/skill"
 )
 
 // Name is the host name used by --agents, state.json and doctor.
@@ -91,12 +93,13 @@ func (a *Adapter) executable() (string, error) {
 	return exe, nil
 }
 
-// Steps lists mcp, hooks and deny, in that order.
+// Steps lists mcp, hooks, deny and skill, in that order.
 func (a *Adapter) Steps(env hosts.Env) []hosts.Step {
 	return []hosts.Step{
 		a.step("mcp", claudeJSONPath, a.mcpEdits),
 		a.step("hooks", settingsPath, a.hookEdits),
 		a.step("deny", settingsPath, denyEdits),
+		skill.Step(Name, skill.ClaudePath),
 	}
 }
 

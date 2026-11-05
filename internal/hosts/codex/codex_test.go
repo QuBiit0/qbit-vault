@@ -107,14 +107,14 @@ func TestName(t *testing.T) {
 		t.Fatalf("name %q", got)
 	}
 	steps := codex.NewWithExe(fakeExe).Steps(hosts.Env{})
-	if len(steps) != 1 || steps[0].Name != "mcp" {
+	if len(steps) != 2 || steps[0].Name != "mcp" || steps[1].Name != "skill" {
 		t.Fatalf("steps %+v", steps)
 	}
 }
 
 func TestApplyOnAbsentFile(t *testing.T) {
 	r := newRig(t)
-	if res := r.apply(); !res.Changed() || len(res.Steps) != 1 {
+	if res := r.apply(); !res.Changed() || len(res.Steps) != 2 {
 		t.Fatalf("result %+v", res)
 	}
 	r.golden("absent.config.toml.golden")

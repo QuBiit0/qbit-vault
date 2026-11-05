@@ -1,8 +1,9 @@
 // Package codex is the Codex host adapter (docs/AGENT_INTEGRATIONS.md § Codex,
-// PRD R-HOST-03). One step, an edit of one TOML file through
-// internal/filemerge:
+// PRD R-HOST-03). Two steps through internal/filemerge:
 //
-//	mcp  ~/.codex/config.toml  [mcp_servers.qbit-vault] (+ its env subtable)
+//	mcp    ~/.codex/config.toml  [mcp_servers.qbit-vault] (+ its env subtable)
+//	skill  ~/.agents/skills/qbit-vault/SKILL.md  the agent skill, shared with Pi
+//	       (Codex reads user skills from ~/.agents/skills; internal/hosts/skill)
 //
 // Codex keeps MCP servers in `[mcp_servers.<name>]` tables of config.toml with
 // the keys command, args and env (https://developers.openai.com/codex/mcp
@@ -24,6 +25,7 @@ import (
 
 	"github.com/QuBiit0/qbit-vault/internal/filemerge"
 	"github.com/QuBiit0/qbit-vault/internal/hosts"
+	"github.com/QuBiit0/qbit-vault/internal/hosts/skill"
 )
 
 // Name is the host name used by --agents, state.json and doctor.
@@ -87,7 +89,7 @@ func (a *Adapter) executable() (string, error) {
 	return exe, nil
 }
 
-// Steps lists the single step, mcp.
+// Steps lists mcp and skill.
 func (a *Adapter) Steps(hosts.Env) []hosts.Step {
 	prepare := func(env hosts.Env) (path, block string, err error) {
 		if env.UserHome == "" {
@@ -121,7 +123,7 @@ func (a *Adapter) Steps(hosts.Env) []hosts.Step {
 			}
 			return hosts.CheckTOML(p, table, b)
 		},
-	}}
+	}, skill.Step(Name, skill.AgentsPath)}
 }
 
 // mcpBlock is the text of our table. QBIT_VAULT_HOME is set only for a vault

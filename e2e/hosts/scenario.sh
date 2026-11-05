@@ -93,9 +93,14 @@ answers
 qbv init --passphrase
 expect_rc "init exits 0" 0
 expect_empty_err "init writes nothing to stderr"
-expect_out "init: claude-code line" $'host claude-code: registered (mcp, hooks, deny)\n'
-expect_out "init: codex line" $'host codex: registered (mcp)\n'
+expect_out "init: claude-code line" $'host claude-code: registered (mcp, hooks, deny, skill)\n'
+expect_out "init: codex line" $'host codex: registered (mcp, skill)\n'
+# Pi shares ~/.agents/skills with Codex, which already wrote the skill.
 expect_out "init: pi line + extension install line" $'host pi: registered (mcp)\nhost pi: to add the extension, run: pi install npm:qbit-vault-pi\n'
+CLAUDE_SKILL="$HOME/.claude/skills/qbit-vault/SKILL.md"
+AGENTS_SKILL="$HOME/.agents/skills/qbit-vault/SKILL.md"
+if [[ -f $CLAUDE_SKILL && -f $AGENTS_SKILL ]] && grep -q '^name: qbit-vault$' "$CLAUDE_SKILL" && cmp -s "$CLAUDE_SKILL" "$AGENTS_SKILL"; then pass "init installs the same skill for claude-code and for codex + pi"; else fail "init installs the same skill for claude-code and for codex + pi"; fi
+if [[ ! -e $HOME/.pi/agent/skills/qbit-vault ]]; then pass "pi gets no second copy of the skill"; else fail "pi gets no second copy of the skill"; fi
 if [[ $OUT == *healthy ]]; then pass "init ends with a healthy doctor report"; else fail "init ends with a healthy doctor report" "$(snippet "$OUT")"; fi
 expect_no_out "init output holds no passphrase" "$PASSPHRASE"
 
@@ -352,6 +357,7 @@ expect_eq "pi mcp.json byte-identical to the original" "$(sha "$PI_MCP")" "$ORIG
 jqt "claude.json: the later user key is kept" "$CLAUDE_JSON" '.addedLater == "user-edit"'
 jqt "claude.json: our entry is gone, the user's server is not" "$CLAUDE_JSON" '(.mcpServers | has("qbit-vault") | not) and .mcpServers["other-mcp"].command == "npx"'
 jqt "claude.json: only our entry (plus the later key) differs from the original" "$CLAUDE_JSON" ". == ($(jq -c . "$WORK/claude.json.orig") + {addedLater: \"user-edit\"})"
+if [[ ! -e $HOME/.claude/skills/qbit-vault && ! -e $HOME/.agents/skills/qbit-vault ]]; then pass "uninstall removes both skill copies"; else fail "uninstall removes both skill copies"; fi
 if [[ -f $VAULT/vault.enc && -f $VAULT/state.json ]]; then pass "the vault is still there"; else fail "the vault is still there"; fi
 qbv list
 expect_rc "the vault still opens after uninstall" 0

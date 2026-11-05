@@ -26,7 +26,7 @@ func TestInitRegistersCodexAndDoctorIsHealthy(t *testing.T) {
 	w := newBareWorld(t)
 	withHosts(t, codexHost(uh))
 	code, out, errs := w.run("", "init", "--agents", "codex")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp)\n") || !strings.HasSuffix(out, "healthy\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp, skill)\n") || !strings.HasSuffix(out, "healthy\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if s := doctorStatus(out, "host.codex.mcp"); s != "ok" {
@@ -82,7 +82,7 @@ func TestInitDetectsCodexByItsConfigDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs = w.run("", "init")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp)\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp, skill)\n") {
 		t.Fatalf("installed: code=%d out=%q err=%q", code, out, errs)
 	}
 }

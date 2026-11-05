@@ -17,7 +17,9 @@ func valueFDKindOK(fd int) bool {
 	}
 	switch st.Mode & syscall.S_IFMT {
 	case syscall.S_IFIFO, syscall.S_IFSOCK, syscall.S_IFREG, syscall.S_IFCHR:
-		return true
+		// fstat alone cannot tell a kqueue apart on macOS: it reports a
+		// file type a pipe also has. isEventPoller asks the kernel.
+		return !isEventPoller(fd)
 	}
 	return false
 }

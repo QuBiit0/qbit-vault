@@ -115,7 +115,9 @@ func mergeFile(home, path string, prev *Receipt, merge func([]byte) ([]byte, err
 			r.Changed = false
 			return r, nil
 		}
-		return Receipt{Path: path, SHA256: digest(doc)}, nil
+		// Nothing was written, so there is no copy; the snapshot only names
+		// the file (state.json needs an absolute path) and Revert strips.
+		return Receipt{Path: path, Snapshot: Snapshot{Path: path, Existed: true}, SHA256: digest(doc)}, nil
 	}
 	snap, err := TakeSnapshot(home, path)
 	if err != nil {

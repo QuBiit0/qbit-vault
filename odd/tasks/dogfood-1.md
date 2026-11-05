@@ -16,10 +16,10 @@ Branch `feat/cli-skeleton`. Spec authority: docs/PRD.md, docs/CLI.md, contracts/
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| D1 | S2, S6 | worker | Windows: `bash`/`sh` in an exec command never resolve to WSL's System32 launcher; diagnose and fix the S6 argument loss | | pending |
-| D2 | S3 | parent | dump-guard relaxation tried and WITHDRAWN (see L5); only `${#NAME}` allowed; `secret_exec` description now tells agents to use it | | done |
-| D3 | S4 | worker | a once grant is consumed only when the child process actually starts | | pending |
-| D4 | S5 | worker | broker/MCP refusals are audited like CLI refusals | | pending |
+| D1 | S2, S6 | worker | Windows: `bash`/`sh` in an exec command never resolve to WSL's System32 launcher; diagnose and fix the S6 argument loss | 5180b22 | done |
+| D2 | S3 | parent | dump-guard relaxation tried and WITHDRAWN (see L5); only `${#NAME}` allowed; `secret_exec` description now tells agents to use it | eaed280 | done |
+| D3 | S4 | worker | a once grant is released when the child process never started | 5180b22 | done |
+| D4 | S5 | worker | broker/MCP refusals are audited like CLI refusals | 97b796e | done |
 
 ## Log
 

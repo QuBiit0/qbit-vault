@@ -1,6 +1,6 @@
 # QBit Vault design system (qbitdev brand)
 
-QBit Vault is a product of the user's personal brand **qbitdev**. Accepted on 2026-11-05: the user picked `design/qbitdev-vault-identity/01-atom-keyhole.html` ("Atom keyhole"). Colors were measured from the user's qbitdev logo image (banner sent in chat on 2026-11-05) and refined in that artboard; every token below names that artboard as its source. This replaces the earlier "Dial" system (design/qbit-vault-identity/02-dial.html), which is history only.
+QBit Vault is a product of the user's personal brand **qbitdev**. Accepted on 2026-11-05: the user picked `design/qbitdev-vault-identity/01-atom-keyhole.html` ("Atom keyhole"). Colors were measured from the user's qbitdev logo image (banner sent in chat on 2026-11-05) and refined in that artboard; every token below names that artboard as its source. This replaces the earlier "Dial" system, removed from the tree (it is in git history before this change).
 
 ## Concept
 

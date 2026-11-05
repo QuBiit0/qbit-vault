@@ -1,0 +1,10 @@
+{
+  "title": "QBit Vault TUI (qbitdev brand)",
+  "brief": "The interactive terminal app for QBit Vault, a secrets broker for coding agents: guided first-run setup (vault, keychain, host registration), secrets (values never shown, masked entry), grants (view and revoke only, never grant), hosts with drift and repair, audit, sync, doctor and update (planned), plus empty, locked, error and loading states. Three interaction models in the qbitdev palette, with the half-block Atom keyhole mark.",
+  "feature": "odd/tasks/polish.md",
+  "artboards": [
+    { "file": "01-panes.html", "title": "Panes", "tradeoff": "lazygit-style three panes (sections, list, detail) with the keys always in the footer: state at a glance and the fastest for power users; densest, needs 100+ columns and is the steepest on a first run. Intended typefaces at implementation: JetBrains Mono in the terminal, Sora Light for the wordmark.", "width": 1440, "height": 14500 },
+    { "file": "02-launcher.html", "title": "Launcher", "tradeoff": "Centered menu in the manner of the gentle-ai and engram installers: splash, one-question-per-screen wizard, then a menu of actions. Gentlest for first use and narrow terminals; more keystrokes for daily tasks and no overview. Intended typefaces: JetBrains Mono, Sora Light.", "width": 1440, "height": 13100 },
+    { "file": "03-command.html", "title": "Command", "tradeoff": "Command-palette-first single list with fuzzy filter and inline detail (k9s, fzf): fastest for daily use and the smallest surface to build; least discoverable, so first run is a checklist. Intended typefaces: JetBrains Mono, Sora Light.", "width": 1440, "height": 10600 }
+  ]
+}

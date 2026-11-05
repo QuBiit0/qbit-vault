@@ -610,3 +610,78 @@ func TestGrantNeverAuthorizesAnotherRecord(t *testing.T) {
 		t.Fatalf("grants = %d, want one per record", len(s.Grants))
 	}
 }
+
+// D3 (dogfood 1): a once grant taken for an exec that never started goes back.
+func TestRestoreReturnsAConsumedOnceGrant(t *testing.T) {
+	once := Request{Name: "A_KEY", Layer: GlobalLayer, Session: sessA, Scope: ScopeOnce}
+	take := func(s *Store, at time.Time) Decision {
+		d, _ := chk(s, "A_KEY", GlobalLayer, sessA, "", at)
+		return d
+	}
+
+	t.Run("the claim carries the grant and a second check is refused", func(t *testing.T) {
+		s := &Store{}
+		g := mustAdd(t, s, once, t0)
+		d := take(s, t0)
+		if !d.Allowed || d.Once == nil || d.Once.ID != g.ID || d.Once.Consumed {
+			t.Fatalf("claim: %+v", d)
+		}
+		if take(s, t0).Allowed {
+			t.Fatal("a claimed once grant allowed a second check")
+		}
+	})
+	t.Run("restore makes it usable again, once", func(t *testing.T) {
+		s := &Store{}
+		mustAdd(t, s, once, t0)
+		d := take(s, t0)
+		if !Restore(s, *d.Once, t0) {
+			t.Fatal("Restore reported nothing to do")
+		}
+		if !take(s, t0).Allowed || take(s, t0).Allowed {
+			t.Fatal("after Restore the grant must allow exactly one more check")
+		}
+	})
+	t.Run("restore brings back a grant a purge already dropped", func(t *testing.T) {
+		s := &Store{}
+		mustAdd(t, s, once, t0)
+		d := take(s, t0)
+		Purge(s, t0) // another operation tidied the consumed grant away
+		if len(s.Grants) != 0 {
+			t.Fatalf("purge kept %d grants", len(s.Grants))
+		}
+		if !Restore(s, *d.Once, t0) || !take(s, t0).Allowed {
+			t.Fatal("the dropped grant did not come back")
+		}
+	})
+	t.Run("an expired grant stays gone", func(t *testing.T) {
+		s := &Store{}
+		mustAdd(t, s, once, t0)
+		d := take(s, t0)
+		if Restore(s, *d.Once, t0.Add(OnceTTL+time.Second)) {
+			t.Fatal("restored an expired grant")
+		}
+		if take(s, t0.Add(OnceTTL+time.Second)).Allowed {
+			t.Fatal("an expired grant allowed a check")
+		}
+	})
+	t.Run("a newer identical grant is not duplicated", func(t *testing.T) {
+		s := &Store{}
+		mustAdd(t, s, once, t0)
+		d := take(s, t0)
+		mustAdd(t, s, once, t0.Add(time.Minute)) // the user granted again meanwhile
+		Restore(s, *d.Once, t0.Add(time.Minute))
+		if n := len(Active(s, t0.Add(time.Minute))); n != 1 {
+			t.Fatalf("%d live grants, want 1", n)
+		}
+	})
+	t.Run("only once grants are restored", func(t *testing.T) {
+		s := &Store{}
+		g := mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
+		if d := take(s, t0); !d.Allowed || d.Once != nil {
+			t.Fatalf("a session grant must not be offered for restore: %+v", d)
+		}
+		if Restore(s, g, t0) {
+			t.Fatal("restored a session grant")
+		}
+	})
+}

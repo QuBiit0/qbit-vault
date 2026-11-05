@@ -89,6 +89,10 @@ type Spec struct {
 // Result is what a run produced. Stdout and Stderr hold redacted output in
 // capture mode only.
 type Result struct {
+	// Started reports whether the operating system created the child
+	// process. False means the command was never run: nothing it could have
+	// done with the injected values happened.
+	Started    bool
 	ExitCode   int
 	Duration   time.Duration
 	Redactions int
@@ -137,7 +141,7 @@ func Run(ctx context.Context, s Spec) (Result, error) {
 
 	cmd := exec.Command(path, args...)
 	cmd.Dir = s.Dir
-	cmd.Env = env
+	cmd.Env = withShellOnPath(env)
 	cmd.WaitDelay = waitDelay
 	if s.Stdin != nil {
 		cmd.Stdin = s.Stdin
@@ -172,7 +176,7 @@ func Run(ctx context.Context, s Spec) (Result, error) {
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		return Result{}, ErrStart
+		return Result{Started: true}, ErrStart
 	}
 
 	done := make(chan error, 1)
@@ -204,6 +208,7 @@ func Run(ctx context.Context, s Spec) (Result, error) {
 	_ = errW.Close()
 
 	res := Result{
+		Started:    true,
 		Duration:   time.Since(start),
 		Redactions: outW.Count() + errW.Count(),
 		TimedOut:   timedOut,

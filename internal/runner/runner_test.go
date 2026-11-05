@@ -549,3 +549,27 @@ func TestRunSignalledChildExitsWith128PlusSignal(t *testing.T) {
 		t.Fatalf("exit code %d, want 137", res.ExitCode)
 	}
 }
+
+// D3 (dogfood 1): Started tells a command that ran from one that never did.
+func TestRunReportsWhetherTheChildStarted(t *testing.T) {
+	helper(t, "exit", "3")
+	res, err := Run(context.Background(), spec(t, nil))
+	if err != nil || !res.Started || res.ExitCode != 3 {
+		t.Fatalf("a child that exits 3: %+v err %v", res, err)
+	}
+
+	s := spec(t, nil)
+	s.Dir = filepath.Join(t.TempDir(), "missing")
+	if res, err := Run(context.Background(), s); !errors.Is(err, ErrStart) || res.Started {
+		t.Fatalf("a directory that does not exist: %+v err %v", res, err)
+	}
+	s = spec(t, map[string]secret.Secret{"BAD=NAME": secret.New("X", []byte("TESTSECRET_x"))})
+	if res, err := Run(context.Background(), s); !errors.Is(err, ErrBadEnv) || res.Started {
+		t.Fatalf("a bad variable name: %+v err %v", res, err)
+	}
+	s = spec(t, nil)
+	s.Shell = "fish"
+	if res, err := Run(context.Background(), s); !errors.Is(err, ErrUnknownShell) || res.Started {
+		t.Fatalf("an unknown shell: %+v err %v", res, err)
+	}
+}

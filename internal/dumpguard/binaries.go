@@ -174,3 +174,37 @@ func SimpleProgram(shell, cmd string) (program string, ok bool) {
 	name := ProgramName(f[0])
 	return name, name != ""
 }
+
+// InvokesBare reports whether cmd runs, in any of its simple commands
+// (including the scripts of `sh -c` and `eval`, wrappers resolved), a program
+// typed as exactly one of names with no directory part: the case where the
+// system, not the caller, decides which file runs. A wrapper whose flags
+// cannot be parsed with certainty counts when any of its words is such a name.
+func InvokesBare(cmd string, names ...string) bool {
+	bare := func(w string) bool {
+		for _, n := range names {
+			if strings.EqualFold(strings.TrimSuffix(strings.ToLower(w), ".exe"), n) && !strings.ContainsAny(w, `/\`) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, s := range Segments(cmd) {
+		idx, _, amb := resolveAmbiguity(s.Words)
+		if idx < 0 {
+			continue
+		}
+		if !amb {
+			if bare(s.Words[idx]) {
+				return true
+			}
+			continue
+		}
+		for _, w := range s.Words {
+			if bare(w) {
+				return true
+			}
+		}
+	}
+	return false
+}

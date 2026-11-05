@@ -258,6 +258,9 @@ type Decision struct {
 	Scope   Scope  // the scope that allowed it
 	GrantID string // the grant that allowed it
 	Err     error  // nil when allowed, else ErrGrantRequired
+	// Once is a copy of the once grant this check consumed, as it was before;
+	// nil for any other scope. Restore puts it back.
+	Once *Grant
 }
 
 // Check evaluates docs/STORAGE.md § Grants for one resolved record: layer is
@@ -296,10 +299,40 @@ func Check(s *Store, name, layer, recordID string, sensitive bool, session, cwd 
 	for i, g := range s.Grants {
 		if g.Name == name && g.Layer == layer && g.RecordID == recordID && g.Scope == ScopeOnce && !g.Consumed && session != "" && g.Session == session {
 			s.Grants[i].Consumed = true
-			return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, true
+			taken := g
+			return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID, Once: &taken}, true
 		}
 	}
 	return Decision{Err: ErrGrantRequired}, mutated
+}
+
+// Restore undoes the consumption of a once grant that Check returned in
+// Decision.Once, for a caller that took it and then could not use it (the
+// command never started). The grant is put back as it was if it is still
+// live: it is un-consumed when present, re-added when a purge dropped it, and
+// left out when it expired or the user granted the same thing again in the
+// meantime. It reports whether the store changed.
+func Restore(s *Store, g Grant, now time.Time) bool {
+	now = now.UTC()
+	if g.Scope != ScopeOnce || g.ID == "" || expired(g.ExpiresAt, now) {
+		return false
+	}
+	g.Consumed = false
+	for i, old := range s.Grants {
+		if old.ID == g.ID {
+			changed := old.Consumed
+			s.Grants[i].Consumed = false
+			return changed
+		}
+	}
+	for _, old := range s.Grants {
+		if !old.Consumed && !expired(old.ExpiresAt, now) && old.Name == g.Name && old.Layer == g.Layer &&
+			old.RecordID == g.RecordID && old.Session == g.Session && old.Scope == g.Scope {
+			return false
+		}
+	}
+	s.Grants = append(s.Grants, g)
+	return true
 }
 
 // inside reports whether p is root or below it, on path boundaries.

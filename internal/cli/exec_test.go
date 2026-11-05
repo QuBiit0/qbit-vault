@@ -387,14 +387,16 @@ func TestExecEnvironment(t *testing.T) {
 	}
 }
 
-func TestExecJoinsArgumentsWithSpaces(t *testing.T) {
+// Changed in dogfood 1 (S6): a word with a blank stays one word; before, the
+// words were joined with spaces and "b c" reached the child as two.
+func TestExecKeepsAWordWithBlanksTogether(t *testing.T) {
 	w := newExecWorld(t)
 	w.setSecret("GITHUB_TOKEN", xv, "--global")
 	w.grantTo(sessA, "GITHUB_TOKEN", "session")
 	run := child(t, "args", "", 0)
 	args := []string{"--session", sessA, "exec", "--secret", "GITHUB_TOKEN", "--", run, "a", "b c"}
 	code, out, errs := w.run("", args...)
-	if code != 0 || nl(out) != "a,b,c\n" || errs != "" {
+	if code != 0 || nl(out) != "a,b c\n" || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 }

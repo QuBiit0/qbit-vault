@@ -45,6 +45,13 @@ const (
 	outcomeError    = "error"
 )
 
+// runCommand starts the child; tests replace it.
+var runCommand = runner.Run
+
+// msgNoPosixShell is the fixed answer when a command names bash or sh on a
+// Windows machine that has no Git for Windows. WSL is never the fallback.
+const msgNoPosixShell = "bash and sh need Git for Windows, which was not found; WSL is not used (name its bash by absolute path to use it)"
+
 // builtins are shell builtins that start no process of their own; they do not
 // count against a binaries allowlist (L3).
 var builtins = map[string]bool{
@@ -156,9 +163,8 @@ func (g *globals) planExec(cmd *cobra.Command, args []string, f execFlags) (exec
 	case dash > 0:
 		return p, usageError{"unexpected arguments"}
 	}
-	// The words after -- are joined with single spaces and handed to the
-	// shell as one command; they are not re-quoted.
-	p.command = strings.Join(args, " ")
+	// The words after -- become one command for the shell (joinCommand).
+	p.command = joinCommand(args, runner.Resolve(p.shell))
 	if strings.TrimSpace(p.command) == "" || len(p.command) > maxCommandBytes {
 		return p, usageError{"command must be 1 to 16384 bytes"}
 	}
@@ -209,18 +215,28 @@ func (g *globals) auditExec(r audit.Record) error {
 // started it only looks: nothing is consumed or written. With a started
 // record it consumes the once grants and appends that record inside the
 // grants lock (L2, L7), so a failed append consumes nothing and nothing runs.
-func (g *globals) grantGate(stderr io.Writer, s *session, recs []vault.Entry, cwd string, started *audit.Record) error {
-	return g.mutateGrants(stderr, s, func(st *grants.Store) (bool, error) {
+//
+// Consuming a once grant is a claim: it is taken here, atomically under the
+// lock, so two execs cannot both use one grant, and it is returned to the
+// caller, who gives it back (releaseOnce) if the command turns out never to
+// start. The claim is the only moment a once grant changes hands; nothing
+// else touches it.
+func (g *globals) grantGate(stderr io.Writer, s *session, recs []vault.Entry, cwd string, started *audit.Record) (claimed []grants.Grant, err error) {
+	err = g.mutateGrants(stderr, s, func(st *grants.Store) (bool, error) {
 		work := &grants.Store{
 			Grants: append([]grants.Grant(nil), st.Grants...),
 			Tokens: append([]grants.Token(nil), st.Tokens...),
 		}
 		now, mutated := clock(), false
+		var taken []grants.Grant
 		for _, e := range recs {
 			d, m := grants.Check(work, e.Name, e.Layer.Key(), e.Record.ID, e.Record.Sensitive, g.Session, cwd, now)
 			mutated = mutated || m
 			if !d.Allowed {
 				return false, refusal.New(refusal.GrantRequired, e.Name)
+			}
+			if d.Once != nil {
+				taken = append(taken, *d.Once)
 			}
 		}
 		if started == nil {
@@ -230,7 +246,29 @@ func (g *globals) grantGate(stderr io.Writer, s *session, recs []vault.Entry, cw
 			return false, refusal.New(refusal.Internal, "")
 		}
 		st.Grants, st.Tokens = work.Grants, work.Tokens
+		claimed = taken
 		return mutated, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claimed, nil
+}
+
+// releaseOnce gives back the once grants an exec claimed when its command
+// never started. A child that started, whatever its exit code, keeps them
+// spent. Best effort: if the grants cannot be written the grants stay spent,
+// which is the safe side.
+func (g *globals) releaseOnce(stderr io.Writer, s *session, claimed []grants.Grant) {
+	if len(claimed) == 0 {
+		return
+	}
+	_ = g.mutateGrants(stderr, s, func(st *grants.Store) (bool, error) {
+		changed := false
+		for _, c := range claimed {
+			changed = grants.Restore(st, c, clock()) || changed
+		}
+		return changed, nil
 	})
 }
 
@@ -275,7 +313,7 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 	}
 
 	// 2. Grants, without consuming anything yet.
-	if err := g.grantGate(stderr, s, recs, grantCwd, nil); err != nil {
+	if _, err := g.grantGate(stderr, s, recs, grantCwd, nil); err != nil {
 		return err
 	}
 
@@ -328,6 +366,12 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 		}
 	}
 
+	// 4b. On Windows a bare bash or sh is Git's, never the WSL launcher; with
+	// no Git for Windows the command cannot run (D1).
+	if runtime.GOOS == "windows" && !runner.PosixShellAvailable() && dumpguard.InvokesBare(p.command, "bash", "sh") {
+		return refusal.New(refusal.Internal, "").WithMessage(msgNoPosixShell)
+	}
+
 	// 5. Hosts are advisory (R-EXEC-08): the audit notes it, the run goes on.
 	hostsWarning := false
 	for _, e := range recs {
@@ -352,7 +396,14 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 		return refusal.New(refusal.Internal, "")
 	}
 
-	// 7. Consume once grants and append the started record, fail-closed (L2).
+	// Everything that can fail before the child exists is resolved before the
+	// once grants are claimed.
+	scrub, err := g.vaultNames(s)
+	if err != nil {
+		return err
+	}
+
+	// 7. Claim once grants and append the started record, fail-closed (L2).
 	rec := audit.Record{
 		Event: audit.EventExec, Names: p.names, Layer: sharedLayer(recs), Cwd: p.dir,
 		Command: truncateUTF8(string(shown), auditCommandLimit), Outcome: outcomeStarted,
@@ -360,9 +411,16 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 	if hostsWarning {
 		rec.Detail = "hosts warning"
 	}
-	if err := g.grantGate(stderr, s, recs, grantCwd, &rec); err != nil {
+	claimed, err := g.grantGate(stderr, s, recs, grantCwd, &rec)
+	if err != nil {
 		return err
 	}
+	notStarted := true
+	defer func() {
+		if notStarted {
+			g.releaseOnce(stderr, s, claimed)
+		}
+	}()
 
 	// 8. Run.
 	spec := runner.Spec{
@@ -372,10 +430,7 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 	for _, sc := range p.secrets {
 		spec.Env[sc.env] = byName[sc.name].Record.Value
 	}
-	spec.ScrubNames, err = g.vaultNames(s)
-	if err != nil {
-		return err
-	}
+	spec.ScrubNames = scrub
 	if stdinOverride != nil {
 		spec.Stdin = stdinOverride
 	}
@@ -394,7 +449,8 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 	}
 	ctx, stop := signal.NotifyContext(commandContext(cmd), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	res, runErr := runner.Run(ctx, spec)
+	res, runErr := runCommand(ctx, spec)
+	notStarted = !res.Started
 
 	// 9. The finished record is best effort.
 	fin := audit.Record{
@@ -404,6 +460,8 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 	ms := res.Duration.Milliseconds()
 	fin.DurationMS = &ms
 	switch {
+	case !res.Started:
+		fin.Outcome, fin.Detail, fin.ExitCode = outcomeError, "not started", nil
 	case res.TimedOut:
 		fin.Detail = "timeout"
 	case runErr != nil && errors.Is(runErr, context.Canceled):
@@ -483,4 +541,40 @@ func commandContext(cmd *cobra.Command) context.Context {
 		return ctx
 	}
 	return context.Background()
+}
+
+// pwshSingleQuotes doubles every character PowerShell reads as a single quote
+// (the ASCII one and U+2018 U+2019 U+201A U+201B), so a word cannot close its
+// own quoting.
+var pwshSingleQuotes = strings.NewReplacer("'", "''", "‘", "‘‘", "’", "’’", "‚", "‚‚", "‛", "‛‛")
+
+// joinCommand builds the one command string the shell runs from the words
+// after --. A single word is the command as is. With several, a word that
+// holds a blank (or is empty) is quoted for the shell so it stays one word:
+// `sh -c 'printf "%s" x'` reaches the shell with its script in one piece.
+// Words without blanks stay verbatim, so `|`, `&&`, `>f` and `$NAME` keep
+// working as shell syntax.
+func joinCommand(words []string, shell runner.Shell) string {
+	if len(words) == 1 {
+		return words[0]
+	}
+	out := make([]string, len(words))
+	for i, w := range words {
+		out[i] = w
+		if w != "" && !strings.ContainsAny(w, " \t\r\n") {
+			continue
+		}
+		switch shell {
+		case runner.ShellCmd:
+			// cmd has no escape that survives /s /c for an inner quote.
+			if !strings.Contains(w, `"`) {
+				out[i] = `"` + w + `"`
+			}
+		case runner.ShellPwsh:
+			out[i] = "'" + pwshSingleQuotes.Replace(w) + "'"
+		default:
+			out[i] = "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
+		}
+	}
+	return strings.Join(out, " ")
 }

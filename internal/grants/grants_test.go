@@ -122,7 +122,7 @@ func TestAddFieldsPerScope(t *testing.T) {
 		t.Fatalf("once = %+v", once)
 	}
 	sess := mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
-	if sess.ExpiresAt == nil || !sess.ExpiresAt.Equal(t0.Add(30*time.Minute)) {
+	if sess.ExpiresAt == nil || !sess.ExpiresAt.Equal(t0.Add(12*time.Hour)) {
 		t.Fatalf("session default ttl: %+v", sess)
 	}
 	p := mustAdd(t, s, Request{Name: "A_KEY", Layer: proj, Session: sessA, Scope: ScopeProject, PromptTokenHash: "sha256:abc"}, t0)
@@ -140,7 +140,7 @@ func TestSessionTTLBounds(t *testing.T) {
 		wantErr bool
 		want    time.Duration
 	}{
-		{0, false, 30 * time.Minute},
+		{0, false, 12 * time.Hour},
 		{time.Minute, false, time.Minute},
 		{45 * time.Minute, false, 45 * time.Minute},
 		{24 * time.Hour, false, 24 * time.Hour},
@@ -182,7 +182,7 @@ func TestAddReplacesIdenticalGrant(t *testing.T) {
 	if len(s.Grants) != 1 || s.Grants[0].ID != second.ID || second.ID == first.ID {
 		t.Fatalf("grants = %+v", s.Grants)
 	}
-	if !s.Grants[0].ExpiresAt.Equal(t0.Add(31 * time.Minute)) {
+	if !s.Grants[0].ExpiresAt.Equal(t0.Add(12*time.Hour + time.Minute)) {
 		t.Fatal("the new grant must carry the new expiry")
 	}
 	// Different session, scope or layer are different grants.
@@ -197,7 +197,7 @@ func TestAddReplacesIdenticalGrant(t *testing.T) {
 func TestAddPurgesExpired(t *testing.T) {
 	s := &Store{}
 	mustAdd(t, s, sessionReq("OLD_KEY", GlobalLayer, sessA), t0)
-	mustAdd(t, s, sessionReq("NEW_KEY", GlobalLayer, sessA), t0.Add(time.Hour))
+	mustAdd(t, s, sessionReq("NEW_KEY", GlobalLayer, sessA), t0.Add(13*time.Hour))
 	if len(s.Grants) != 1 || s.Grants[0].Name != "NEW_KEY" {
 		t.Fatalf("grants = %+v", s.Grants)
 	}
@@ -206,14 +206,14 @@ func TestAddPurgesExpired(t *testing.T) {
 func TestCheckSessionGrant(t *testing.T) {
 	s := &Store{}
 	mustAdd(t, s, sessionReq("A_KEY", GlobalLayer, sessA), t0)
-	if !allowed(s, "A_KEY", GlobalLayer, sessA, "/anywhere", t0.Add(29*time.Minute)) {
+	if !allowed(s, "A_KEY", GlobalLayer, sessA, "/anywhere", t0.Add(12*time.Hour-time.Minute)) {
 		t.Fatal("active session grant refused")
 	}
 	// A session grant is not consumed.
-	if !allowed(s, "A_KEY", GlobalLayer, sessA, "/anywhere", t0.Add(29*time.Minute)) {
+	if !allowed(s, "A_KEY", GlobalLayer, sessA, "/anywhere", t0.Add(12*time.Hour-time.Minute)) {
 		t.Fatal("session grant was consumed")
 	}
-	d, _ := chk(s, "A_KEY", GlobalLayer, sessA, "/x", t0.Add(30*time.Minute))
+	d, _ := chk(s, "A_KEY", GlobalLayer, sessA, "/x", t0.Add(12*time.Hour))
 	if d.Allowed || !errors.Is(d.Err, ErrGrantRequired) {
 		t.Fatalf("expired grant: %+v", d)
 	}
@@ -228,7 +228,7 @@ func TestCheckExpiredIsPurgedAndMutated(t *testing.T) {
 	if _, mutated := chk(s, "A_KEY", GlobalLayer, sessA, "", t0.Add(time.Minute)); mutated {
 		t.Fatal("a pure allow must not report a mutation")
 	}
-	if _, mutated := chk(s, "A_KEY", GlobalLayer, sessA, "", t0.Add(time.Hour)); !mutated {
+	if _, mutated := chk(s, "A_KEY", GlobalLayer, sessA, "", t0.Add(13*time.Hour)); !mutated {
 		t.Fatal("purging must report a mutation")
 	}
 }
@@ -516,7 +516,7 @@ func TestActiveIsSortedAndPurged(t *testing.T) {
 	if strings.Join(names, ";") != strings.Join(want, ";") {
 		t.Fatalf("order:\n got %v\nwant %v", names, want)
 	}
-	if got := Active(s, t0.Add(2*time.Hour)); len(got) != 1 || got[0].Scope != ScopeProject {
+	if got := Active(s, t0.Add(13*time.Hour)); len(got) != 1 || got[0].Scope != ScopeProject {
 		t.Fatalf("after expiry: %+v", got)
 	}
 	if got := ForRecord(s, "A_KEY", projLayer("shop"), testRec, t0); len(got) != 1 {
@@ -684,4 +684,14 @@ func TestRestoreReturnsAConsumedOnceGrant(t *testing.T) {
 			t.Fatal("restored a session grant")
 		}
 	})
+}
+
+// The default session lifetime is 12h, inside the 1m to 24h bounds.
+func TestDefaultSessionTTLIs12Hours(t *testing.T) {
+	if DefaultSessionTTL != 12*time.Hour {
+		t.Fatalf("DefaultSessionTTL = %v", DefaultSessionTTL)
+	}
+	if MinTTL != time.Minute || MaxTTL != 24*time.Hour {
+		t.Fatalf("bounds = %v..%v", MinTTL, MaxTTL)
+	}
 }

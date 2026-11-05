@@ -192,7 +192,7 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		return broker.RequestResponse{}, refusal.New(refusal.ScopeNotAllowed, firstName(fields))
 	}
 	proposed, _ := grants.ParseScope(r.SuggestedScope)
-	opts, def := scopeLabels(e.Session, scopes, proposed)
+	opts, def := scopeLabels(e.Session, scopes, proposed, false)
 	var who []string
 	for _, a := range fields {
 		if a.exists && len(fields) > 1 {

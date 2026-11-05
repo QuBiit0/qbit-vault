@@ -40,7 +40,7 @@ const (
 	projectPrefix = "project:"
 
 	// DefaultSessionTTL is the session scope lifetime without --ttl.
-	DefaultSessionTTL = 30 * time.Minute
+	DefaultSessionTTL = 12 * time.Hour
 	// MinTTL and MaxTTL bound a session grant's lifetime.
 	MinTTL = time.Minute
 	MaxTTL = 24 * time.Hour

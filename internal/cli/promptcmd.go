@@ -229,9 +229,9 @@ func newPromptCmd(g *globals) *cobra.Command {
 				recordID = ""
 			}
 
-			opts, _ := scopeLabels(g.Session, allowed, "")
+			opts, def := scopeLabels(g.Session, allowed, "", false)
 			opts = append(opts, "deny")
-			i, err := ask.Choose(fmt.Sprintf("Allow %s (%s) for: %s", name, layerText(layerChoice), reason), opts, 0)
+			i, err := ask.Choose(fmt.Sprintf("Allow %s (%s) for: %s", name, layerText(layerChoice), reason), opts, def)
 			if err != nil {
 				return promptFail(err, "")
 			}

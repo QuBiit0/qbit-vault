@@ -115,7 +115,7 @@ func TestTokenBindsTTL(t *testing.T) {
 	if _, err := ConsumeToken(s, tok, "A_KEY", GlobalLayer, "", ScopeSession, sessA, time.Hour, t0); err != nil {
 		t.Fatalf("matching ttl refused: %v", err)
 	}
-	// Omitted ttl is the 30 minute default on both sides.
+	// Omitted ttl is the 12 hour default on both sides.
 	tok = IssueToken(s, "A_KEY", GlobalLayer, "", ScopeSession, sessA, 0, t0)
 	if _, err := ConsumeToken(s, tok, "A_KEY", GlobalLayer, "", ScopeSession, sessA, DefaultSessionTTL, t0); err != nil {
 		t.Fatalf("explicit default ttl refused for an omitted-ttl token: %v", err)

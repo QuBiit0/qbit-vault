@@ -36,7 +36,7 @@ func TestGrantTokenBindsTTL(t *testing.T) {
 	before := w.grantsState()
 	refused := "error: " + msgNotModel + "\n"
 
-	// A token issued for 1h does not buy a 30m (omitted) or a 2h grant, and
+	// A token issued for 1h does not buy a 12h (omitted) or a 2h grant, and
 	// the failed attempt burns it.
 	tok := w.issueTokenFor("A_KEY", "global", "", grants.ScopeSession, sessA, time.Hour)
 	code, out, errs := w.run("", "--session", sessA, "grant", "A_KEY", "--scope", "session", "--from-prompt-token", tok)
@@ -59,12 +59,12 @@ func TestGrantTokenBindsTTL(t *testing.T) {
 		t.Fatalf("matching ttl: code=%d out=%q err=%q", code, out, errs)
 	}
 
-	// Omitted ttl means the 30m default on both sides, explicit or not.
+	// Omitted ttl means the 12h default on both sides, explicit or not.
 	tok = w.issueTokenFor("A_KEY", "global", "", grants.ScopeSession, sessA, 0)
-	if code, _, errs = w.run("", "--session", sessA, "grant", "A_KEY", "--scope", "session", "--ttl", "30m", "--from-prompt-token", tok); code != 0 {
+	if code, _, errs = w.run("", "--session", sessA, "grant", "A_KEY", "--scope", "session", "--ttl", "12h", "--from-prompt-token", tok); code != 0 {
 		t.Fatalf("default ttl spelled out: code=%d err=%q", code, errs)
 	}
-	tok = w.issueTokenFor("A_KEY", "global", "", grants.ScopeSession, sessA, 30*time.Minute)
+	tok = w.issueTokenFor("A_KEY", "global", "", grants.ScopeSession, sessA, 12*time.Hour)
 	if code, _, errs = w.run("", "--session", sessA, "grant", "A_KEY", "--scope", "session", "--from-prompt-token", tok); code != 0 {
 		t.Fatalf("default ttl omitted: code=%d err=%q", code, errs)
 	}

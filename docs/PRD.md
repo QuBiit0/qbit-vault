@@ -90,7 +90,7 @@ Gentle AI already blocks the *reading* of credential files through its sensitive
 ### 5.3 Grants
 
 - R-GRANT-01. A grant binds (secret name, layer, session id, scope, expiry). A grant for the global `NAME` does not cover a project `NAME`, and the reverse. No exec may inject a secret without an active grant.
-- R-GRANT-02. Scopes: `once` (this exec only), `session` (this host session, default TTL 30 min, configurable), `project` (this repository root until revoked; survives sessions). Secrets flagged `sensitive` MUST only accept `once`.
+- R-GRANT-02. Scopes: `once` (this exec only), `session` (this host session, default TTL 12 h, configurable; preselected in the approval dialog whenever the record allows it, unless the user named another scope on their own command line), `project` (this repository root until revoked; survives sessions). Secrets flagged `sensitive` MUST only accept `once`.
 - R-GRANT-03. A grant MUST be created only from an explicit user confirmation delivered through the host UI or the native prompt. The MCP tool surface MUST NOT be able to create a grant on its own.
 - R-GRANT-04. Grants MUST be persisted (metadata only, no values), encrypted with the master key, at `$QBIT_VAULT_HOME/grants.enc` so that a host restart does not silently widen or narrow access.
 - R-GRANT-05. Subagents MUST NOT inherit grants. A subagent is a different session id and must obtain its own.

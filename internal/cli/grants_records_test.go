@@ -47,7 +47,7 @@ func TestSetGrantWithToken(t *testing.T) {
 	w := newWorld(t)
 	tok := w.issueToken("NEW_KEY", "global", grants.ScopeSession, sessA)
 	code, out, errs := w.run(fxVal+"\n", "--session", sessA, "set", "NEW_KEY", "--global", "--stdin", "--grant", "session", "--from-prompt-token", tok)
-	want := "stored NEW_KEY (global)\ngranted NEW_KEY (global): session, for pi:sess-aaaa, until 2026-11-03T12:30:00Z\n"
+	want := "stored NEW_KEY (global)\ngranted NEW_KEY (global): session, for pi:sess-aaaa, until 2026-11-04T00:00:00Z\n"
 	if code != 0 || out != want || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
@@ -399,7 +399,7 @@ func TestEndToEndGrants(t *testing.T) {
 	// grant (terminal, answer y) → grants → describe → revoke → grants.
 	step("y\n", 0, "granted GITHUB_TOKEN (global): session, for pi:sess-aaaa, until TS\n",
 		grantPrompt("GITHUB_TOKEN", "global", sessA, "session"), sessQ, "grant", "GITHUB_TOKEN", "--scope", "session")
-	step("", 0, `{"ok":true,"grants":[{"name":"GITHUB_TOKEN","layer":"global","project":null,"scope":"session","session":"pi:sess-aaaa","expires_at":"TS","remaining":"30m0s"}]}`+"\n", "", "--json", "grants")
+	step("", 0, `{"ok":true,"grants":[{"name":"GITHUB_TOKEN","layer":"global","project":null,"scope":"session","session":"pi:sess-aaaa","expires_at":"TS","remaining":"12h0m0s"}]}`+"\n", "", "--json", "grants")
 	_, out, _ := w.run("", "describe", "GITHUB_TOKEN")
 	if !strings.Contains(norm(out), "  grants:      session, for pi:sess-aaaa, until TS\n") {
 		t.Fatalf("describe: %q", out)

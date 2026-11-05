@@ -67,7 +67,7 @@ model ──secret_request(GITHUB_TOKEN, "gh release create")──▶ extension
 extension ──ctx.ui.custom(masked input + scope)──▶ user types value, picks "session"
 extension ──spawn: qbit-vault set GITHUB_TOKEN --stdin --session S --grant session --reason "..."
             (value on stdin, never argv)
-qbit-vault: keychain.unlock → vault.put → grants.add(S, GITHUB_TOKEN, session, +30m) → audit
+qbit-vault: keychain.unlock → vault.put → grants.add(S, GITHUB_TOKEN, session, +12h) → audit
             ◀── {"ok":true,"ref":"secret://GITHUB_TOKEN","grant":{...}}
 extension ──tool result──▶ model   (same JSON, no value)
 ```

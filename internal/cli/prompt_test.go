@@ -244,7 +244,7 @@ func TestSetInteractiveGrantChoices(t *testing.T) {
 		answer    int
 		wantOut   string
 	}{
-		{"project layer offers project", true, false, "project", []string{"once", "session", "project", "no grant"}, 2, 2,
+		{"project layer offers project, the user's --grant project preselected", true, false, "project", []string{"once", "session", "project", "no grant"}, 2, 2,
 			"stored A_KEY (project shop-api)\ngranted A_KEY (project shop-api): project, until revoked\n"},
 		{"sensitive offers once only", false, true, "once", []string{"once", "no grant"}, 0, 0,
 			"stored A_KEY (global)\ngranted A_KEY (global): once, for pi:sess-aaaa, until TS\n"},
@@ -867,5 +867,34 @@ func TestEveryBackendComesFromSelect(t *testing.T) {
 		if strings.Contains(string(src), "prompt.New(") {
 			t.Errorf("%s builds a prompt backend without prompt.Select", f)
 		}
+	}
+}
+
+// The scope the user typed on their own command line wins over the session
+// preselection, which is for scopes an agent only suggests.
+func TestSetGrantFlagIsTheUsersChoice(t *testing.T) {
+	pinClock(t)
+	w := newWorld(t)
+	f := withBackend(t, answers(val(fxVal), pick(0)))
+	if code, out, errs := w.run("", "--session", sessA, "set", "A_KEY", "--grant", "once"); code != exitcode.OK {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if q := f.Calls[1]; q.Kind != "choose" || q.Default != 0 || !strings.HasPrefix(q.Options[0], "once") {
+		t.Fatalf("scope question = %+v", q)
+	}
+}
+
+// The standalone prompt (an agent asking through the host) preselects
+// session like the broker's request.
+func TestPromptPreselectsSession(t *testing.T) {
+	pinClock(t)
+	w := newWorld(t)
+	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
+	f := withBackend(t, answers(pick(1)))
+	if code, out, errs := w.run("", "--session", sessA, "prompt", "--name", "A_KEY", "--reason", "run the release"); code != exitcode.OK {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if q := f.Calls[0]; q.Default != 1 || !strings.HasPrefix(q.Options[1], "session (12h") {
+		t.Fatalf("question = %+v", q)
 	}
 }

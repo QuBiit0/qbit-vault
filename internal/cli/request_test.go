@@ -291,3 +291,33 @@ func TestRequestShowsDescriptionsAndStoredFields(t *testing.T) {
 		t.Fatalf("scope question=%q", q)
 	}
 }
+
+// The user is asked once per 12h, not once per thing: session is the preselected
+// scope whatever the agent suggested, and the label shows the real duration.
+func TestRequestPreselectsSessionScope(t *testing.T) {
+	for _, extra := range []string{"", `,"suggested_scope":"once"`, `,"suggested_scope":"project"`, `,"suggested_scope":"session"`} {
+		w := newWorld(t)
+		f := withBackend(t, answers(val("TESTSECRET_preselect"), pick(1)))
+		code, m, _ := w.broker("request", reqFor(w.outside, extra))
+		if code != exitcode.OK {
+			t.Fatalf("%q: code=%d m=%v", extra, code, m)
+		}
+		c := f.Calls[1]
+		if c.Default != 1 || !strings.HasPrefix(c.Options[1], "session (12h, for "+brokerSession+")") ||
+			!strings.HasPrefix(c.Options[0], "once") || len(c.Options) != 3 || c.Options[2] != "deny" {
+			t.Fatalf("%q: default=%d options=%v", extra, c.Default, c.Options)
+		}
+	}
+}
+
+// A sensitive record does not offer session, so the old default stays.
+func TestRequestSensitiveKeepsOldDefault(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_sensitive\n", "set", "S", "--stdin", "--sensitive")
+	f := withBackend(t, answers(pick(0)))
+	w.broker("request", envelope("request", w.outside, `"name":"S","reason":"`+reqReason+`","suggested_scope":"project"`))
+	c := f.Calls[0]
+	if c.Default != 0 || len(c.Options) != 2 || !strings.HasPrefix(c.Options[0], "once") {
+		t.Fatalf("default=%d options=%v", c.Default, c.Options)
+	}
+}

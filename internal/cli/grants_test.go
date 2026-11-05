@@ -118,12 +118,12 @@ func TestGrantSessionOnTerminal(t *testing.T) {
 	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
 
 	code, out, errs := w.run("y\n", "--session", sessA, "grant", "A_KEY", "--scope", "session")
-	want := "granted A_KEY (global): session, for pi:sess-aaaa, until 2026-11-03T12:30:00Z\n"
+	want := "granted A_KEY (global): session, for pi:sess-aaaa, until 2026-11-04T00:00:00Z\n"
 	if code != exitcode.OK || out != want || errs != grantPrompt("A_KEY", "global", sessA, "session") {
 		t.Fatalf("code=%d\nstdout=%q\nstderr=%q", code, out, errs)
 	}
 	exp := fmt.Sprintf("%-5s  %-6s  %-7s  %-12s  %-20s  %s\n", "NAME", "LAYER", "SCOPE", "SESSION", "EXPIRES", "REMAINING") +
-		fmt.Sprintf("%-5s  %-6s  %-7s  %-12s  %-20s  %s\n", "A_KEY", "global", "session", sessA, "2026-11-03T12:30:00Z", "30m0s")
+		fmt.Sprintf("%-5s  %-6s  %-7s  %-12s  %-20s  %s\n", "A_KEY", "global", "session", sessA, "2026-11-04T00:00:00Z", "12h0m0s")
 	if code, out, errs = w.run("", "grants"); code != 0 || out != exp || errs != "" {
 		t.Fatalf("grants: code=%d out=%q err=%q", code, out, errs)
 	}
@@ -298,7 +298,7 @@ func TestGrantWithPromptToken(t *testing.T) {
 	tok := w.issueToken("A_KEY", "global", grants.ScopeSession, sessA)
 
 	code, out, errs := w.run("", "--json", "--session", sessA, "grant", "A_KEY", "--scope", "session", "--from-prompt-token", tok)
-	want := `{"ok":true,"grant":{"name":"A_KEY","layer":"global","scope":"session","session":"pi:sess-aaaa","expires_at":"2026-11-03T12:30:00Z"}}` + "\n"
+	want := `{"ok":true,"grant":{"name":"A_KEY","layer":"global","scope":"session","session":"pi:sess-aaaa","expires_at":"2026-11-04T00:00:00Z"}}` + "\n"
 	if code != 0 || out != want || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
@@ -316,7 +316,7 @@ func TestGrantWithPromptToken(t *testing.T) {
 	// The audit trail names the grant and how it was confirmed, never the token.
 	got := w.records("--event", "grant")
 	if len(got) != 1 || got[0].Detail != "prompt token" || got[0].Scope != "session" || got[0].Layer != "global" ||
-		got[0].ExpiresAt != "2026-11-03T12:30:00Z" || got[0].Names[0] != "A_KEY" || got[0].Session != sessA {
+		got[0].ExpiresAt != "2026-11-04T00:00:00Z" || got[0].Names[0] != "A_KEY" || got[0].Session != sessA {
 		t.Fatalf("grant audit: %+v", got)
 	}
 	if strings.Contains(w.auditText(), tok) {
@@ -577,15 +577,37 @@ func TestDescribeShowsItsGrants(t *testing.T) {
 		t.Fatalf("project json: %s", out)
 	}
 	code, out, _ = w.run("", "describe", "DB_URL", "--global")
-	if code != 0 || !strings.Contains(out, "  grants:      session, for pi:sess-aaaa, until 2026-11-03T12:30:00Z\n") {
+	if code != 0 || !strings.Contains(out, "  grants:      session, for pi:sess-aaaa, until 2026-11-04T00:00:00Z\n") {
 		t.Fatalf("global describe: %q", out)
 	}
 	_, out, _ = w.run("", "--json", "describe", "DB_URL", "--global")
-	if !strings.Contains(out, `"grants":[{"scope":"session","session":"pi:sess-aaaa","expires_at":"2026-11-03T12:30:00Z"}]`) {
+	if !strings.Contains(out, `"grants":[{"scope":"session","session":"pi:sess-aaaa","expires_at":"2026-11-04T00:00:00Z"}]`) {
 		t.Fatalf("global json: %s", out)
 	}
 	w.mustRun("", "revoke", "DB_URL")
 	if _, out, _ = w.run("", "--json", "describe", "DB_URL", "--global"); !strings.Contains(out, `"grants":[]`) {
 		t.Fatalf("after revoke: %s", out)
+	}
+}
+
+// A session grant without --ttl lives 12h; the bounds stay 1m to 24h.
+func TestGrantSessionDefaultsTo12Hours(t *testing.T) {
+	pinClock(t)
+	asTerminal(t, true)
+	w := newWorld(t)
+	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
+	w.mustRun("y\n", "--session", sessA, "grant", "A_KEY", "--scope", "session")
+	_, out, _ := w.run("", "--json", "--session", sessA, "grants")
+	if !strings.Contains(out, `"expires_at":"2026-11-04T00:00:00Z","remaining":"12h0m0s"`) {
+		t.Fatalf("grants: %s", out)
+	}
+	for _, ttl := range []string{"1m", "24h"} {
+		if code, _, errs := w.run("y\n", "--session", sessA, "grant", "A_KEY", "--scope", "session", "--ttl", ttl); code != 0 {
+			t.Fatalf("--ttl %s: code=%d err=%q", ttl, code, errs)
+		}
+	}
+	cmd := newGrant(&globals{})
+	if u := cmd.Flags().Lookup("ttl").Usage; !strings.Contains(u, "default 12h") {
+		t.Fatalf("--ttl help: %q", u)
 	}
 }

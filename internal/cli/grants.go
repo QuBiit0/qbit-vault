@@ -320,7 +320,7 @@ func newGrant(g *globals) *cobra.Command {
 		gf grantFlags
 	)
 	cmd := &cobra.Command{
-		Use:   "grant NAME [--global|--project] --scope once|session|project [--ttl 30m] [--from-prompt-token T]",
+		Use:   "grant NAME [--global|--project] --scope once|session|project [--ttl 12h] [--from-prompt-token T]",
 		Short: "Allow a secret to be injected (asks you to confirm)",
 		Args:  nameArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -376,7 +376,7 @@ func newGrant(g *globals) *cobra.Command {
 	}
 	lf.bind(cmd)
 	cmd.Flags().StringVar(&gf.scope, "scope", "", "once, session or project")
-	cmd.Flags().DurationVar(&gf.ttl, "ttl", 0, "session scope lifetime, 1m to 24h (default 30m)")
+	cmd.Flags().DurationVar(&gf.ttl, "ttl", 0, "session scope lifetime, 1m to 24h (default 12h)")
 	cmd.Flags().StringVar(&gf.token, "from-prompt-token", "", "confirm with a token issued by the prompt backend instead of a terminal")
 	return cmd
 }

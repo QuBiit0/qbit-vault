@@ -174,7 +174,7 @@ Response:
 
 Only the host UI (Pi extension prompt, native dialog) may send it, and only as the result of a user interaction. The MCP server does not expose it as a tool. The CLI accepts it only from an interactive TTY or with `--from-prompt-token <t>` issued by the broker's own prompt.
 
-Request: `{ "op": "grant", "name": "GITHUB_TOKEN", "layer": "global", "scope": "session", "ttl_ms": 1800000 }`
+Request: `{ "op": "grant", "name": "GITHUB_TOKEN", "layer": "global", "scope": "session", "ttl_ms": 43200000 }`
 Response: `{ "ok": true, "grant": { "scope": "session", "expires_at": "…" } }`
 
 ### `revoke` — drop grants (user-callable)

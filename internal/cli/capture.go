@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/QuBiit0/qbit-vault/internal/grants"
@@ -38,24 +39,47 @@ func (g *globals) allowedScopes(name string, layer vault.Layer, sensitive bool, 
 	return out
 }
 
-// scopeLabels describes scopes for a menu and returns the index of the
-// proposed one (0 when it is not offered).
-func scopeLabels(session string, scopes []grants.Scope, proposed grants.Scope) ([]string, int) {
-	opts, def := make([]string, len(scopes)), 0
+// ttlText is d without the zero units Duration.String adds ("12h", not
+// "12h0m0s").
+func ttlText(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
+// scopeLabels describes scopes for a menu and returns the index preselected.
+// A scope the user typed on their own command line (userChose) wins; else
+// session when it is offered, so one approval covers the whole session; else
+// the proposed scope; else 0 (a sensitive record offers once only).
+func scopeLabels(session string, scopes []grants.Scope, proposed grants.Scope, userChose bool) ([]string, int) {
+	opts := make([]string, len(scopes))
+	at := map[grants.Scope]int{}
 	for i, sc := range scopes {
+		at[sc] = i
 		switch sc {
 		case grants.ScopeOnce:
 			opts[i] = "once (one command, for " + session + ")"
 		case grants.ScopeSession:
-			opts[i] = "session (" + grants.DefaultSessionTTL.String() + ", for " + session + ")"
+			opts[i] = "session (" + ttlText(grants.DefaultSessionTTL) + ", for " + session + ")"
 		default:
 			opts[i] = "project (this project, until revoked)"
 		}
-		if sc == proposed {
-			def = i
-		}
 	}
-	return opts, def
+	if i, ok := at[proposed]; ok && userChose {
+		return opts, i
+	}
+	if i, ok := at[grants.ScopeSession]; ok {
+		return opts, i
+	}
+	if i, ok := at[proposed]; ok {
+		return opts, i
+	}
+	return opts, 0
 }
 
 // layerRequest is how the prompt names the project of a layer: its label, or
@@ -105,7 +129,7 @@ func (g *globals) captureValue(ask prompt.Backend, name string, layer vault.Laye
 		return raw, "", nil
 	}
 	scopes := g.allowedScopes(name, layer, sensitive, scopeOrder)
-	opts, def := scopeLabels(g.Session, scopes, flagScope)
+	opts, def := scopeLabels(g.Session, scopes, flagScope, flagScope != "")
 	opts = append(opts, "no grant (store the value only)")
 	i, err := ask.Choose(fmt.Sprintf("Grant %s (%s)? Choose a scope:", name, layerText(layer)), opts, def)
 	if err != nil {

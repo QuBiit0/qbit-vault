@@ -17,7 +17,7 @@ Branch `feat/cli-skeleton` until T8. Spec authority: the code as built, docs/*, 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
 | T1 | S1, S2 | inline | repo cleanup: .gitignore (.codegraph), move the proposal under docs/, CI on main, delete old review branches after proving each is contained in feat/cli-skeleton | f734b75 | done |
-| T2 | S1, S4 | worker | docs audit: every doc and help text matches the code (ROADMAP status, INSTALL, CLI, ARCHITECTURE, PRD statuses) | (T2) | done |
+| T2 | S1, S4 | worker | docs audit: every doc and help text matches the code (ROADMAP status, INSTALL, CLI, ARCHITECTURE, PRD statuses) | 8df3d3b | done |
 | T3 | S2, S3 | design | visual identity: logo, banner, palette (gentle-design artboards), exported assets for README and TUI | | pending |
 | T4 | S2 | design | TUI design: screens and flows as artboards; user picks a direction | | pending |
 | T5 | S1, S2 | worker | README: visual, complete, accurate (banner, diagrams, quickstart, commands, security model, status) | | pending |

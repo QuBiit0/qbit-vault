@@ -3,12 +3,13 @@
   "chosen": "01-atom-keyhole.html",
   "handoffs": {
     "01-atom-keyhole.html": {
-      "status": "sent",
+      "status": "in_progress",
       "queued": true,
       "sentAt": "2026-11-05T12:22:50.053Z",
-      "startedAt": null,
+      "startedAt": "2026-11-05T12:59:09.312Z",
       "implementedAt": null,
-      "feature": "odd/tasks/polish.md"
+      "feature": "odd/tasks/polish.md",
+      "note": "Tokens (design/system.md), brand assets (assets/brand/) and README banner done; the TUI theme, half-block mark, splash and header are being built in odd/tasks/tui.md T1."
     }
   }
 }

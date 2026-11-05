@@ -204,6 +204,9 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 			if g.JSON {
 				return usageError{"no command given"}
 			}
+			if g.wantTUI() {
+				return g.startTUI(false)
+			}
 			return cmd.Help()
 		},
 	}
@@ -227,6 +230,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newLock(g), newUnlock(g), newRestore(g), newRekey(g), newImport(g))
 	root.AddCommand(newBrokerCmd(g), newMCPCmd(g), newHookCmd(g), newLink(g))
 	root.AddCommand(newRemote(g))
+	root.AddCommand(newTUI(g))
 	return root
 }
 

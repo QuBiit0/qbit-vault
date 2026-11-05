@@ -244,6 +244,90 @@ expect_rc "doctor exits 0 after the repair" 0
 if [[ $OUT == *healthy ]]; then pass "doctor healthy again"; else fail "doctor healthy again" "$(snippet "$OUT")"; fi
 jqt "settings.json: the user's hooks survived the repair" "$SETTINGS" '([.hooks.PreToolUse[].hooks[] | select(.command == "gentle-ai hook guard")] | length == 1) and ([.hooks.Stop[]] | length == 1)'
 
+# ---- step 5b: a real agent's MCP session ----
+
+step "5b. MCP end to end: the calls Claude Code makes, over stdio, with a scripted approval"
+TOKEN_NAME=QBIT_TEST_TOKEN
+TOKEN=TESTSECRET_mcp_e2e_token_7d2b9e41
+MCP_SESSION=claude-code:e2e-5b-session
+answers "$TOKEN"
+qbv set "$TOKEN_NAME" --global
+expect_rc "set stores $TOKEN_NAME (scripted prompt)" 0
+answers
+# the value must not stay in the answers file after the prompt read it
+if grep -qF "$TOKEN" "$QBIT_VAULT_SCRIPTED_ANSWERS"; then fail "the answers file no longer holds the value"; else pass "the answers file no longer holds the value"; fi
+
+mcp_call() { jq -cn --arg n "$1" --argjson a "$2" '{method:"tools/call",name:$n,arguments:$a}'; }
+EXEC_LEN=$(jq -cn '{command:"printf %s \"${#QBIT_TEST_TOKEN}\"",secrets:[{name:"QBIT_TEST_TOKEN"}]}')
+EXEC_DUMP=$(jq -cn '{command:"echo $QBIT_TEST_TOKEN",secrets:[{name:"QBIT_TEST_TOKEN"}]}')
+EXEC_SH=$(jq -cn '{command:"sh -c '"'"'printf \"%s\" \"${#QBIT_TEST_TOKEN}\"'"'"'",secrets:[{name:"QBIT_TEST_TOKEN"}]}')
+REQ=$(jq -cn '{name:"QBIT_TEST_TOKEN",reason:"e2e: measure the length of the test token",suggested_scope:"once"}')
+{
+  printf '{"method":"tools/list"}\n'
+  mcp_call secret_list '{}'
+  mcp_call secret_exec "$EXEC_LEN"
+  mcp_call secret_request "$REQ"
+  mcp_call secret_exec "$EXEC_DUMP"
+  mcp_call secret_exec "$EXEC_SH"
+  mcp_call secret_exec "$EXEC_LEN"
+} | jq -s . >"$WORK/mcp-script.json"
+
+# exactly one scripted answer: "1" = once. A second prompt would find the
+# queue empty, wait 3s and cancel, which the transcript check below catches.
+answers 1
+AUDIT_BEFORE=$(wc -l <"$VAULT/audit.jsonl")
+QBIT_VAULT_SESSION=$MCP_SESSION QBIT_VAULT_SCRIPTED_WAIT=3s run mcpclient -server qbit-vault "$WORK/mcp-script.json"
+expect_rc "mcpclient: all seven calls were answered" 0
+expect_empty_err "the MCP server wrote nothing to stderr"
+expect_eq "mcpclient printed one line per call" "$(wc -l <"$WORK/o" | tr -d ' ')" 7
+for n in 1 2 3 4 5 6 7; do sed -n "${n}p" "$WORK/o" >"$WORK/l$n"; done
+refused() { jq -e --arg t "$1" '.result.isError == true and ((.result.content[0].text | fromjson) | .ok == false and .refusal.type == $t)' "$2" >/dev/null 2>&1 && echo true || echo false; }
+
+# 1. tools/list
+jqt "1. tools/list returns exactly the four tools (no grant tool)" "$WORK/l1" '[.result.tools[].name] | sort == ["secret_exec","secret_list","secret_manage","secret_request"]'
+jqt "1. the secret_exec description tells agents to write \${#NAME}" "$WORK/l1" '.result.tools[] | select(.name == "secret_exec") | .description | contains("${#NAME}")'
+# 2. secret_list
+jqt "2. secret_list shows $TOKEN_NAME by name" "$WORK/l2" '.result.isError != true and ((.result.content[0].text | fromjson) | .ok == true and ([.secrets[].name] | index("QBIT_TEST_TOKEN")) != null)'
+jqt "2. secret_list: $TOKEN_NAME carries no grant yet and no value field" "$WORK/l2" '(.result.content[0].text | fromjson | .secrets[] | select(.name == "QBIT_TEST_TOKEN")) | .grant == null and (keys | index("value") == null)'
+# 3. exec without a grant
+expect_eq "3. secret_exec without a grant is refused grant_required" "$(refused grant_required "$WORK/l3")" true
+# 4. request, approved once by the scripted backend
+jqt "4. secret_request is granted with scope once" "$WORK/l4" '.result.isError != true and ((.result.content[0].text | fromjson) | .ok == true and .grant.scope == "once" and .ref == "secret://QBIT_TEST_TOKEN")'
+# 5. dump command, grant kept (D3)
+expect_eq "5. secret_exec 'echo \$$TOKEN_NAME' is refused dump_command" "$(refused dump_command "$WORK/l5")" true
+# 6. the length through sh -c (D1 quoting), same once grant
+jqt "6. secret_exec sh -c 'printf ... \${#NAME}' exits 0 on the grant the refusal did not spend (D3)" "$WORK/l6" '.result.isError != true and ((.result.content[0].text | fromjson) | .ok == true and .exit_code == 0)'
+expect_eq "6. its stdout is the length of the value (D1 quoting)" "$(jq -r '.result.content[0].text | fromjson | .stdout' "$WORK/l6")" "${#TOKEN}"
+# 7. the once grant is spent
+expect_eq "7. a further secret_exec needs a new grant (once is consumed)" "$(refused grant_required "$WORK/l7")" true
+
+# one prompt only: the approval of step 4, nothing was asked again
+expect_eq "one prompt in the whole session (the scope choice of step 4)" "$(grep -c '^ASK ' "$QBIT_VAULT_SCRIPTED_TRANSCRIPT")" 1
+has "the only prompt was the scope choice for $TOKEN_NAME" "$QBIT_VAULT_SCRIPTED_TRANSCRIPT" "ASK choose q=\"Allow $TOKEN_NAME (global) for: e2e: measure the length of the test token\""
+if grep -q '^EXHAUSTED' "$QBIT_VAULT_SCRIPTED_TRANSCRIPT"; then fail "no prompt ran out of scripted answers"; else pass "no prompt ran out of scripted answers"; fi
+
+# audit (D4): the refusals of this MCP session are recorded, names only
+tail -n +$((AUDIT_BEFORE + 1)) "$VAULT/audit.jsonl" >"$WORK/audit.new"
+auditq() { jq -cs "[.[] | select(.session == \"$MCP_SESSION\")] | $1" "$WORK/audit.new"; }
+expect_eq "audit: two grant_required refusals for the MCP session (steps 3 and 7)" "$(auditq '[.[] | select(.event == "refusal" and .refusal == "grant_required" and .names == ["QBIT_TEST_TOKEN"])] | length')" 2
+expect_eq "audit: one dump_command refusal for the MCP session (step 5)" "$(auditq '[.[] | select(.event == "refusal" and .refusal == "dump_command")] | length')" 1
+expect_eq "audit: refusals are attributed to the agent" "$(auditq '[.[] | select(.event == "refusal") | .by] | unique')" '["agent"]'
+expect_eq "audit: the grant and the prompt of step 4 are there" "$(auditq '[.[] | select(.event == "grant" or (.event == "prompt" and .outcome == "issued")) | .event] | sort')" '["grant","prompt"]'
+run qbit-vault audit --verify
+expect_rc "audit chain still verifies after the MCP session" 0
+
+# 7. leak: nothing the agent could read, nothing on disk outside the vault's encrypted files
+if grep -qF "$TOKEN" "$WORK/o" "$WORK/e"; then fail "7. no mcpclient output or server stderr holds the value"; else pass "7. no mcpclient output or server stderr holds the value"; fi
+if grep -qF "$TOKEN" "$VAULT/audit.jsonl"; then fail "7. the audit log does not hold the value"; else pass "7. the audit log does not hold the value"; fi
+if grep -rlF "$TOKEN" /home/qbv /dev/shm /tmp 2>/dev/null | grep .; then
+  fail "7. no file outside the vault's encrypted files holds the value"
+else
+  pass "7. no file outside the vault's encrypted files holds the value (home, /dev/shm, /tmp)"
+fi
+printf 'x %s y' "$TOKEN" >"$HOME/.canary5b"
+if grep -rlF "$TOKEN" /home/qbv >/dev/null 2>&1; then pass "7. scan self-check: a planted value is found"; else fail "7. scan self-check: a planted value is found"; fi
+rm -f "$HOME/.canary5b"
+
 # ---- step 6: uninstall ----
 
 step "6. a later user edit, then uninstall (answer: yes)"
@@ -305,12 +389,12 @@ if [[ -d $HOME/.claude && -d $HOME/.codex && -d $HOME/.pi/agent ]]; then pass "t
 # ---- step 8: leak scan ----
 
 step "8. leak scan: stdout/stderr and the fake HOME"
-if grep -qF -e "$SECRET" -e "$PASSPHRASE" "$LOG"; then
+if grep -qF -e "$SECRET" -e "$PASSPHRASE" -e "$TOKEN" "$LOG"; then
   fail "no captured stdout/stderr holds the value or the passphrase"
 else
   pass "no captured stdout/stderr holds the value or the passphrase ($(wc -l <"$LOG" | tr -d ' ') lines)"
 fi
-if grep -rlF -e "$SECRET" -e "$PASSPHRASE" "$HOME" "$QBIT_VAULT_SCRIPTED_TRANSCRIPT" 2>/dev/null | grep .; then
+if grep -rlF -e "$SECRET" -e "$PASSPHRASE" -e "$TOKEN" "$HOME" "$QBIT_VAULT_SCRIPTED_TRANSCRIPT" 2>/dev/null | grep .; then
   fail "no file under the fake HOME or the transcript holds the value or the passphrase"
 else
   pass "no file under the fake HOME or the transcript holds the value or the passphrase ($(find "$HOME" -type f | wc -l | tr -d ' ') files)"

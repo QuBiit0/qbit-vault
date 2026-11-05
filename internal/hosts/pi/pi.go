@@ -1,8 +1,9 @@
 // Package pi is the Pi / Gentle Shell host adapter (docs/AGENT_INTEGRATIONS.md
-// § Pi / Gentle Shell, PRD R-HOST-01). One step, an edit of one JSON file
-// through internal/filemerge:
+// § Pi / Gentle Shell, PRD R-HOST-01). Two steps through internal/filemerge:
 //
-//	mcp  <Pi agent dir>/mcp.json  mcpServers.qbit-vault
+//	mcp    <Pi agent dir>/mcp.json  mcpServers.qbit-vault
+//	skill  ~/.agents/skills/qbit-vault/SKILL.md  the agent skill, shared with
+//	       Codex (Pi reads ~/.agents/skills too; internal/hosts/skill)
 //
 // Pi 0.99 and later connects MCP servers natively and reads user-level ones
 // from `<agent dir>/mcp.json`, a top-level `mcpServers` object whose stdio
@@ -29,6 +30,7 @@ import (
 
 	"github.com/QuBiit0/qbit-vault/internal/filemerge"
 	"github.com/QuBiit0/qbit-vault/internal/hosts"
+	"github.com/QuBiit0/qbit-vault/internal/hosts/skill"
 )
 
 // Name is the host name used by --agents, state.json and doctor.
@@ -146,7 +148,7 @@ type mcpServer struct {
 	Env     map[string]string `json:"env,omitempty"`
 }
 
-// Steps lists the single step, mcp.
+// Steps lists mcp and skill.
 func (a *Adapter) Steps(hosts.Env) []hosts.Step {
 	prepare := func(env hosts.Env) (string, []filemerge.JSONEdit, error) {
 		dir, err := a.agentDir(env)
@@ -190,7 +192,7 @@ func (a *Adapter) Steps(hosts.Env) []hosts.Step {
 			}
 			return hosts.CheckJSON(p, e)
 		},
-	}}
+	}, skill.Step(Name, skill.AgentsPath)}
 }
 
 // marshal is json.Marshal without HTML escaping, so `&` in a path stays.

@@ -281,3 +281,27 @@ func TestRegistrySelect(t *testing.T) {
 		t.Fatalf("pick unknown: %v", err)
 	}
 }
+
+// A host whose config already holds our entry (state.json was lost, or the
+// user copied the entry by hand) registers without writing, and its receipt
+// is one state.json accepts.
+func TestApplyRecordsAHostWhoseFileAlreadyHoldsOurEntry(t *testing.T) {
+	r := newRig(t)
+	if res := hosts.Apply(r.env, []hosts.Adapter{r.host}); res[0].Err() != nil {
+		t.Fatal(res[0].Err())
+	}
+	if err := vault.WriteHost(r.env.VaultHome, "fake", nil); err != nil {
+		t.Fatal(err)
+	}
+	res := hosts.Apply(r.env, []hosts.Adapter{r.host})
+	if err := res[0].Err(); err != nil {
+		t.Fatalf("re-register over existing entries: %v", err)
+	}
+	if res[0].Changed() {
+		t.Fatal("a file that already holds our entry was rewritten")
+	}
+	st, err := vault.ReadHosts(r.env.VaultHome)
+	if err != nil || len(st["fake"].Registered) == 0 {
+		t.Fatalf("host not recorded: %+v, %v", st["fake"], err)
+	}
+}

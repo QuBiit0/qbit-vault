@@ -22,13 +22,14 @@ The MCP server never exposes `grant`: there is no such tool, and a `grant` envel
 
 ### Registration written by `init`
 
-**Claude Code** (adapter `claude-code`, `internal/hosts/claude`): three steps, each merged into a user-scope file after a snapshot, owning only its own entries.
+**Claude Code** (adapter `claude-code`, `internal/hosts/claude`): four steps, each written into a user-scope file after a snapshot, owning only its own entries.
 
 | Step | File | Owns |
 | --- | --- | --- |
 | `mcp` | `~/.claude.json` | `mcpServers.qbit-vault` |
 | `hooks` | `~/.claude/settings.json` | the hook entries whose `statusMessage` starts with `qbit-vault hook ` |
 | `deny` | `~/.claude/settings.json` | the two `permissions.deny` strings below |
+| `skill` | `~/.claude/skills/qbit-vault/SKILL.md` | the whole file (§ Agent skill) |
 
 Claude Code keeps **user-scoped MCP servers in `~/.claude.json`** (top-level `mcpServers`), not in `settings.json`; hooks and permissions live in `settings.json` (checked 2026-11-04 against <https://code.claude.com/docs/en/mcp.md> § MCP installation scopes and <https://code.claude.com/docs/en/settings.md>). Detection is read-only: `~/.claude` is a directory, or a `claude` binary is on `PATH`.
 
@@ -103,7 +104,7 @@ Differences from what this document said before: the PostToolUse replacement fie
 - **`user-prompt`.** A prompt that contains a stored value (any encoding above, including inside `<pasted_content>` blocks) is blocked: `{"decision":"block","reason":"This prompt contains the value of a stored secret, so qbit-vault blocked it. Store secrets with 'qbit-vault set NAME' in your own terminal and refer to them by name.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}}`. The reason never includes the prompt or a name, and `suppressOriginalPrompt` keeps the text out of the block message. A prompt that matches a well-known secret shape (`ghp_`/`gho_`/`ghs_`, `github_pat_`, `AKIA`/`ASIA` keys, `xox*-` Slack tokens, `sk_live_`/`rk_live_`, `sk-`/`sk-ant-`/`sk-proj-` keys of 32 or more characters, PEM private key headers, JWTs) is blocked too, with `This prompt looks like it contains a secret, ...`; that check needs no vault, so it works while the vault is locked. Generic high-entropy strings are not matched (too many false positives). **Limit:** a blocked prompt still lands in the transcript and the prompt history (Claude Code writes them before the hook can act); the hook cannot remove it, only keep it out of the block message.
 - **Limits.** Redaction happens after the tool ran and only changes what the model sees; telemetry and the user's terminal keep the original. A value the shell transformed (hex, ROT13, split across lines of a table) is not recognized.
 
-**Codex** (`~/.codex/config.toml`, merged):
+**Codex** (`~/.codex/config.toml`, merged; plus the `skill` step, `~/.agents/skills/qbit-vault/SKILL.md`, § Agent skill):
 
 ```toml
 [mcp_servers.qbit-vault]
@@ -127,7 +128,7 @@ Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.
 
 **Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`pi install npm:qbit-vault-pi`, the rich path) is Phase 4 and does not exist yet.
 
-**Pi / Gentle Shell registration written by `init`** (adapter `pi`, `internal/hosts/pi`): one step, `mcp`, merged into `<Pi agent dir>/mcp.json` after a snapshot, owning only `mcpServers.qbit-vault`:
+**Pi / Gentle Shell registration written by `init`** (adapter `pi`, `internal/hosts/pi`): two steps: `skill` writes `~/.agents/skills/qbit-vault/SKILL.md`, shared with Codex (§ Agent skill), and `mcp` is merged into `<Pi agent dir>/mcp.json` after a snapshot, owning only `mcpServers.qbit-vault`:
 
 ```json
 { "mcpServers": { "qbit-vault": { "command": "/abs/path/to/qbit-vault", "args": ["mcp"] } } }
@@ -138,6 +139,23 @@ Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.
 The extension is **not** installed by `init` (it needs the network, invariant 8). After a successful registration `init` prints `host pi: to add the extension, run: pi install npm:qbit-vault-pi` (JSON: `install_command` on the host) and the user runs it. Not honored: `.pi/mcp.json`, and an agent directory passed with a Pi command-line option.
 
 **Gentle Shell** (planned, with the extension): `gentle-shell install npm:qbit-vault-pi` into `~/.gentle-shell/agent` (or `--link` home). See `GENTLE_SHELL_EXTENSION.md`.
+
+## Agent skill
+
+The MCP instructions and the four tool descriptions say *what* the tools do; the `qbit-vault` skill says *when* to reach for them: whenever a command needs a credential, call `secret_list`, then `secret_request` for what is missing, then `secret_exec`; never ask the user to paste a value; what to do with each refusal. Source: `internal/hosts/skill/SKILL.md`, embedded in the binary.
+
+| Host | Skill file | Why there |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills/qbit-vault/SKILL.md` | Claude Code's personal skills directory |
+| Codex | `~/.agents/skills/qbit-vault/SKILL.md` | Codex reads user skills from `~/.agents/skills` (`~/.codex/skills` is its legacy name; openai/codex#10437, checked 2026-11-05) |
+| Pi | the same file as Codex | Pi reads `~/.agents/skills` too; a second copy in `~/.pi/agent/skills` would collide by name |
+
+Rules (step `skill`, `internal/hosts/skill`, written with `filemerge.WriteOwnedFile`):
+
+- **Only where it is needed.** Only registered hosts get it, and the file is written only when its bytes differ from the skill this build carries: a current copy is never rewritten, snapshotted or re-recorded. The skill text has no version string, so a release that does not change it touches nothing.
+- **Always current.** `sync` rewrites a stale copy (snapshot first), and `install.sh` / `install.ps1` run `sync` after every upgrade, so each release installs its own skill. `doctor` reports a stale or missing copy as `host.<name>.skill` drift (`run 'qbit-vault sync'`).
+- **Whole file, ours only.** The file carries the marker `<!-- Managed by qbit-vault:`. A `SKILL.md` at that path without it is the user's own skill of that name and wins: the step records it without writing, `doctor` accepts it, and `uninstall` leaves it; registration does not fail because of it. Edits to our file are replaced by the next `sync`; keep your own notes in another skill.
+- **Uninstall.** `uninstall` deletes our copy (snapshot first) and its directory when empty; a copy the user replaced (no marker) stays. The shared Codex/Pi file stays while the other host is still registered. qbit-vault never writes `CLAUDE.md`, `AGENTS.md` or any other instruction file of the user.
 
 ## Native capture dialog (non-Pi hosts)
 

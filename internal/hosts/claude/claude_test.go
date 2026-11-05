@@ -125,7 +125,7 @@ func TestName(t *testing.T) {
 	for _, s := range claude.NewWithExe(fakeExe).Steps(hosts.Env{}) {
 		names = append(names, s.Name)
 	}
-	if strings.Join(names, ",") != "mcp,hooks,deny" {
+	if strings.Join(names, ",") != "mcp,hooks,deny,skill" {
 		t.Fatalf("steps %v", names)
 	}
 }
@@ -133,7 +133,7 @@ func TestName(t *testing.T) {
 func TestApplyOnAbsentFiles(t *testing.T) {
 	r := newRig(t)
 	res := r.apply()
-	if !res.Changed() || len(res.Steps) != 3 {
+	if !res.Changed() || len(res.Steps) != 4 {
 		t.Fatalf("result %+v", res)
 	}
 	r.golden(r.claudeJSON(), "absent.claude.json.golden")

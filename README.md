@@ -172,13 +172,13 @@ Also in place: tamper-evident audit log (`audit --verify`), grants bound to one 
 
 ## Supported hosts
 
-`init` registers each host it detects. Today every host uses the MCP server; only Claude Code gets hooks and deny rules.
+`init` registers each host it detects. Every host gets the MCP server and the `qbit-vault` agent skill, which tells the agent when to reach for the tools (any command that needs a credential) and how; only Claude Code gets hooks and deny rules. The skill is kept current by `sync`, which the install scripts run after every upgrade.
 
-| Host | MCP tools | Hooks | Deny rules | Notes |
-| --- | --- | --- | --- | --- |
-| Claude Code | yes | `pre-bash`, `post-bash`, `post-read`, `user-prompt` | `Read` / `Edit` of the vault directory | `post-*` redact tool output; `user-prompt` blocks a prompt that carries a secret; `pre-bash` keeps user-only commands out of the agent's shell |
-| Codex | yes | no | no | `secret_exec` output is already redacted |
-| Pi / Gentle Shell | yes | no | no | via `mcp.json`; the native extension is planned |
+| Host | MCP tools | Skill | Hooks | Deny rules | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code | yes | `~/.claude/skills` | `pre-bash`, `post-bash`, `post-read`, `user-prompt` | `Read` / `Edit` of the vault directory | `post-*` redact tool output; `user-prompt` blocks a prompt that carries a secret; `pre-bash` keeps user-only commands out of the agent's shell |
+| Codex | yes | `~/.agents/skills` | no | no | `secret_exec` output is already redacted |
+| Pi / Gentle Shell | yes | `~/.agents/skills` (shared with Codex) | no | no | via `mcp.json`; the native extension is planned |
 
 OpenCode is not supported. Per-host files and the hook protocol: [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md).
 

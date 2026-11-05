@@ -109,7 +109,7 @@ func TestName(t *testing.T) {
 		t.Fatalf("name %q", got)
 	}
 	steps := pi.NewWithExe(fakeExe).Steps(hosts.Env{})
-	if len(steps) != 1 || steps[0].Name != "mcp" {
+	if len(steps) != 2 || steps[0].Name != "mcp" || steps[1].Name != "skill" {
 		t.Fatalf("steps %+v", steps)
 	}
 	if pi.ExtensionInstallCommand != "pi install npm:qbit-vault-pi" {
@@ -119,7 +119,7 @@ func TestName(t *testing.T) {
 
 func TestApplyOnAbsentFile(t *testing.T) {
 	r := newRig(t)
-	if res := r.apply(); !res.Changed() || len(res.Steps) != 1 {
+	if res := r.apply(); !res.Changed() || len(res.Steps) != 2 {
 		t.Fatalf("result %+v", res)
 	}
 	r.golden("absent.mcp.json.golden")

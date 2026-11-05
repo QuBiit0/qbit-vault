@@ -25,7 +25,7 @@ func TestInitRegistersPiAndPrintsTheExtensionCommand(t *testing.T) {
 	w := newBareWorld(t)
 	withHosts(t, piHost(uh))
 	code, out, errs := w.run("", "init", "--agents", "pi")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp)\n"+piInstallLine) || !strings.HasSuffix(out, "healthy\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n"+piInstallLine) || !strings.HasSuffix(out, "healthy\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if s := doctorStatus(out, "host.pi.mcp"); s != "ok" {
@@ -122,7 +122,7 @@ func TestInitDetectsPiByItsConfigDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs = w.run("", "init")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp)\n"+piInstallLine) {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n"+piInstallLine) {
 		t.Fatalf("installed: code=%d out=%q err=%q", code, out, errs)
 	}
 }

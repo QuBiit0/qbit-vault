@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QBit Vault identity: Hex seal</title>
+<style>
+  :root {
+    --void: #000204; --deep: #07121B; --panel: #0C1A24; --line: #16303D;
+    --blue: #2E9BE0; --blue-glow: #7FD0EC; --green: #2FBF78; --green-glow: #91ECC5;
+    --frost: #C7D9DE; --mist: #8FA7B2; --warn: #E8B04A; --err: #F07A6A;
+    --display: "Segoe UI Variable Display", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+    --text: "Segoe UI", "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  figure { margin: 0; }
+  svg { max-width: 100%; height: auto; }
+  body { margin: 0; background: var(--void); color: var(--frost); font: 400 16px/1.6 var(--text); }
+  main { max-width: 1280px; margin: 0 auto; padding: 72px 64px 96px; }
+  :focus-visible { outline: 3px solid var(--blue-glow); outline-offset: 3px; }
+
+  .hero { display: grid; justify-items: center; text-align: center; gap: 8px; padding-bottom: 72px; border-bottom: 1px solid var(--line); }
+  .hero .claim { margin-left: auto; margin-right: auto; }
+  .wordmark { font: 300 92px/1 var(--display); letter-spacing: -0.01em; margin: 0; color: var(--frost); }
+  .wordmark b { font-weight: 300; background: linear-gradient(90deg, var(--blue-glow), var(--green-glow)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .family { color: var(--mist); font-size: 15px; margin: 18px 0 0; }
+  .claim { font-size: 22px; line-height: 1.5; max-width: 30ch; margin: 26px 0 0; }
+  .orbit { transform-origin: 190px 190px; animation: spin 24s linear infinite; }
+  .orbit.b { animation-duration: 32s; animation-direction: reverse; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .orbit { animation: none; } }
+
+  h2 { font: 400 28px/1.2 var(--display); margin: 0 0 8px; color: #fff; }
+  .section { margin-top: 80px; }
+  .lede { color: var(--mist); max-width: 70ch; margin: 0 0 28px; }
+  .marks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .tile { background: var(--deep); border: 1px solid var(--line); border-radius: 14px; min-height: 210px; display: grid; place-items: center; gap: 12px; padding: 24px; }
+  .tile.light { background: #EEF5F7; border-color: #EEF5F7; }
+  .tile figcaption { font-size: 13px; color: var(--mist); }
+  .tile.light figcaption { color: #4A6470; }
+
+  .palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
+  .sw { background: var(--deep); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .chip { height: 108px; }
+  .sw p { margin: 0; padding: 12px 14px 14px; font-size: 13px; line-height: 1.45; color: var(--mist); }
+  .sw b { display: block; color: var(--frost); font-size: 15px; }
+  .sw code { font-family: var(--mono); }
+  .grad { height: 56px; border-radius: 12px; margin-top: 14px; background: linear-gradient(90deg, #2E9BE0, #2FBF78); }
+
+  .type { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .card { background: var(--deep); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+  .t1 { font: 300 54px/1.05 var(--display); margin: 0 0 12px; color: #fff; }
+  .t2 { font: 500 24px/1.25 var(--display); margin: 0 0 10px; color: var(--frost); }
+  .t3 { margin: 0; color: var(--mist); }
+  .tm { font: 400 15px/1.7 var(--mono); margin: 0; }
+
+  .tui { background: #02080D; border: 1px solid var(--line); border-radius: 14px; padding: 26px 30px; font: 400 14px/1.55 var(--mono); white-space: pre; overflow-x: auto; color: var(--frost); }
+  .tui .bl { color: var(--blue-glow); } .tui .gr { color: var(--green-glow); } .tui .m { color: var(--mist); }
+  .tui .sel { background: linear-gradient(90deg, #1C6E9E, #1F8A57); color: #fff; }
+
+  @media (max-width: 800px) {
+    main { padding: 40px 20px 64px; }
+    .hero { grid-template-columns: 1fr; gap: 24px; }
+    .hero svg.big { max-width: 260px; margin: 0 auto; display: block; }
+    .wordmark { font-size: 56px; }
+    .claim { font-size: 18px; }
+    .marks, .palette { grid-template-columns: 1fr 1fr; }
+    .type { grid-template-columns: 1fr; }
+    .t1 { font-size: 38px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <svg class="big" width="300" height="300" viewBox="0 0 380 380" role="img" aria-label="QBit Vault mark: the qbitdev Q inside a hexagon seal"><defs><linearGradient id="q" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7FD0EC"/><stop offset="1" stop-color="#91ECC5"/></linearGradient><filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g filter="url(#glow)"><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="#07121B"/><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="none" stroke="url(#q)" stroke-width="16" stroke-linejoin="round"/><rect x="124" y="118" width="132" height="132" rx="44" fill="none" stroke="url(#q)" stroke-width="18"/><path d="M222 222 L262 262" stroke="url(#q)" stroke-width="18" stroke-linecap="round"/></g><g fill="#91ECC5"><circle cx="190" cy="28" r="7"/><circle cx="330" cy="271" r="7" fill="#7FD0EC"/><circle cx="50" cy="271" r="7"/></g></svg>
+    <div>
+      <h1 class="wordmark">qbit <b>vault</b></h1>
+      <p class="family">by qbitdev</p>
+      <p class="claim">A sealed place for the keys your coding agents use: they get the work done, the seal never opens to the chat.</p>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="marks">
+    <h2 id="marks">The mark</h2>
+    <p class="lede">The hexagon badge from the qbitdev hoodie becomes the seal of the vault, with the brand Q inside. Its three vertices carry the orbit electrons. A hexagon holds its shape at 16 px and in box-drawing characters, so the terminal and the favicon use the same mark.</p>
+    <div class="marks">
+      <figure class="tile">
+        <svg width="132" height="132" viewBox="0 0 380 380" aria-hidden="true"><defs><linearGradient id="a1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7FD0EC"/><stop offset="1" stop-color="#91ECC5"/></linearGradient></defs><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="#07121B"/><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="none" stroke="url(#a1)" stroke-width="16" stroke-linejoin="round"/><rect x="124" y="118" width="132" height="132" rx="44" fill="none" stroke="url(#a1)" stroke-width="18"/><path d="M222 222 L262 262" stroke="url(#a1)" stroke-width="18" stroke-linecap="round"/></svg>
+        <figcaption>App icon</figcaption>
+      </figure>
+      <figure class="tile light">
+        <svg width="132" height="132" viewBox="0 0 380 380" aria-hidden="true"><defs><linearGradient id="a2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1C6E9E"/><stop offset="1" stop-color="#1F8A57"/></linearGradient></defs><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="none" stroke="url(#a2)" stroke-width="16" stroke-linejoin="round"/><rect x="124" y="118" width="132" height="132" rx="44" fill="none" stroke="url(#a2)" stroke-width="18"/><path d="M222 222 L262 262" stroke="url(#a2)" stroke-width="18" stroke-linecap="round"/></svg>
+        <figcaption>On light (deepened gradient)</figcaption>
+      </figure>
+      <figure class="tile">
+        <svg width="132" height="132" viewBox="0 0 380 380" aria-hidden="true"><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="none" stroke="#C7D9DE" stroke-width="16" stroke-linejoin="round"/><rect x="124" y="118" width="132" height="132" rx="44" fill="none" stroke="#C7D9DE" stroke-width="18"/><path d="M222 222 L262 262" stroke="#C7D9DE" stroke-width="18" stroke-linecap="round"/></svg>
+        <figcaption>One color</figcaption>
+      </figure>
+      <figure class="tile">
+        <div style="display:flex;gap:18px;align-items:end"><svg width="32" height="32" viewBox="0 0 380 380" aria-hidden="true"><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="#07121B" stroke="#7FD0EC" stroke-width="30" stroke-linejoin="round"/><rect x="130" y="124" width="120" height="120" rx="40" fill="none" stroke="#91ECC5" stroke-width="34"/></svg><svg width="16" height="16" viewBox="0 0 380 380" aria-hidden="true"><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="#7FD0EC"/><circle cx="190" cy="190" r="70" fill="#07121B"/></svg></div>
+        <figcaption>Favicon, 32 and 16 px</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="color">
+    <h2 id="color">Color</h2>
+    <p class="lede">Measured from the qbitdev logo: near-black space, a blue and a green that glow, frost white for text. The blue-to-green gradient belongs to the mark and to selection only; flat colors carry everything else.</p>
+    <div class="palette">
+      <div class="sw"><div class="chip" style="background:#000204"></div><p><b>Void</b><code>#000204</code><br>Background</p></div>
+      <div class="sw"><div class="chip" style="background:#07121B"></div><p><b>Deep</b><code>#07121B</code><br>Panels, terminal</p></div>
+      <div class="sw"><div class="chip" style="background:#2E9BE0"></div><p><b>Qubit blue</b><code>#2E9BE0</code><br>Actions, focus</p></div>
+      <div class="sw"><div class="chip" style="background:#2FBF78"></div><p><b>Qubit green</b><code>#2FBF78</code><br>Granted, healthy</p></div>
+      <div class="sw"><div class="chip" style="background:#C7D9DE"></div><p><b>Frost</b><code>#C7D9DE</code><br>Text</p></div>
+      <div class="sw"><div class="chip" style="background:#F07A6A"></div><p><b>Flare</b><code>#F07A6A</code><br>Refused, errors</p></div>
+    </div>
+    <div class="grad" role="img" aria-label="Brand gradient from qubit blue to qubit green"></div>
+  </section>
+
+  <section class="section" aria-labelledby="type">
+    <h2 id="type">Type</h2>
+    <p class="lede">Light, lowercase and open like the qbitdev wordmark for the name; plain text for reading; monospace in the terminal.</p>
+    <div class="type">
+      <div class="card">
+        <p class="t1">use it, never see it</p>
+        <p class="t2">One approval covers twelve hours</p>
+        <p class="t3">The value is typed out of band, stored encrypted on this machine and injected into one command at a time.</p>
+      </div>
+      <div class="card">
+        <p class="tm">GITHUB_TOKEN   global     <span style="color:#91ECC5">session 11h 42m</span></p>
+        <p class="tm" style="color:#8FA7B2">STRIPE_KEY     shop-api   no grant</p>
+        <p class="tm" style="color:#7FD0EC;margin-top:12px">✓ healthy, 3 hosts registered</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="banner">
+    <h2 id="banner">README banner</h2>
+    <p class="lede">1280 × 320, SVG.</p>
+    <svg viewBox="0 0 1280 320" width="100%" role="img" aria-label="QBit Vault banner" style="border-radius:14px;display:block">
+      <defs>
+        <linearGradient id="bq" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7FD0EC"/><stop offset="1" stop-color="#91ECC5"/></linearGradient>
+        <linearGradient id="bs" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2E9BE0"/><stop offset="1" stop-color="#2FBF78"/></linearGradient>
+        <radialGradient id="bg" cx=".2" cy=".5" r=".7"><stop offset="0" stop-color="#0A2230"/><stop offset="1" stop-color="#000204"/></radialGradient>
+      </defs>
+      <rect width="1280" height="320" fill="url(#bg)"/>
+      
+      <g transform="translate(220 160) scale(.7) translate(-190 -190)"><path d="M190 28 L330 109 L330 271 L190 352 L50 271 L50 109 Z" fill="none" stroke="url(#bq)" stroke-width="16" stroke-linejoin="round"/><rect x="124" y="118" width="132" height="132" rx="44" fill="none" stroke="url(#bq)" stroke-width="18"/><path d="M222 222 L262 262" stroke="url(#bq)" stroke-width="18" stroke-linecap="round"/></g>
+      <text x="430" y="170" fill="#C7D9DE" font-family="Segoe UI, Helvetica, sans-serif" font-weight="300" font-size="96">qbit vault</text>
+      <text x="434" y="222" fill="#8FA7B2" font-family="Segoe UI, Helvetica, sans-serif" font-size="28">Agents use your secrets. They never see them.</text>
+      <path d="M434 248 H900" stroke="url(#bs)" stroke-width="2"/>
+    </svg>
+  </section>
+
+  <section class="section" aria-labelledby="tui">
+    <h2 id="tui">In the terminal</h2>
+<div class="tui" role="img" aria-label="Terminal header sample"><span class="bl">   ╱‾‾‾‾╲ </span>   <span style="font-weight:300">qbit vault</span>  <span class="m">0.1.0  by qbitdev</span>
+<span class="bl">  ⟨ </span><span class="gr">(Q)</span><span class="bl">  ⟩</span>   <span class="m">~/.qbit-vault   unlocked   3 hosts</span>
+<span class="bl">   ╲____╱ </span>
+<span class="sel">  ▸ Secrets                </span>
+    Grants           <span class="gr">2 active</span>
+    Hosts            <span class="bl">claude-code  codex  pi</span>
+    Audit
+    Settings
+    Update           <span class="m">up to date</span></div>
+  </section>
+</main>
+</body>
+</html>

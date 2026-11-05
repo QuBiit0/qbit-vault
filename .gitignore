@@ -4,3 +4,4 @@
 *.test
 coverage.out
 .codegraph/
+.playwright-mcp/

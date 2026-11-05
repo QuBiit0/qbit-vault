@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "02-dial.html",
+  "handoffs": {
+    "02-dial.html": {
+      "status": "sent",
+      "queued": true,
+      "sentAt": "2026-11-05T12:14:58.766Z",
+      "startedAt": null,
+      "implementedAt": null,
+      "feature": "odd/tasks/polish.md"
+    }
+  }
+}

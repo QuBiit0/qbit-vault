@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chosen": "01-atom-keyhole.html",
+  "handoffs": {
+    "01-atom-keyhole.html": {
+      "status": "sent",
+      "queued": true,
+      "sentAt": "2026-11-05T12:22:50.053Z",
+      "startedAt": null,
+      "implementedAt": null,
+      "feature": "odd/tasks/polish.md"
+    }
+  }
+}

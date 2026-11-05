@@ -1,0 +1,10 @@
+{
+  "title": "QBit Vault identity (qbitdev brand)",
+  "brief": "QBit Vault as a product of the user's qbitdev brand: black, blue and green, the Q with a blue-to-green gradient inside atom orbits, a light lowercase wordmark. Mark, palette (measured from the user's logo), type, README banner and the terminal header for the TUI.",
+  "feature": "odd/tasks/polish.md",
+  "artboards": [
+    { "file": "01-atom-keyhole.html", "title": "Atom keyhole", "tradeoff": "Closest to the qbitdev logo (same Q, same orbits) with a keyhole in the counter; strongest family resemblance, the keyhole is small at favicon sizes. Intended typefaces: Sora Light for the wordmark, Inter for text, JetBrains Mono.", "width": 1440, "height": 2600 },
+    { "file": "02-hex-seal.html", "title": "Hex seal", "tradeoff": "The hoodie's hexagon badge as a vault seal; crisp at 16 px and easy to draw in the terminal; a little more geometric and less 'atomic' than the master logo. Intended typefaces: Sora Light, Inter, JetBrains Mono.", "width": 1440, "height": 2600 },
+    { "file": "03-orbit-lock.html", "title": "Orbit lock", "tradeoff": "An orbit becomes a padlock shackle over the Q: reads as 'lock' to anyone, not only developers; the taller shape fits square slots less well. Intended typefaces: Sora Light, Inter, JetBrains Mono.", "width": 1440, "height": 2600 }
+  ]
+}

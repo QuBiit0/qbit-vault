@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QBit Vault identity: Dial</title>
+<style>
+  :root {
+    --graphite: #22262C;
+    --steel: #59626E;
+    --plate: #E5E8EC;
+    --brass: #A87B3C;
+    --brass-light: #D9B57A;
+    --patina: #2D7A70;
+    --rust: #A8442E;
+    --display: "Segoe UI Variable Display", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+    --text: "Segoe UI", "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  figure { margin: 0; }
+  svg { max-width: 100%; height: auto; }
+  body { margin: 0; background: var(--plate); color: var(--graphite); font: 400 16px/1.6 var(--text); }
+  main { max-width: 1160px; margin: 0 auto; padding: 80px 56px 104px; }
+  :focus-visible { outline: 3px solid var(--brass); outline-offset: 3px; }
+
+  .hero { text-align: center; padding: 24px 0 72px; }
+  .dial { width: 220px; height: 220px; }
+  .dial .ring { transform-origin: 110px 110px; animation: turn 1600ms 300ms cubic-bezier(.3,.0,.2,1) both; }
+  @keyframes turn { from { transform: rotate(-120deg); } to { transform: rotate(0); } }
+  @media (prefers-reduced-motion: reduce) { .dial .ring { animation: none; } }
+  .wordmark { font: 500 54px/1.1 var(--display); letter-spacing: 0.22em; margin: 36px 0 0; text-indent: 0.22em; }
+  .claim { margin: 20px auto 0; max-width: 34ch; font-size: 20px; color: var(--steel); }
+
+  h2 { font: 600 24px/1.25 var(--display); margin: 0 0 8px; letter-spacing: 0.01em; }
+  .section { margin-top: 84px; }
+  .lede { color: var(--steel); margin: 0 0 28px; max-width: 68ch; }
+
+  .plate { background: linear-gradient(180deg, #F1F3F5, #DCE0E5); border: 1px solid #C9CED5; border-radius: 6px; padding: 32px; box-shadow: inset 0 1px 0 #fff; }
+  .marks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .mark { display: grid; place-items: center; gap: 12px; padding: 26px 12px; background: #F6F7F9; border: 1px solid #C9CED5; border-radius: 6px; min-height: 196px; }
+  .mark.dark { background: var(--graphite); border-color: var(--graphite); color: #C7CDD5; }
+  .mark figcaption { font-size: 13px; color: var(--steel); }
+  .mark.dark figcaption { color: #A7AFBA; }
+
+  .palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; border: 1px solid #C9CED5; border-radius: 6px; overflow: hidden; }
+  .sw { padding: 0 0 14px; background: #F6F7F9; }
+  .sw + .sw { border-left: 1px solid #C9CED5; }
+  .chip { height: 120px; }
+  .sw p { margin: 12px 14px 0; font-size: 13px; line-height: 1.45; }
+  .sw b { display: block; font-size: 15px; }
+  .sw code { font-family: var(--mono); color: var(--steel); }
+
+  .type { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; }
+  .t1 { font: 500 44px/1.1 var(--display); letter-spacing: 0.12em; margin: 0 0 12px; }
+  .t2 { font: 600 24px/1.25 var(--display); margin: 0 0 10px; }
+  .t3 { margin: 0; color: var(--steel); }
+  .tm { font: 400 15px/1.7 var(--mono); margin: 0; }
+
+  .tui { background: var(--graphite); color: #D6DBE2; border-radius: 6px; padding: 26px 30px; font: 400 14px/1.55 var(--mono); white-space: pre; overflow-x: auto; }
+  .tui .b { color: var(--brass-light); } .tui .m { color: #8E97A3; } .tui .g { color: #6FC7B9; } .tui .sel { color: var(--graphite); background: var(--brass-light); }
+
+  @media (max-width: 760px) {
+    main { padding: 44px 20px 64px; }
+    .dial { width: 150px; height: 150px; }
+    .wordmark { font-size: 32px; letter-spacing: 0.16em; text-indent: 0.16em; }
+    .claim { font-size: 17px; }
+    .marks { grid-template-columns: 1fr 1fr; }
+    .palette { grid-template-columns: 1fr 1fr; }
+    .sw + .sw { border-left: 0; }
+    .sw { border-bottom: 1px solid #C9CED5; }
+    .type { grid-template-columns: 1fr; }
+    .t1 { font-size: 30px; }
+    .plate { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <svg class="dial" viewBox="0 0 220 220" role="img" aria-label="QBit Vault dial mark">
+      <circle cx="110" cy="110" r="104" fill="#22262C"/>
+      <g class="ring">
+        <circle cx="110" cy="110" r="78" fill="none" stroke="#D9B57A" stroke-width="10"/>
+        <g stroke="#8E97A3" stroke-width="3" stroke-linecap="round">
+          <line x1="110" y1="16" x2="110" y2="28"/><line x1="204" y1="110" x2="192" y2="110"/>
+          <line x1="110" y1="204" x2="110" y2="192"/><line x1="16" y1="110" x2="28" y2="110"/>
+          <line x1="176" y1="44" x2="168" y2="52"/><line x1="44" y1="44" x2="52" y2="52"/><line x1="44" y1="176" x2="52" y2="168"/>
+        </g>
+      </g>
+      <circle cx="110" cy="110" r="40" fill="#E5E8EC"/>
+      <path d="M140 140 L176 176" stroke="#D9B57A" stroke-width="14" stroke-linecap="round"/>
+      <circle cx="110" cy="110" r="10" fill="#22262C"/>
+    </svg>
+    <h1 class="wordmark">QBIT VAULT</h1>
+    <p class="claim">A safe for the keys your coding agents need, opened one command at a time.</p>
+  </header>
+
+  <section class="section" aria-labelledby="marks">
+    <h2 id="marks">The mark</h2>
+    <p class="lede">A combination dial whose handle is the tail of the Q. Turning it is the act of granting: a secret leaves the safe only for the command you approved.</p>
+    <div class="plate">
+      <div class="marks">
+        <figure class="mark">
+          <svg width="112" height="112" viewBox="0 0 220 220" aria-hidden="true"><circle cx="110" cy="110" r="104" fill="#22262C"/><circle cx="110" cy="110" r="78" fill="none" stroke="#D9B57A" stroke-width="10"/><circle cx="110" cy="110" r="40" fill="#E5E8EC"/><path d="M140 140 L176 176" stroke="#D9B57A" stroke-width="14" stroke-linecap="round"/><circle cx="110" cy="110" r="10" fill="#22262C"/></svg>
+          <figcaption>App icon</figcaption>
+        </figure>
+        <figure class="mark">
+          <svg width="112" height="112" viewBox="0 0 220 220" aria-hidden="true"><circle cx="110" cy="110" r="78" fill="none" stroke="#22262C" stroke-width="14"/><circle cx="110" cy="110" r="10" fill="#22262C"/><path d="M140 140 L176 176" stroke="#22262C" stroke-width="16" stroke-linecap="round"/></svg>
+          <figcaption>One color, engraved</figcaption>
+        </figure>
+        <figure class="mark dark">
+          <svg width="112" height="112" viewBox="0 0 220 220" aria-hidden="true"><circle cx="110" cy="110" r="78" fill="none" stroke="#D9B57A" stroke-width="14"/><circle cx="110" cy="110" r="10" fill="#D9B57A"/><path d="M140 140 L176 176" stroke="#D9B57A" stroke-width="16" stroke-linecap="round"/></svg>
+          <figcaption>Brass on graphite</figcaption>
+        </figure>
+        <figure class="mark">
+          <div style="display:flex;gap:18px;align-items:end">
+            <svg width="32" height="32" viewBox="0 0 220 220" aria-hidden="true"><circle cx="110" cy="110" r="104" fill="#22262C"/><circle cx="110" cy="110" r="70" fill="none" stroke="#D9B57A" stroke-width="26"/></svg>
+            <svg width="16" height="16" viewBox="0 0 220 220" aria-hidden="true"><circle cx="110" cy="110" r="104" fill="#22262C"/><circle cx="110" cy="110" r="60" fill="none" stroke="#D9B57A" stroke-width="44"/></svg>
+          </div>
+          <figcaption>Favicon, 32 and 16 px</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="color">
+    <h2 id="color">Color</h2>
+    <p class="lede">Materials, not hues: graphite and steel for the safe, brass for what you touch, patina and rust for what went right or wrong.</p>
+    <div class="palette">
+      <div class="sw"><div class="chip" style="background:#22262C"></div><p><b>Graphite</b><code>#22262C</code><br>Text, terminal</p></div>
+      <div class="sw"><div class="chip" style="background:#59626E"></div><p><b>Steel</b><code>#59626E</code><br>Secondary text</p></div>
+      <div class="sw"><div class="chip" style="background:#E5E8EC"></div><p><b>Plate</b><code>#E5E8EC</code><br>Background</p></div>
+      <div class="sw"><div class="chip" style="background:#A87B3C"></div><p><b>Brass</b><code>#A87B3C</code><br>Actions, focus</p></div>
+      <div class="sw"><div class="chip" style="background:#2D7A70"></div><p><b>Patina</b><code>#2D7A70</code><br>Granted, healthy</p></div>
+      <div class="sw"><div class="chip" style="background:#A8442E"></div><p><b>Rust</b><code>#A8442E</code><br>Refused, errors</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="type">
+    <h2 id="type">Type</h2>
+    <p class="lede">The name is set wide and spaced like engraving; headings are plain; data is monospace.</p>
+    <div class="type">
+      <div class="plate">
+        <p class="t1">OPEN ONCE</p>
+        <p class="t2">One approval covers twelve hours</p>
+        <p class="t3">The vault stays closed to the model. Only the command you approve receives the key.</p>
+      </div>
+      <div class="plate">
+        <p class="tm">GITHUB_TOKEN   global     11h 42m</p>
+        <p class="tm" style="color:#59626E">STRIPE_KEY     shop-api   closed</p>
+        <p class="tm" style="color:#2D7A70;margin-top:12px">healthy, 3 hosts registered</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="banner">
+    <h2 id="banner">README banner</h2>
+    <p class="lede">1280 × 320, SVG.</p>
+    <svg viewBox="0 0 1280 320" width="100%" role="img" aria-label="QBit Vault banner" style="border-radius:6px;display:block">
+      <rect width="1280" height="320" fill="#22262C"/>
+      <g transform="translate(110 50) scale(1)">
+        <circle cx="110" cy="110" r="78" fill="none" stroke="#D9B57A" stroke-width="10"/>
+        <circle cx="110" cy="110" r="40" fill="#E5E8EC"/>
+        <path d="M140 140 L176 176" stroke="#D9B57A" stroke-width="14" stroke-linecap="round"/>
+        <circle cx="110" cy="110" r="10" fill="#22262C"/>
+      </g>
+      <text x="380" y="160" fill="#E5E8EC" font-family="Segoe UI, Helvetica, sans-serif" font-weight="500" font-size="68" letter-spacing="14">QBIT VAULT</text>
+      <text x="382" y="214" fill="#A7AFBA" font-family="Segoe UI, Helvetica, sans-serif" font-size="28">A safe for the keys your coding agents need.</text>
+    </svg>
+  </section>
+
+  <section class="section" aria-labelledby="tui">
+    <h2 id="tui">In the terminal</h2>
+<div class="tui" role="img" aria-label="Terminal header sample"><span class="b">   ╭─────╮</span>    QBIT VAULT  <span class="m">v0.1.0</span>
+<span class="b">   │  ●  │</span>    <span class="m">~/.qbit-vault   unlocked   3 hosts</span>
+<span class="b">   ╰─────╯╲</span>
+<span class="sel">  ❯ Secrets              </span>
+    Grants          <span class="g">2 open</span>
+    Hosts           <span class="g">claude-code  codex  pi</span>
+    Audit
+    Settings
+    Update          <span class="m">up to date</span></div>
+  </section>
+</main>
+</body>
+</html>

@@ -4,9 +4,15 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.4] - 2026-11-06
+
 ### Changed
 
 - `init` on a machine without an OS keychain (WSL, a headless Linux box) asks for a passphrase instead of failing with `vault is locked`, and says why; with no terminal to ask it names `--passphrase --passphrase-stdin`.
+
+### Fixed
+
+- `prompt --value` refuses a terminal on file descriptor 3 (the value would show on screen); `/dev/null` still works. On Linux the Go runtime's epoll descriptor is recognized by asking the kernel.
 
 ## [0.1.0-beta.3] - 2026-11-05
 

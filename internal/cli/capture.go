@@ -121,9 +121,9 @@ func layerRequest(layer vault.Layer) string {
 	return ""
 }
 
-// askValue asks for a masked value and checks it (R-CAP-04). The caller wipes
-// the returned bytes, which are the value as typed: trim them with
-// bytes.TrimSpace to get the value. Blank and oversized input are usage
+// askValue asks for a masked value and checks it (R-CAP-04), then offers to
+// drop pasted quotes or invisible characters (reviewValue). The caller wipes
+// the returned bytes, the trimmed value. Blank and oversized input are usage
 // errors; nothing has been written either way.
 func askValue(ask prompt.Backend, req prompt.SecretRequest, hint string) ([]byte, error) {
 	sec, err := ask.Secret(req)
@@ -132,15 +132,19 @@ func askValue(ask prompt.Backend, req prompt.SecretRequest, hint string) ([]byte
 	}
 	raw := sec.Reveal()
 	sec.Wipe()
-	switch v := bytes.TrimSpace(raw); {
+	defer clear(raw)
+	v := bytes.TrimSpace(raw)
+	switch {
 	case len(v) == 0:
-		clear(raw)
 		return nil, usageError{"empty value"}
 	case len(v) > maxValueBytes:
-		clear(raw)
 		return nil, usageError{"value too large"}
 	}
-	return raw, nil
+	reviewed, err := reviewValue(ask, req.Name, v)
+	if err != nil {
+		return nil, promptFail(err, hint)
+	}
+	return reviewed, nil
 }
 
 // captureValue runs the interactive part of set on the prompt backend: the

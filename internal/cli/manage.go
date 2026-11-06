@@ -149,7 +149,15 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		if len(v) == 0 || len(v) > maxValueBytes {
 			return broker.ManageResponse{}, refusal.New(refusal.Internal, "").WithMessage("empty or too large value")
 		}
-		rec.Value = secret.New(r.Name, v)
+		reviewed, rerr := reviewValue(ask, r.Name, v)
+		if rerr != nil {
+			if gaveUp(rerr) {
+				return broker.ManageResponse{}, declined()
+			}
+			return broker.ManageResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
+		}
+		defer clear(reviewed)
+		rec.Value = secret.New(r.Name, reviewed)
 		_, err = s.v.ReplaceWithGrants(en.Layer, r.Name, rec, ed)
 		after = ptr(layerName(en.Layer))
 	}

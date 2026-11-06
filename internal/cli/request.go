@@ -177,6 +177,12 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		case len(a.value) > maxValueBytes:
 			return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage("value too large")
 		}
+		reviewed, err := reviewValue(ask, a.f.Name, a.value)
+		clear(a.value)
+		if err != nil {
+			return broker.RequestResponse{}, fail(err)
+		}
+		a.value = reviewed
 	}
 
 	// One scope for all: only those every field allows.

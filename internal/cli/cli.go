@@ -39,8 +39,9 @@ type globals struct {
 	// execStdin, when set, is the stdin of an exec child instead of ours.
 	execStdin io.Reader
 	// cwd is the working directory of a broker call (its envelope's cwd);
-	// empty means the process's own.
+	// empty means the process's own, except in a broker call (broker).
 	cwd     string
+	broker  bool
 	home    string
 	JSON    bool
 	Session string

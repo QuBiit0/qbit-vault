@@ -131,3 +131,34 @@ func TestPromptCommandOffersNoProjectScopeForAGlobalSecret(t *testing.T) {
 		}
 	}
 }
+
+// A prompt token was issued by another call, maybe in another repository:
+// redeeming it never binds a global secret to this one.
+func TestGrantFromPromptTokenRefusesProjectScopeOnAGlobalSecret(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_global\n", "set", "A_KEY", "--global", "--stdin")
+	w.inRepo()
+	before := w.grantsState()
+	code, _, errs := w.run("", "grant", "A_KEY", "--scope", "project", "--from-prompt-token", "tok_anything")
+	if code != exitcode.Refusal || errs != "error: project scope needs a repository: run it inside one\n" {
+		t.Fatalf("code=%d err=%q", code, errs)
+	}
+	if w.grantsState() != before {
+		t.Fatal("a refused token grant changed the grants")
+	}
+}
+
+// A broker call always carries its cwd; one without it must not fall back to
+// the server process's directory for a repository binding.
+func TestRepoRootOfABrokerCallWithoutCwdIsEmpty(t *testing.T) {
+	w := newWorld(t)
+	w.inRepo()
+	g := &globals{getenv: envFrom(nil), home: w.home, broker: true}
+	if r := g.repoRoot(); r != "" {
+		t.Fatalf("repoRoot = %q, want none", r)
+	}
+	g.broker = false
+	if r := g.repoRoot(); r == "" {
+		t.Fatal("a CLI command in a repository found no root")
+	}
+}

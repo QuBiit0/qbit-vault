@@ -34,6 +34,9 @@ func (g *globals) grantRequest(name string, layer vault.Layer, recordID string, 
 // grant of a global secret is bound to it.
 func (g *globals) repoRoot() string {
 	dir := g.cwd
+	if dir == "" && g.broker {
+		return "" // never the server process's own directory
+	}
 	if dir == "" {
 		var err error
 		if dir, err = getwd(); err != nil {

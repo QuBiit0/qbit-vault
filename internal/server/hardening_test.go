@@ -524,3 +524,24 @@ func TestLimiterEvictionKeepsLiveCounters(t *testing.T) {
 		t.Fatalf("limiter holds %d keys, bound is %d", n, l.max)
 	}
 }
+
+// A table full of live keys never refuses everyone: a new key evicts one
+// entry at random and is admitted, so a flood of device ids cannot lock out
+// legitimate users (the bound on memory still holds).
+func TestLimiterFullOfLiveKeysStillAdmitsANewKey(t *testing.T) {
+	l := newLimiter(2, time.Minute)
+	l.max = 3
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 3; i++ {
+		l.allow(fmt.Sprintf("flood-%d", i), now)
+	}
+	if !l.allow("legit", now.Add(time.Second)) {
+		t.Fatal("a new key was refused because the table is full of live keys")
+	}
+	l.mu.Lock()
+	n := len(l.seen)
+	l.mu.Unlock()
+	if n > l.max {
+		t.Fatalf("limiter holds %d keys, bound is %d", n, l.max)
+	}
+}

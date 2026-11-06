@@ -34,7 +34,12 @@ func (l *limiter) allow(key string, now time.Time) bool {
 		if b == nil && len(l.seen) >= l.max {
 			l.evict(now)
 			if len(l.seen) >= l.max {
-				return false // a flood of live keys: refuse new ones, keep every counter
+				// A flood of live keys: drop one at random (map order) rather
+				// than refuse everyone or reset every counter.
+				for k := range l.seen {
+					delete(l.seen, k)
+					break
+				}
 			}
 		}
 		b = &bucket{start: now}

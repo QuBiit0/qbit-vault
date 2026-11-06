@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.9] - 2026-11-06
+
 ### Added
 
 - `qbit-vault export FILE`: an encrypted, portable backup of the whole vault (every layer and secret with its metadata, no grants or keys) sealed under a passphrase you choose at export time (at least 12 characters; Argon2id 128 MiB, XChaCha20-Poly1305). It needs no server, no sync and no account. `qbit-vault import --from-export FILE` restores it on any machine, including an empty vault just created by `init`: secrets return to their own layer, those with a name that already exists are replaced after a question (`--yes` skips it), every other secret and grant is untouched.

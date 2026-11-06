@@ -66,12 +66,12 @@ $env:QBIT_VAULT_HOME = Join-Path $work 'home'
 $env:QBV_TEST_SYNC_LOG = Join-Path $work 'sync.log'
 $realPath = $env:Path
 
-function Invoke-Install($arch, $release, $dest, $prefixPath = $null, $noSync = $null) {
+function Invoke-Install($arch, $release, $dest, $prefixPath = $null, $noSync = $null, $version = 'v0.0.0-test') {
     Set-Content -LiteralPath $env:QBV_TEST_SYNC_LOG -Value $null
     $env:QBIT_VAULT_NO_SYNC = $noSync
     $env:Path = if ($prefixPath) { "$prefixPath;$realPath" } else { $realPath }
     $env:PROCESSOR_ARCHITECTURE = $arch
-    $env:QBIT_VAULT_VERSION = 'v0.0.0-test'
+    $env:QBIT_VAULT_VERSION = $version
     $env:QBIT_VAULT_RELEASE_URL = $release
     $env:QBIT_VAULT_INSTALL_DIR = $dest
     $env:QBIT_VAULT_NO_PATH = '1'
@@ -176,10 +176,44 @@ try {
     Check 'explicit dir installs there' ((Installed (Join-Path $work 'dest11')) -eq 'fake-qbit-vault-amd64')
     Check 'explicit dir leaves the old copy' ((& (Join-Path $prev 'qbit-vault.exe') version) -match 'v0.0.0-old')
     Check 'explicit dir warns about the shadowing copy' ($r.Out -match [regex]::Escape("another qbit-vault at $(Join-Path $prev 'qbit-vault.exe') comes first on your PATH"))
+
+    # 12. Without QBIT_VAULT_VERSION the newest published release wins, wherever
+    # the API lists it (GitHub orders by tag text, so beta.10 comes after beta.9).
+    $api = Join-Path $work 'releases.json'
+    Set-Content -LiteralPath $api -Value @'
+[
+  {
+    "tag_name": "v0.0.9-old",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-11-06T16:37:55Z",
+    "published_at": "2026-11-06T16:41:42Z",
+    "assets": [{"name": "checksums.txt", "created_at": "2026-11-06T18:00:00Z"}]
+  },
+  {
+    "tag_name": "v0.0.0-draft",
+    "draft": true,
+    "created_at": "2026-11-06T19:00:00Z",
+    "published_at": null
+  },
+  {
+    "tag_name": "v0.0.0-test",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-11-06T16:57:22Z",
+    "published_at": "2026-11-06T17:00:26Z"
+  }
+]
+'@
+    $env:QBIT_VAULT_RELEASES_API = $api
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest12') $null $null ''
+    Remove-Item Env:QBIT_VAULT_RELEASES_API
+    Check 'newest published release is chosen' ($r.Out -match [regex]::Escape('installing qbit-vault v0.0.0-test (windows/amd64)'))
+    Check 'newest published release installs' ((Installed (Join-Path $work 'dest12')) -eq 'fake-qbit-vault-amd64')
 } finally {
     $env:Path = $realPath
     $env:PROCESSOR_ARCHITECTURE = $realArch
-    'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH', 'QBIT_VAULT_NO_SYNC', 'QBIT_VAULT_HOME', 'QBV_TEST_SYNC_LOG' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+    'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASES_API', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH', 'QBIT_VAULT_NO_SYNC', 'QBIT_VAULT_HOME', 'QBV_TEST_SYNC_LOG' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 

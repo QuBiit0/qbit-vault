@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Fixed
+
+- Installers: without `QBIT_VAULT_VERSION` they installed the first release the GitHub API lists, which orders by tag text, so `v0.1.0-beta.10` lost to `v0.1.0-beta.9`. They now take the release with the latest publish date. The installers are served from `main`, so the fix applies as soon as it merges.
+
 ## [0.1.0-beta.10] - 2026-11-06
 
 ### Fixed

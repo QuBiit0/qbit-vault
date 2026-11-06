@@ -5,6 +5,7 @@
 #
 # Environment:
 #   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
+#   QBIT_VAULT_RELEASES_API release list to pick the newest from (default: the GitHub releases API)
 #   QBIT_VAULT_INSTALL_DIR  target directory (default: where qbit-vault already is, else $HOME/.local/bin)
 #   QBIT_VAULT_RELEASE_URL  base download URL (default: the GitHub releases of QuBiit0/qbit-vault)
 #   QBIT_VAULT_NO_SYNC      set to 1 to skip `qbit-vault sync` after an upgrade
@@ -60,10 +61,15 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 if [ -z "$VERSION" ]; then
-	# releases/latest skips pre-releases, so ask for the newest release of any kind.
-	fetch "https://api.github.com/repos/$REPO/releases?per_page=1" "$tmp/releases.json" ||
+	# releases/latest skips pre-releases, so list releases of any kind. The API
+	# orders them by tag text (v0.1.0-beta.10 after v0.1.0-beta.9), so take the
+	# newest publish date; a draft has none.
+	fetch "${QBIT_VAULT_RELEASES_API:-https://api.github.com/repos/$REPO/releases?per_page=100}" "$tmp/releases.json" ||
 		die "could not query the releases of $REPO"
-	VERSION="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$tmp/releases.json" | head -n 1)"
+	VERSION="$(awk '
+		/"tag_name"[[:space:]]*:/ { t = $0; sub(/.*"tag_name"[[:space:]]*:[[:space:]]*"/, "", t); sub(/".*/, "", t) }
+		/"published_at"[[:space:]]*:[[:space:]]*"/ { p = $0; sub(/.*"published_at"[[:space:]]*:[[:space:]]*"/, "", p); sub(/".*/, "", p); if (p > best) { best = p; tag = t } }
+		END { print tag }' "$tmp/releases.json")"
 	[ -n "$VERSION" ] || die "no release of $REPO found"
 fi
 

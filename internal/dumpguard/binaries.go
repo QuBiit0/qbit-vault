@@ -109,7 +109,8 @@ func scriptOf(w []string) (string, bool) {
 // encodedPowerShell reports whether w runs pwsh/powershell with an encoded
 // command (-e, -ec, -en, -enc, ... -encodedcommand, any case, - or / prefix):
 // the script is base64 and cannot be inspected. Only the options before the
-// command or file are read.
+// command or file are read; a word that is not an option is an option's
+// value (-ExecutionPolicy Bypass) and is skipped.
 func encodedPowerShell(w []string) bool {
 	idx, bare := resolve(w)
 	if idx < 0 || bare || !psNames[strings.ToLower(baseName(w[idx]))] {
@@ -117,7 +118,7 @@ func encodedPowerShell(w []string) bool {
 	}
 	for _, a := range w[idx+1:] {
 		if len(a) < 2 || (a[0] != '-' && a[0] != '/') {
-			return false
+			continue
 		}
 		f := strings.ToLower(a[1:])
 		switch {

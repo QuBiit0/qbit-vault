@@ -251,11 +251,12 @@ func refusesRunner(args []string, depth int) bool {
 
 // encodedCommand reports PowerShell's -EncodedCommand in any spelling (-e,
 // -ec, -en, -enc, ... any case, - or / prefix) among the options before the
-// command or file: its base64 script cannot be read, so it is refused.
+// command or file: its base64 script cannot be read, so it is refused. A
+// word that is not an option is an option's value (-ExecutionPolicy Bypass).
 func encodedCommand(args []string) bool {
 	for _, a := range args {
 		if len(a) < 2 || (a[0] != '-' && a[0] != '/') {
-			return false
+			continue
 		}
 		f := strings.ToLower(a[1:])
 		switch {

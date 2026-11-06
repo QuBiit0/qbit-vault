@@ -66,6 +66,11 @@ func TestMatchRefusesPowerShellEncodedCommand(t *testing.T) {
 		`POWERSHELL -ENC SQBFAFgA`,
 		`pwsh /enc SQBFAFgA`,
 		`pwsh -NoProfile -NonInteractive -EncodedCommand SQBFAFgA`,
+		// Options that take a value come first in the common forms.
+		`pwsh -ExecutionPolicy Bypass -EncodedCommand SQBFAFgA`,
+		`powershell -NoProfile -ExecutionPolicy Bypass -enc SQBFAFgA`,
+		`powershell -WindowStyle Hidden -NonInteractive -e SQBFAFgA`,
+		`pwsh -InputFormat Text -OutputFormat Text -ec SQBFAFgA`,
 		`pwsh -encodedcommand SQBFAFgA`,
 		`sudo pwsh -e SQBFAFgA`,
 		`echo hi; pwsh -e SQBFAFgA`,

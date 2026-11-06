@@ -357,7 +357,7 @@ func TestKdialogArgv(t *testing.T) {
 	}{
 		{"secret", sd, []string{"--title", sd.title, "--password", strings.ReplaceAll(sd.text, "\n", "<br>")}},
 		{"choose", cd, []string{"--title", cd.title, "--radiolist", "Which scope?", "1", "once", "off", "2", " -danger", "on", "3", "deny", "off"}},
-		{"confirm", qd, []string{"--title", qd.title, "--yes-label", "Decline", "--no-label", "Confirm", "--yesno", "Remove X?"}},
+		{"confirm", qd, []string{"--title", qd.title, "--radiolist", "Remove X?", "1", "Decline", "on", "2", "Confirm", "off"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -422,23 +422,33 @@ func TestArgvToolsKeepHostileTextInOneElement(t *testing.T) {
 	}
 }
 
-// D-B1: Enter on a confirmation declines, as on macOS and Windows. The
-// default button of zenity (--default-cancel) and of kdialog (yes) is Decline.
+// D-B1: Enter on a confirmation declines, as on macOS and Windows. Zenity
+// has --default-cancel. Kdialog's yes/no dialog cannot default to no, and
+// Escape or closing it answers like its no button, so a confirmation is a
+// two-item list with Decline preselected: only choosing Confirm and pressing
+// OK confirms; Enter, Escape, closing the window or empty output decline.
 func TestKdialogConfirmDefaultIsDecline(t *testing.T) {
 	qd := confirmDialog("q")
 	k := kdialogTool{}
-	if k.classify(qd, result{Exit: 0}) != statusNo {
-		t.Error("kdialog exit 0 (Enter, the yes button) must be Decline")
+	for _, tt := range []struct {
+		name string
+		r    result
+		want status
+	}{
+		{"Enter keeps Decline", result{Exit: 0, Stdout: []byte("1\n")}, statusNo},
+		{"Confirm chosen", result{Exit: 0, Stdout: []byte("2\n")}, statusOK},
+		{"Escape or close", result{Exit: 1}, statusNo},
+		{"OK with no output", result{Exit: 0}, statusNo},
+		{"unknown answer", result{Exit: 0, Stdout: []byte("3")}, statusNo},
+		{"helper failure", result{Exit: 5}, statusFail},
+	} {
+		if got := k.classify(qd, tt.r); got != tt.want {
+			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		}
 	}
-	if k.classify(qd, result{Exit: 1}) != statusOK {
-		t.Error("kdialog exit 1 (the no button) must be Confirm")
-	}
-	if k.classify(qd, result{Exit: 2}) != statusCancel {
-		t.Error("kdialog exit 2 must be a cancel")
-	}
-	// Only a confirmation is swapped.
+	// Value dialogs keep kdialog's codes.
 	if k.classify(secretDialog(req), result{Exit: 0}) != statusOK || k.classify(secretDialog(req), result{Exit: 1}) != statusCancel {
-		t.Error("a value dialog got swapped codes")
+		t.Error("a value dialog changed codes")
 	}
 	// Zenity keeps its codes: --default-cancel changes the button, not the answer.
 	z := zenityTool{}
@@ -641,9 +651,10 @@ func TestNativeConfirm(t *testing.T) {
 	}{
 		{"zenity yes", zenityTool{}, result{Exit: 0}, true, nil},
 		{"zenity no", zenityTool{}, result{Exit: 1}, false, nil},
-		// kdialog's default (yes) button is Decline, so its exit codes are swapped.
-		{"kdialog confirm", kdialogTool{}, result{Exit: 1}, true, nil},
-		{"kdialog decline", kdialogTool{}, result{Exit: 0}, false, nil},
+		// kdialog: a list with Decline preselected; only "2" (Confirm) confirms.
+		{"kdialog confirm", kdialogTool{}, ok("2\n"), true, nil},
+		{"kdialog enter keeps decline", kdialogTool{}, ok("1\n"), false, nil},
+		{"kdialog escape", kdialogTool{}, result{Exit: 1}, false, nil},
 		{"osascript yes", osascriptTool{}, ok("Confirm\n"), true, nil},
 		{"osascript decline", osascriptTool{}, result{Exit: 1, Stderr: []byte("User canceled. (-128)")}, false, nil},
 		{"powershell yes", powershellTool{}, result{Exit: 0}, true, nil},

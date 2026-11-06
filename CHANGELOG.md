@@ -13,7 +13,7 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
   - An invite is claimed atomically: two simultaneous account creations with one invite make one account.
   - Expired nonces, tokens and pairings (including their files) are swept; at most 1000 pairings are pending at once (then 429); the rate limiter evicts only expired entries instead of resetting every counter.
 - Windows: the recovery key and pairing code dialogs always show the whole code (it sits alone in the selectable box, sized to its content; the explanation is above it).
-- Linux: pressing Enter on a yes/no confirmation (zenity, kdialog) now declines, as on macOS and Windows.
+- Linux: pressing Enter on a yes/no confirmation now declines, as on macOS and Windows (zenity `--default-cancel`; kdialog shows the confirmation as a list with Decline preselected, so Enter, Escape and closing the window all decline).
 - `init` and `sync` no longer print an install command for the Pi extension (it is not published yet), and `--json` no longer has `install_command`.
 - `SECURITY.md`: the latest release is the supported version.
 - Sync client: it never follows a redirect (a 3xx answer is `remote_unreachable`), so sealed data only goes to the configured server.

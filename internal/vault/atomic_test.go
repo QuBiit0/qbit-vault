@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"testing"
 )
@@ -177,5 +178,37 @@ func TestListBackupsSkipsConfigSnapshots(t *testing.T) {
 	bs, err := ListBackups(home)
 	if err != nil || len(bs) != 0 {
 		t.Fatalf("backups = %+v, %v", bs, err)
+	}
+}
+
+// B-F1: the backup of the previous pair is flushed like the live files, so a
+// power loss cannot leave a torn restore point.
+func TestSnapshotIsSynced(t *testing.T) {
+	home := t.TempDir()
+	for _, name := range []string{"vault.enc", "key.enc"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte("old "+name), fileMode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var synced []string
+	old := syncFile
+	syncFile = func(f *os.File) error {
+		synced = append(synced, f.Name())
+		return f.Sync()
+	}
+	t.Cleanup(func() { syncFile = old })
+
+	dir, err := snapshot(home, "vault.enc", "key.enc")
+	if err != nil || dir == "" {
+		t.Fatalf("dir=%q err=%v", dir, err)
+	}
+	for _, name := range []string{"vault.enc", "key.enc"} {
+		if !slices.Contains(synced, filepath.Join(dir, name)) {
+			t.Errorf("backup of %s was not synced; synced=%v", name, synced)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil || string(got) != "old "+name {
+			t.Errorf("backup of %s: err=%v content=%q", name, err, got)
+		}
 	}
 }

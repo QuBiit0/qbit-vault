@@ -21,8 +21,13 @@ type cacheEntry struct {
 	Key       string `json:"key"`
 }
 
+// memoryBacked reports whether dir is on memory-backed storage (tmpfs). It is
+// a test seam for onMemory, which is statfs on Linux and always true elsewhere
+// (the cache is off there anyway).
+var memoryBacked = onMemory
+
 // cacheDir returns the cache directory, or "" when caching is off: not on
-// Linux, or the variable is unset, relative, or not an existing directory.
+// Linux, or the variable is unset, relative, not an existing directory or not tmpfs.
 func cacheDir(opts Options) string {
 	// Only Linux's XDG_RUNTIME_DIR is known to be memory-backed (tmpfs).
 	if opts.platform() != "linux" {
@@ -34,6 +39,10 @@ func cacheDir(opts Options) string {
 		return ""
 	}
 	if fi, err := os.Stat(run); err != nil || !fi.IsDir() {
+		return ""
+	}
+	// A runtime dir on disk would keep the master key there for the whole TTL.
+	if !memoryBacked(run) {
 		return ""
 	}
 	return filepath.Join(run, "qbit-vault")

@@ -188,6 +188,23 @@ Restart your agent afterwards so it picks up the MCP server.
 
 Re-applies the host registration steps from the receipts in `state.json` (run it after upgrading qbit-vault, after `gentle-ai sync` or any host rewrote its config, or after moving the binary). `doctor` tells you when it is needed. It is not the multi-machine sync: that is `remote` (below).
 
+## Backup without a server
+
+A lost or broken machine takes the vault with it unless you keep a copy. The simplest copy needs no server, no account and no sync: one encrypted file.
+
+```bash
+qbit-vault export ~/vault-backup.qvx          # asks a new export passphrase twice (at least 12 characters)
+```
+
+Keep the file somewhere else (a USB stick, a cloud drive) and the passphrase in a different place, such as a password manager or paper: the file is a full copy, and anyone with both reads every secret. To restore on a new machine, install QBit Vault, then:
+
+```bash
+qbit-vault init                                       # an empty vault
+qbit-vault import --from-export ~/vault-backup.qvx    # asks the export passphrase
+```
+
+Every secret returns to its own layer with its metadata; project secrets return to the project with the same folder path (`qbit-vault relink OLD_ROOT NEW_ROOT` if the repository lives elsewhere now). Grants are not in the file: approve them again as you use each secret. Export again after you add or change secrets; the file is a snapshot of the day you made it. Format and limits: [STORAGE.md](STORAGE.md#export-file-format), [THREAT_MODEL.md](THREAT_MODEL.md) (L35, R16). To keep several machines in step instead, see the next section.
+
 ## Several machines (optional)
 
 `init` never contacts a server; sync is a separate, explicit step (`REMOTE_SYNC.md`).

@@ -560,8 +560,11 @@ func TestUnknownEvent(t *testing.T) {
 	if !ValidEvent(EventRemote) || EventRemote != "remote" {
 		t.Error("remote is not valid")
 	}
-	if len(events) != 18 {
-		t.Fatalf("%d events, want 18", len(events))
+	if !ValidEvent(EventExport) || EventExport != "export" {
+		t.Error("export is not valid")
+	}
+	if len(events) != 19 {
+		t.Fatalf("%d events, want 19", len(events))
 	}
 }
 

@@ -25,11 +25,12 @@ Available Commands:
   doctor      Read-only health report
   edit        Change a secret's metadata (never its value)
   exec        Run a command with granted secrets injected into that child only
+  export      Write an encrypted, portable copy of the whole vault to FILE
   grant       Allow a secret to be injected (asks you to confirm)
   grants      List active grants
   help        Help about any command
   hook        Host hooks: read an event on stdin, answer on stdout (host plumbing)
-  import      Import secrets from the environment or a dotenv file
+  import      Import secrets from the environment, a dotenv file or an export
   init        Create an empty vault and register the coding-agent hosts
   link        Bind a project layer synced from another device to this repository
   list        List secret names and metadata (never values)

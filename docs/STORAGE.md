@@ -187,7 +187,7 @@ One JSON object per line. Every record:
   "hash": "sha256:<hash of this line without the hash field>" }
 ```
 
-Events: `init`, `capture`, `grant`, `exec`, `manage`, `refusal`, `revoke`, `rm`, `mv`, `edit`, `relink`, `link`, `rekey`, `restore`, `uninstall`, `warning`, `prompt`, `remote`. An unknown event is refused when appending. `remote` records carry `detail` `registered`, `joined (pairing)`, `joined (recovery)`, `approved <device>`, `revoked <device>`, `recovery key rotated`, `conflict resolved`, `restored version N` or `logged out`, and never a code, a key or a server token; a sync round itself is not audited (it is not a user decision), except an applied conflict, which adds a `warning` (`detail: "sync conflict"`, names, layer).
+Events: `init`, `capture`, `grant`, `exec`, `manage`, `refusal`, `revoke`, `rm`, `mv`, `edit`, `relink`, `link`, `rekey`, `restore`, `uninstall`, `warning`, `prompt`, `remote`, `export`. An unknown event is refused when appending. `remote` records carry `detail` `registered`, `joined (pairing)`, `joined (recovery)`, `approved <device>`, `revoked <device>`, `recovery key rotated`, `conflict resolved`, `restored version N` or `logged out`, and never a code, a key or a server token; a sync round itself is not audited (it is not a user decision), except an applied conflict, which adds a `warning` (`detail: "sync conflict"`, names, layer).
 
 **Fields.** In this order: `ts` (RFC 3339, nanoseconds, UTC), `seq` (1-based), `prev`, `event`, `session`, then the optional `host` (`{name, version}`), `names`, `layer` (`global` or `project:<root>`), `by`, `reason`, `cwd`, `refusal` (the refusal type), `scope`, `expires_at`, `command`, `exit_code`, `duration_ms`, `redactions`, `outcome`, `detail`, and finally `hash`. Optional fields are omitted when empty. The API takes secret **names** only; a name that does not match the secret-name rule is dropped (never written raw) and the record gets `detail: "invalid name"`.
 
@@ -266,3 +266,20 @@ A missing or unreadable `base.enc` makes the next round merge with an empty base
 ## Retired keys
 
 `keys/retired.enc` (`format: "qbit-vault-retired/1"`, sealed with the current master key, written atomically like the other files) lists the master keys this vault used before, newest first: `{"keys":[{"generation":"local"|"<n>","key":"<base64>","retired_at":"…"}]}`, at most 20 entries (the oldest is dropped; backups are pruned to 20 saves by default, so an older key rarely opens anything). A file that cannot be opened is treated as empty: it only means no older key to try. `rekey`, a revocation and joining an account with a non-empty local vault add the key they replace, so `restore` can still open a backup made under an older key, and `audit --verify` can read anchors sealed under one. Entries are pruned with the backups that need them. A retired key is no weaker than the backups it opens: whoever holds the current key can already read them.
+
+## Export file format
+
+`qbit-vault export FILE` writes the offline backup: one file that restores the whole vault on any machine with `qbit-vault import --from-export FILE`, using only the file and the passphrase chosen at export time. It needs no server, no sync and no key from the machine it came from.
+
+```json
+{ "format": "qbit-vault-export/1", "cipher": "xchacha20poly1305", "created_at": "2026-11-06T12:00:00Z",
+  "kdf": { "alg": "argon2id", "salt": "<base64, 16 bytes>", "t": 3, "m_kib": 131072, "p": 4 },
+  "nonce": "<base64, 24 bytes>", "ct": "<base64 ciphertext>" }
+```
+
+- **Key.** Argon2id over the export passphrase and a random 16-byte salt, 32 bytes out. The parameters are written in the file: `t=3`, 128 MiB, `p=4`, twice the memory of the passphrase-mode `key.enc` (64 MiB), because this file leaves the machine and the passphrase is its only protection. A file whose parameters are out of bounds (`t` above 10, memory below 64 MiB or above 1 GiB, `p` above 16) is refused before Argon2 runs.
+- **Seal.** The payload is sealed with the AEAD of `internal/envelope` (XChaCha20-Poly1305, fresh random nonce). The additional data is the canonical JSON of `format`, `cipher`, `created_at` and `kdf` (salt included), in that order, so a changed byte anywhere in the header, the nonce or the ciphertext fails to open. A wrong passphrase, a changed byte, a truncated file and an unknown format are one outcome (`cannot open the export: wrong passphrase or damaged file`): the file does not tell which.
+- **Payload** (before sealing): `{"layers":[{"project":false,"records":[…]},{"project":true,"root":"<canonical root>","label":"<label>","records":[…]}]}` with one entry for the global layer and one per project layer, each record `{"name","value"(base64),"kind","description","sensitive","binaries","hosts","created_at","updated_at"}`. **Not included:** grants, prompt tokens and cooldowns, the audit log, backups, keychain material, remote and sync state, device keys, record ids and sync clocks (a restored record is a new record).
+- **Writing.** Temp file in the target's directory, owner-only (`internal/perm`), fsync, rename over the target, directory fsync; the temp file is removed on every failure. An existing target is refused unless `--force`. The file is read back bounded to 64 MiB.
+- **Restoring.** `import --from-export` merges: each record returns to its layer (a project layer by root path, created if absent), replaces a same-name record whole (new id, grants dropped) and leaves every other record and grant alone. One locked write, one snapshot. See `CLI.md`.
+- **Passphrase.** At least 12 characters, asked twice and read only through the prompt backend (never an argument, the environment, stdin or a file). It is not stored anywhere; lose it and the file is unreadable. The audit log records `export` with a count only.

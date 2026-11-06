@@ -49,12 +49,13 @@ const (
 	EventWarning   = "warning"
 	EventPrompt    = "prompt"
 	EventRemote    = "remote"
+	EventExport    = "export"
 )
 
 var events = []string{
 	EventInit, EventCapture, EventGrant, EventExec, EventManage, EventRefusal,
 	EventRevoke, EventRm, EventMv, EventEdit, EventRelink, EventLink, EventRekey,
-	EventRestore, EventUninstall, EventWarning, EventPrompt, EventRemote,
+	EventRestore, EventUninstall, EventWarning, EventPrompt, EventRemote, EventExport,
 }
 
 // ValidEvent reports whether e is a known event name.

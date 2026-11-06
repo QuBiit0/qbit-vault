@@ -69,24 +69,31 @@ func newImport(g *globals) *cobra.Command {
 		lf           layerFlags
 		fromEnv      string
 		fromFile     string
+		fromExport   string
 		names        []string
 		removeSource bool
 		yes          bool
 	)
 	cmd := &cobra.Command{
-		Use:   "import --from-env NAME[,NAME...] | --from-file PATH [--names A,B] [--global|--project] [--yes] [--remove-source]",
-		Short: "Import secrets from the environment or a dotenv file",
+		Use:   "import --from-env NAME[,NAME...] | --from-file PATH [--names A,B] [--global|--project] [--yes] [--remove-source] | --from-export FILE [--yes]",
+		Short: "Import secrets from the environment, a dotenv file or an export",
 		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			f := cmd.Flags()
-			envGiven, fileGiven := f.Changed("from-env"), f.Changed("from-file")
+			envGiven, fileGiven, exportGiven := f.Changed("from-env"), f.Changed("from-file"), f.Changed("from-export")
 			switch {
-			case envGiven == fileGiven:
-				return usageError{"choose --from-env or --from-file"}
+			case b2i(envGiven)+b2i(fileGiven)+b2i(exportGiven) != 1:
+				return usageError{"choose --from-env, --from-file or --from-export"}
 			case f.Changed("names") && !fileGiven:
 				return usageError{"--names needs --from-file"}
 			case removeSource && !fileGiven:
 				return usageError{"--remove-source needs --from-file"}
+			}
+			if exportGiven {
+				if lf.explicit() {
+					return usageError{"--global and --project do not apply to --from-export; every secret returns to its own layer"}
+				}
+				return importFromExport(g, cmd, fromExport, yes)
 			}
 			if err := lf.validate(); err != nil {
 				return err
@@ -190,10 +197,18 @@ func newImport(g *globals) *cobra.Command {
 	fl := cmd.Flags()
 	fl.StringVar(&fromEnv, "from-env", "", "comma-separated variable names to read from the current environment")
 	fl.StringVar(&fromFile, "from-file", "", "dotenv file to read")
+	fl.StringVar(&fromExport, "from-export", "", "export file written by 'qbit-vault export' (asks its passphrase)")
 	fl.StringSliceVar(&names, "names", nil, "with --from-file: import only these names")
 	fl.BoolVar(&removeSource, "remove-source", false, "with --from-file: delete the file after a successful import")
 	fl.BoolVar(&yes, "yes", false, "import without asking (for scripts)")
 	return cmd
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func plural(n int, one, many string) string {

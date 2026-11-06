@@ -231,7 +231,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newAudit(g))
 	root.AddCommand(newExec(g))
 	root.AddCommand(newPromptCmd(g))
-	root.AddCommand(newLock(g), newUnlock(g), newRestore(g), newRekey(g), newImport(g))
+	root.AddCommand(newLock(g), newUnlock(g), newRestore(g), newRekey(g), newImport(g), newExport(g))
 	root.AddCommand(newBrokerCmd(g), newMCPCmd(g), newHookCmd(g), newLink(g))
 	root.AddCommand(newRemote(g))
 	root.AddCommand(newTUI(g))

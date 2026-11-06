@@ -128,3 +128,47 @@ func Open(format string, key secret.Secret, data []byte) ([]byte, AAD, error) {
 	}
 	return pt, env.AAD, nil
 }
+
+// SealRaw is Seal for a file whose header is not an AAD: it encrypts
+// plaintext under key with a fresh random nonce, authenticating aad as given
+// (the export file binds its whole header this way). The caller keeps
+// ownership of plaintext.
+func SealRaw(key secret.Secret, aad, plaintext []byte) (nonce, ct []byte, err error) {
+	if err := CheckKey(key); err != nil {
+		return nil, nil, err
+	}
+	k := key.Reveal()
+	defer clear(k)
+	aead, err := chacha20poly1305.NewX(k)
+	if err != nil {
+		return nil, nil, errors.New("vault: cipher setup failed")
+	}
+	nonce = make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, nil, errors.New("vault: random source failed")
+	}
+	return nonce, aead.Seal(nil, nonce, plaintext, aad), nil
+}
+
+// OpenRaw verifies and decrypts what SealRaw sealed. Every failure to trust
+// the data (wrong key, changed aad, nonce or ciphertext) is ErrCorrupt. The
+// caller must wipe the returned plaintext.
+func OpenRaw(key secret.Secret, aad, nonce, ct []byte) ([]byte, error) {
+	if err := CheckKey(key); err != nil {
+		return nil, err
+	}
+	if len(nonce) != chacha20poly1305.NonceSizeX {
+		return nil, corrupt("bad nonce")
+	}
+	k := key.Reveal()
+	defer clear(k)
+	aead, err := chacha20poly1305.NewX(k)
+	if err != nil {
+		return nil, errors.New("vault: cipher setup failed")
+	}
+	pt, err := aead.Open(nil, nonce, ct, aad)
+	if err != nil {
+		return nil, corrupt("authentication failed")
+	}
+	return pt, nil
+}

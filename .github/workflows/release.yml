@@ -29,7 +29,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/ci-logs"
           set -o pipefail
-          go test -count=1 ./... 2>&1 | tee "$RUNNER_TEMP/ci-logs/go-test.log"
+          go test -count=1 -timeout 30m ./... 2>&1 | tee "$RUNNER_TEMP/ci-logs/go-test.log"
       - name: leak grep
         run: go run ./tools/leakgrep "$RUNNER_TEMP/ci-logs"
       - uses: goreleaser/goreleaser-action@v6

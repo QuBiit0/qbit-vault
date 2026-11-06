@@ -199,3 +199,37 @@ func FuzzEnvelope(f *testing.F) {
 		}
 	})
 }
+
+func TestSealRawOpenRaw(t *testing.T) {
+	key, aad := testKey(1), []byte(`{"format":"x/1"}`)
+	nonce, ct, err := SealRaw(key, aad, []byte(fixtureValue))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(ct, []byte(fixtureValue)) {
+		t.Fatal("ciphertext holds the plaintext")
+	}
+	pt, err := OpenRaw(key, aad, nonce, ct)
+	if err != nil || string(pt) != fixtureValue {
+		t.Fatalf("round trip: %v", err)
+	}
+	flipped := bytes.Clone(ct)
+	flipped[0] ^= 1
+	badNonce := bytes.Clone(nonce)
+	badNonce[0] ^= 1
+	for name, got := range map[string]error{
+		"wrong key":     func() error { _, e := OpenRaw(testKey(2), aad, nonce, ct); return e }(),
+		"changed aad":   func() error { _, e := OpenRaw(key, []byte(`{"format":"x/2"}`), nonce, ct); return e }(),
+		"changed nonce": func() error { _, e := OpenRaw(key, aad, badNonce, ct); return e }(),
+		"changed ct":    func() error { _, e := OpenRaw(key, aad, nonce, flipped); return e }(),
+		"short nonce":   func() error { _, e := OpenRaw(key, aad, nonce[:3], ct); return e }(),
+		"truncated ct":  func() error { _, e := OpenRaw(key, aad, nonce, ct[:len(ct)-1]); return e }(),
+	} {
+		if !errors.Is(got, ErrCorrupt) {
+			t.Errorf("%s: err=%v, want ErrCorrupt", name, got)
+		}
+	}
+	if _, _, err := SealRaw(secret.New("k", []byte("short")), aad, nil); err == nil {
+		t.Fatal("sealed with a short key")
+	}
+}

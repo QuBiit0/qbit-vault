@@ -69,7 +69,7 @@ func TestRequestGrantsAGlobalSecretForThisProject(t *testing.T) {
 	if code != exitcode.OK || m["grant"].(map[string]any)["scope"] != "project" {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
-	want := []string{"Once: only the next command", "Session: until the agent restarts (max 12h)", "Project: always in this project, until you revoke it", "Don't allow"}
+	want := []string{"Once: only the next command", twelveHours, "Project: always in this project, until you revoke it", "Don't allow"}
 	if strings.Join(f.Calls[0].Options, "|") != strings.Join(want, "|") || f.Calls[0].Default != 1 {
 		t.Fatalf("options=%q default=%d", f.Calls[0].Options, f.Calls[0].Default)
 	}

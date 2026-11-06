@@ -166,7 +166,7 @@ func TestSessionTTLBounds(t *testing.T) {
 			}
 		})
 	}
-	for _, sc := range []Scope{ScopeOnce, ScopeProject} {
+	for _, sc := range []Scope{ScopeOnce} {
 		req := Request{Name: "A_KEY", Layer: projLayer("shop"), Session: sessA, Scope: sc, TTL: time.Hour}
 		req.RecordID = testRec
 		if _, err := Add(&Store{}, req, t0); !errors.Is(err, ErrInvalidTTL) {
@@ -726,5 +726,25 @@ func TestProjectGrantOnAGlobalSecretIsBoundToItsRepository(t *testing.T) {
 	}
 	if _, err := Add(&Store{}, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec, ProjectRoot: shop, Sensitive: true}, t0); !errors.Is(err, ErrScopeNotAllowed) {
 		t.Fatalf("sensitive: err = %v", err)
+	}
+}
+
+// A project grant can expire: "12 hours in this project" survives new agent
+// sessions in the repository like any project grant, then ends.
+func TestProjectGrantWithATTLExpires(t *testing.T) {
+	const shop = "/work/shop"
+	s := &Store{}
+	g := mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec, ProjectRoot: shop, TTL: 12 * time.Hour}, t0)
+	if g.ExpiresAt == nil || !g.ExpiresAt.Equal(t0.Add(12*time.Hour)) || g.Session != "" {
+		t.Fatalf("grant = %+v", g)
+	}
+	if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, false, "mcp:new-session", shop, t0.Add(11*time.Hour)); !d.Allowed {
+		t.Fatalf("within 12h: %+v", d)
+	}
+	if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, false, "mcp:new-session", shop, t0.Add(12*time.Hour)); d.Allowed {
+		t.Fatal("still allowed after 12h")
+	}
+	if _, err := Add(&Store{}, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec, ProjectRoot: shop, TTL: 48 * time.Hour}, t0); !errors.Is(err, ErrInvalidTTL) {
+		t.Fatalf("ttl over the max: err = %v", err)
 	}
 }

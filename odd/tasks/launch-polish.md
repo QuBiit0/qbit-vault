@@ -152,7 +152,7 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | --- | --- | --- | --- | --- |
 | LP0 | S1, S2 | audits (5 explorers) + visual check | (this document) | done |
 | LP1 | S4 | worker | | done, awaiting review |
-| LP2 | S5 | worker | | in progress |
+| LP2 | S5 | worker + parent correction | ab worker commit + 00799f7 (kdialog) | done, beta.11 |
 | LP3-LP7 | S1-S3 | plan steps 3-7 | | pending |
 
 ## Log
@@ -161,3 +161,4 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L2. Owner chose installers from each release (S3) and asked to continue the plan (S4). Step 1 started on branch fix/server-hardening.
 - L3. Step 1 merged (PR #22); live server healthy after redeploy. QBV_SERVER_TRUST_PROXY kept at 1 behind Cloudflare + Traefik (Traefik rewrites the header unless it trusts Cloudflare). Step 2 started on branch fix/visible-bugs.
 - L3. LP2 (S5.1-S5.7) done by worker, not committed. RED first for each rule, then GREEN. S5.1 `splitShown` + `psShowText` (code alone in the box, height from `TextRenderer.MeasureText`; screenshot of the real builder at 1440-style render shows the whole key). S5.2 zenity `--default-cancel`, kdialog labels swapped (`Decline` on yes) and `classify` reads confirmations swapped. S5.3 `init` no longer prints or carries the Pi install command (constant kept); docs say the extension is unpublished. S5.4 SECURITY.md. S5.5 `CheckRedirect: http.ErrUseLastResponse` and a 3xx maps to `ErrUnreachable`. S5.6 `remote approve` shows the code right after the server accepts; roster and sync failures are warnings (new `warnApproveSync`). Left for the owner: `e2e/hosts/scenario.sh:99` still expects the old install line (outside this task's edit surface); `docs/GENTLE_SHELL_EXTENSION.md:5`, `docs/ROADMAP.md:76`, `docs/TESTING.md:43` still mention the printed line.
+- L4. Step 2 review: a CRITICAL finding (the kdialog label swap made Escape/close confirm) was corrected in 00799f7: kdialog confirmations are a list with Decline preselected. Review approved after targeted validation. Released as 0.1.0-beta.11.

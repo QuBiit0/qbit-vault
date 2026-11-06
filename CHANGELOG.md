@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.11] - 2026-11-06
+
 ### Fixed
 
 - Server hardening (`qbit-vault-server`; the client is unchanged):

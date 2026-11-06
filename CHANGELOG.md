@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Changed
+
+- `init` on a machine without an OS keychain (WSL, a headless Linux box) asks for a passphrase instead of failing with `vault is locked`, and says why; with no terminal to ask it names `--passphrase --passphrase-stdin`.
+
 ## [0.1.0-beta.3] - 2026-11-05
 
 ### Added

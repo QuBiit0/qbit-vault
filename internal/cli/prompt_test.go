@@ -144,7 +144,7 @@ func TestSetInteractiveRefusalsLeaveVaultUnchanged(t *testing.T) {
 		{"invalid name never prompts", false, nil, []string{"set", "TESTSECRET_x"}, exitcode.Refusal, "error: invalid secret name\n", 0},
 		{"token without stdin", false, nil, []string{"set", "A_KEY", "--grant", "once", "--from-prompt-token", "t"}, exitcode.Usage, usageErr("--from-prompt-token needs --stdin"), 0},
 		{"grant without session never prompts", false, nil, []string{"set", "A_KEY", "--grant", "once"}, exitcode.Usage, usageErr("--session is required for the once and session scopes"), 0},
-		{"project grant on a global value never prompts", false, nil, []string{"set", "A_KEY", "--session", sessA, "--grant", "project"}, exitcode.Refusal, "error: project scope needs a project secret\n", 0},
+		{"project grant on a global value never prompts", false, nil, []string{"set", "A_KEY", "--session", sessA, "--grant", "project"}, exitcode.Refusal, "error: project scope needs a repository: run it inside one\n", 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -892,7 +892,7 @@ func TestPromptPreselectsSession(t *testing.T) {
 	if code, out, errs := w.run("", "--session", sessA, "prompt", "--name", "A_KEY", "--reason", "run the release"); code != exitcode.OK {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if q := f.Calls[0]; q.Default != 1 || !strings.HasPrefix(q.Options[1], "Session: this agent session, for 12h") {
+	if q := f.Calls[0]; q.Default != 1 || !strings.HasPrefix(q.Options[1], "Session: until the agent restarts (max 12h)") {
 		t.Fatalf("question = %+v", q)
 	}
 }

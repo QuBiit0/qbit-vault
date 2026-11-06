@@ -57,7 +57,7 @@ var (
 	ErrInvalidTTL      = errors.New("invalid_ttl")
 	// ErrNeedsProject is a scope_not_allowed refusal with its own message:
 	// project scope on a global record has no project to bind to.
-	ErrNeedsProject = fmt.Errorf("%w: project scope needs a project secret", ErrScopeNotAllowed)
+	ErrNeedsProject = fmt.Errorf("%w: project scope needs a repository: run it inside one", ErrScopeNotAllowed)
 )
 
 // ProjectLayer is the layer text of the project record rooted at root.
@@ -129,6 +129,10 @@ type Request struct {
 	TTL             time.Duration // session scope only; 0 means DefaultSessionTTL
 	Sensitive       bool          // the record's flag; sensitive records accept once only
 	PromptTokenHash string
+	// ProjectRoot is the repository a project grant of a global record is
+	// bound to (the canonical root of the cwd it was approved in). A project
+	// record's grant takes its root from Layer and ignores this.
+	ProjectRoot string
 }
 
 // Validate applies the scope rules (R-GRANT-02) without touching a store.
@@ -148,7 +152,7 @@ func Validate(req Request) error {
 	if req.Sensitive && req.Scope != ScopeOnce {
 		return ErrScopeNotAllowed
 	}
-	if req.Scope == ScopeProject && !isProject {
+	if req.Scope == ScopeProject && !isProject && req.ProjectRoot == "" {
 		return ErrNeedsProject
 	}
 	if req.Scope != ScopeProject && req.Session == "" {
@@ -190,11 +194,14 @@ func Add(s *Store, req Request, now time.Time) (Grant, error) {
 		g.Session = req.Session
 		g.ExpiresAt = at(now.Add(ttl))
 	case ScopeProject:
-		g.ProjectRoot, _ = ProjectRootOf(req.Layer)
+		var isProject bool
+		if g.ProjectRoot, isProject = ProjectRootOf(req.Layer); !isProject {
+			g.ProjectRoot = req.ProjectRoot
+		}
 	}
 	kept := s.Grants[:0]
 	for _, old := range s.Grants {
-		if old.Name == g.Name && old.Layer == g.Layer && old.RecordID == g.RecordID && old.Session == g.Session && old.Scope == g.Scope {
+		if old.Name == g.Name && old.Layer == g.Layer && old.RecordID == g.RecordID && old.Session == g.Session && old.Scope == g.Scope && old.ProjectRoot == g.ProjectRoot {
 			continue
 		}
 		kept = append(kept, old)
@@ -291,7 +298,12 @@ func Check(s *Store, name, layer, recordID string, sensitive bool, session, cwd 
 				return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, mutated
 			}
 		case ScopeProject:
-			if g.ProjectRoot != "" && inside(g.ProjectRoot, cwd) {
+			// A project record's grant covers its repository and below; a
+			// global record's grant only the exact repository it was approved
+			// in (cwd is the repository root when there is one), so a nested
+			// repository does not inherit it.
+			_, projectRecord := ProjectRootOf(layer)
+			if g.ProjectRoot != "" && (projectRecord && inside(g.ProjectRoot, cwd) || !projectRecord && g.ProjectRoot == cwd) {
 				return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, mutated
 			}
 		}

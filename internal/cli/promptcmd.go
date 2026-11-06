@@ -215,6 +215,12 @@ func newPromptCmd(g *globals) *cobra.Command {
 			}
 
 			allowed := g.allowedScopes(name, layerChoice, sensitive, want)
+			if !layerChoice.Project {
+				// The token is redeemed by another call, maybe with another cwd:
+				// a project grant of a global secret is offered only where the
+				// decision and the grant happen in one step.
+				allowed = slices.DeleteFunc(allowed, func(s grants.Scope) bool { return s == grants.ScopeProject })
+			}
 			if len(allowed) == 0 {
 				outcome = ""
 				return g.noScopeError(name, layerChoice, sensitive, want)

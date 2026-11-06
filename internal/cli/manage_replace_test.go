@@ -27,7 +27,7 @@ func TestManageReplaceGrantsInTheSameDecision(t *testing.T) {
 	if q.Q != "The agent proposes to replace the value of A (all projects). Why: "+manageReason || q.Default != 1 {
 		t.Fatalf("question = %q default %d", q.Q, q.Default)
 	}
-	want := []string{"Replace, then Once: only the next command", "Replace, then Session: this agent session, for 12h", "Replace only: ask me again before it is used", "Don't replace"}
+	want := []string{"Replace, then Once: only the next command", "Replace, then Session: until the agent restarts (max 12h)", "Replace only: ask me again before it is used", "Don't replace"}
 	if strings.Join(q.Options, "|") != strings.Join(want, "|") {
 		t.Fatalf("options = %q", q.Options)
 	}

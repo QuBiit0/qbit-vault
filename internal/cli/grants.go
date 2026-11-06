@@ -110,7 +110,7 @@ func (g *globals) recordStrict(r audit.Record) error {
 func grantErr(err error, name string) error {
 	switch {
 	case errors.Is(err, grants.ErrNeedsProject):
-		return refusal.New(refusal.ScopeNotAllowed, name).WithMessage("project scope needs a project secret")
+		return refusal.New(refusal.ScopeNotAllowed, name).WithMessage("project scope needs a repository: run it inside one")
 	case errors.Is(err, grants.ErrScopeNotAllowed):
 		return refusal.New(refusal.ScopeNotAllowed, name)
 	case errors.Is(err, grants.ErrBadToken):
@@ -353,8 +353,13 @@ func newGrant(g *globals) *cobra.Command {
 			}
 			e.Record.Value.Wipe()
 			req := grants.Request{Name: name, Layer: e.Layer.Key(), RecordID: e.Record.ID, Scope: scope, TTL: ttl, Sensitive: e.Record.Sensitive}
+			fromToken := cmd.Flags().Changed("from-prompt-token")
 			if scope != grants.ScopeProject {
 				req.Session = g.Session
+			} else if !e.Layer.Project && !fromToken {
+				// Confirmed right here, in this repository: bind the grant to it.
+				// A token from another call never binds a global secret.
+				req.ProjectRoot = g.repoRoot()
 			}
 			if err := grants.Validate(req); err != nil {
 				return grantErr(err, name)

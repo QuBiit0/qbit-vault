@@ -303,7 +303,7 @@ func TestRequestPreselectsSessionScope(t *testing.T) {
 			t.Fatalf("%q: code=%d m=%v", extra, code, m)
 		}
 		c := f.Calls[1]
-		if c.Default != 1 || !strings.HasPrefix(c.Options[1], "Session: this agent session, for 12h") ||
+		if c.Default != 1 || !strings.HasPrefix(c.Options[1], "Session: until the agent restarts (max 12h)") ||
 			!strings.HasPrefix(c.Options[0], "Once:") || len(c.Options) != 3 || c.Options[2] != "Don't allow" {
 			t.Fatalf("%q: default=%d options=%v", extra, c.Default, c.Options)
 		}

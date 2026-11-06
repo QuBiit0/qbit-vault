@@ -273,7 +273,7 @@ func TestProjectScopeOnGlobalHasItsOwnMessage(t *testing.T) {
 	w := newWorld(t)
 	w.mustRun(fxVal, "set", "PLAIN_KEY", "--global", "--stdin")
 	before := w.grantsState()
-	const msg = "project scope needs a project secret"
+	const msg = "project scope needs a repository: run it inside one"
 	code, out, errs := w.run("y\n", "grant", "PLAIN_KEY", "--scope", "project")
 	if code != exitcode.Refusal || out != "" || errs != "error: "+msg+"\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)

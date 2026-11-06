@@ -61,7 +61,7 @@ You type the value in a masked prompt: it is not echoed and not kept in your she
 Ask for something ordinary: *"create a GitHub release for v1.2"*, *"run the migrations against the database"*.
 
 1. The agent sees it needs a credential and asks QBit Vault for it **by name**.
-2. A **native dialog** (outside the chat) asks you to approve it: once, for this session, or always in this project. A secret that does not exist yet is typed right there.
+2. A **native dialog** (outside the chat) asks you to approve it: once, or always in this project (inside a git repository). A secret that does not exist yet is typed right there.
 3. The command runs with the value injected into **that one process**, and the output comes back **redacted**: wherever the value appears, the agent sees `[REDACTED:GITHUB_TOKEN]`.
 
 The agent never sees the value: not in the chat, not in the transcript, not on the provider's servers.
@@ -99,7 +99,7 @@ The usual ways to give an agent a credential all leak it: the value sits in the 
 | The agent | You | QBit Vault |
 | --- | --- | --- |
 | Asks for `GITHUB_TOKEN` with a reason | Type the value in a native dialog, never in the chat | Stores it encrypted, key in the OS keychain |
-| Runs a command that needs it | Pick the grant (once, session or project) | Injects it into one child process and redacts the output |
+| Runs a command that needs it | Pick the grant (once, or always in this project) | Injects it into one child process and redacts the output |
 | Sees names and redacted results | | Never returns the value |
 
 ## How it works
@@ -235,7 +235,7 @@ Reference: [docs/CLI.md](docs/CLI.md).
 
 ## Status and roadmap
 
-**Built and tested** ([docs/ROADMAP.md](docs/ROADMAP.md)): encrypted vault with global and project layers, grants, hash-chained audit log, redaction, `exec`, native prompts (Windows, macOS, Linux, terminal), the contract broker and MCP server, the agent skill, registration for Claude Code, Codex and Pi, one-line install and in-place upgrade, remote sync with `qbit-vault-server`, and the interactive TUI ([docs/CLI.md](docs/CLI.md#tui)).
+**Built and tested** ([docs/ROADMAP.md](docs/ROADMAP.md)): encrypted vault with global and project layers, grants, hash-chained audit log, redaction, `exec`, native prompts (Windows, macOS, Linux, terminal), the contract broker and MCP server, the agent skill, registration for Claude Code, Codex and Pi, one-line install and in-place upgrade, remote sync with `qbit-vault-server`, the offline backup (`export` / `import --from-export`), and the interactive TUI ([docs/CLI.md](docs/CLI.md#tui)).
 
 **Planned, not built yet**, do not rely on these:
 

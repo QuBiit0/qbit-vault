@@ -1,6 +1,6 @@
 # Install: one command, then `qbit-vault init`
 
-QBit Vault is a pre-release (`v0.1.0-beta.2` is the first published release; the `v0.1.0-beta.1` tag has no release). Each `v*` tag publishes a GitHub release with archives for Linux, macOS and Windows (amd64 and arm64), a `checksums.txt` and a build-provenance attestation (`.github/workflows/release.yml`, `.goreleaser.yaml`). There is no npm package and no Homebrew formula yet (Phase 5, `ROADMAP.md`).
+QBit Vault is a public beta. Published releases run from `v0.1.0-beta.2` to the newest one listed in `CHANGELOG.md`, and the installers pick the newest (the `v0.1.0-beta.1` tag has no release, on purpose). Each `v*` tag publishes a GitHub release with archives for Linux, macOS and Windows (amd64 and arm64), a `checksums.txt` and a build-provenance attestation (`.github/workflows/release.yml`, `.goreleaser.yaml`). There is no npm package and no Homebrew formula yet (Phase 5, `ROADMAP.md`).
 
 ## Quick path
 

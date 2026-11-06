@@ -33,7 +33,7 @@ Every secret lives in one **layer**: `global`, or `project` (the repository that
 
 Request, one secret:
 ```json
-{ "op": "request", "name": "GITHUB_TOKEN", "reason": "gh release create v1.2.0", "suggested_scope": "session", "suggested_layer": "global" }
+{ "op": "request", "name": "GITHUB_TOKEN", "reason": "gh release create v1.2.0", "suggested_scope": "once", "suggested_layer": "global" }
 ```
 
 Request, several fields in one prompt:
@@ -42,7 +42,7 @@ Request, several fields in one prompt:
   "fields": [ { "name": "DB_HOST", "kind": "text", "label": "Host" },
               { "name": "DB_USER", "kind": "text", "label": "User" },
               { "name": "DB_PASSWORD", "label": "Password", "description": "staging db password" } ],
-  "suggested_scope": "session", "suggested_layer": "project" }
+  "suggested_scope": "once", "suggested_layer": "project" }
 ```
 
 | Field | Req | Rules |

@@ -4,17 +4,17 @@ Version 0.1. Requirement IDs are stable; reference them from issues, PRs and tes
 
 ## 0. Implementation status
 
-Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants, audit, redaction, `exec`, the native prompts, the contract broker and MCP server (§§ 5.1–5.6, 5.8), the sync client and server (§ 5.10, `REMOTE_SYNC.md`), and host registration for **Claude Code, Codex and Pi / Gentle Shell** (§ 5.7, 5.9). Not built:
+Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants, audit, redaction, `exec`, the native prompts, the contract broker and MCP server (§§ 5.1–5.6, 5.8), the sync client and server (§ 5.10, `REMOTE_SYNC.md`), the offline backup (`export` / `import --from-export`, `INSTALL.md` § Backup without a server), and host registration for **Claude Code, Codex and Pi / Gentle Shell** (§ 5.7, 5.9). Not built:
 
 - the Pi extension `qbit-vault-pi` (Phase 4): R-HOST-01, the Pi parts of R-CAP-01 and R-CAP-06, R-RED-04 and R-EXEC-02 on Pi; `set --stdin --fields` and `prompt --field` (R-CAP-08 is met by the broker for MCP hosts);
 - the Claude Code `PreToolUse` rewrite of secret references into `exec` (R-EXEC-02) and its `grant_required` / `dump_command` denials; today `pre-bash` only keeps user-only commands out of the agent's shell;
-- the npm launcher, signed releases, `install.sh`/Homebrew and `qbit-vault update` (Phase 5): R-INS-01 as worded, R-INS-02, R-NFR-03, the binary-signature part of R-INS-07;
+- the npm launcher, signed releases, Homebrew and `qbit-vault update` (Phase 5): R-INS-01 as worded, R-INS-02, R-NFR-03, the binary-signature part of R-INS-07;
 - OpenCode (R-HOST-04): dropped by a recorded decision (`odd/tasks/hosts.md` S8);
 - self-update, in the TUI or as `qbit-vault update` (Phase 5): the TUI's Update section is a static *planned* screen.
 
 Also built, outside the numbered requirements of this document: the interactive TUI (`qbit-vault tui`, and `qbit-vault` with no arguments on a terminal; `CLI.md` § TUI, `ROADMAP.md`). It is a front end over the existing commands and keeps their invariants (no value shown, values typed only in the prompt backend, grants revoke-only). Not exercised: its suspend and resume around the masked prompt on a real terminal.
 
-Pre-release from `v0.1.0-beta.2`. Install with the `install.sh` / `install.ps1` one-liners (release archive, SHA-256 verified), `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest`, or from source (`INSTALL.md`).
+Public beta: published releases run from `v0.1.0-beta.2`, the newest is listed in `CHANGELOG.md`. Install with the `install.sh` / `install.ps1` one-liners (release archive, SHA-256 verified), `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest`, or from source (`INSTALL.md`).
 
 ## 1. Problem statement
 
@@ -104,7 +104,7 @@ Agent harnesses can already block the *reading* of credential files through deny
 ### 5.3 Grants
 
 - R-GRANT-01. A grant binds (secret name, layer, session id, scope, expiry). A grant for the global `NAME` does not cover a project `NAME`, and the reverse. No exec may inject a secret without an active grant.
-- R-GRANT-02. Scopes: `once` (this exec only), `session` (this host session, default TTL 12 h, configurable; preselected in the approval dialog whenever the record allows it, unless the user named another scope on their own command line), `project` (this repository root until revoked; survives sessions; for a global secret, the repository the user approved it in). A `session` grant ends when the agent restarts, since a restarted MCP server is a new session, so the agent's permission questions (`request` and `manage` replace) do not offer it: they offer `Once: only the next command` (preselected), `Always: in this project, until you revoke it` (inside a repository, for a record that allows it) and `Don't allow`. A global secret approved "always" is approved for that one repository; another repository asks once. `session` stays available to the user's own `grant` and `set --grant`, and to the `prompt` command, whose caller lists the scopes it offers (`--scopes`). Secrets flagged `sensitive` MUST only accept `once`.
+- R-GRANT-02. Scopes: `once` (this exec only), `session` (this host session, default TTL 12 h, configurable; preselected in the `prompt` command's scope menu when that command offers it, unless the user named another scope on their own command line), `project` (this repository root until revoked; survives sessions; for a global secret, the repository the user approved it in). A `session` grant ends when the agent restarts, since a restarted MCP server is a new session, so the agent's permission questions (`request` and `manage` replace) do not offer it: they offer `Once: only the next command` (preselected), `Always: in this project, until you revoke it` (inside a repository, for a record that allows it) and `Don't allow`. A global secret approved "always" is approved for that one repository; another repository asks once. `session` stays available to the user's own `grant` and `set --grant`, and to the `prompt` command, whose caller lists the scopes it offers (`--scopes`). Secrets flagged `sensitive` MUST only accept `once`.
 - R-GRANT-03. A grant MUST be created only from an explicit user confirmation delivered through the host UI or the native prompt. The MCP tool surface MUST NOT be able to create a grant on its own.
 - R-GRANT-04. Grants MUST be persisted (metadata only, no values), encrypted with the master key, at `$QBIT_VAULT_HOME/grants.enc` so that a host restart does not silently widen or narrow access.
 - R-GRANT-05. Subagents MUST NOT inherit grants. A subagent is a different session id and must obtain its own.

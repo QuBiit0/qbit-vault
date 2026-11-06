@@ -19,7 +19,7 @@ Branch `chore/public-launch`.
 | P1 | S1, S2 | inline | contract ID rename (code, schema, tests, docs), Gentle AI framing out of PRD/ARCHITECTURE/ROADMAP/TESTING, stale worktrees pruned, rename R3 closed | 867a706 | done |
 | P2 | S3, S4 | inline | GoReleaser config, release workflow on `v*` tags (checksums, build provenance), version via ldflags and build info | 84c0c63 | done |
 | P3 | S3, S6 | inline | `scripts/install.sh`, `scripts/install.ps1` with SHA-256 verification, in-place upgrade and re-sync; tests; README and INSTALL updated | f0671d9, 15509a0 | done |
-| P4 | S1 | inline | full suite, PR, then the user's decisions: make the repo public, tag v0.1.0-beta.1 | | pending |
+| P4 | S1 | inline | full suite, PR, then the user's decisions: make the repo public, tag v0.1.0-beta.1 | | done (repo public; beta.1 tag kept without a release by design; releases from beta.2) |
 
 ## Log
 

@@ -156,7 +156,7 @@ Agent harnesses can already block the *reading* of credential files through deny
 
 ### 5.9 Install, sync, doctor, uninstall
 
-- R-INS-01. `qbit-vault init` MUST complete the whole setup (R-INS-03..06) with no further input on a machine with a working keychain. Where no keychain exists, `init` fails until the user passes `--passphrase` (two prompts, or `--passphrase-stdin`); there is no automatic fallback. The `npx qbit-vault@latest init` form is Phase 5; today the binary comes from `go install`.
+- R-INS-01. `qbit-vault init` MUST complete the whole setup (R-INS-03..06) with no further input on a machine with a working keychain. Where no keychain exists, `init` falls back to the passphrase mode of R-VAULT-02 (two prompts) and says so; with no way to prompt it fails naming `--passphrase --passphrase-stdin`. The `npx qbit-vault@latest init` form is Phase 5; today the binary comes from `go install`.
 - R-INS-02. *Status: Phase 5, not built (no `packages/`).* The npm launcher MUST have no `postinstall`. Platform binaries MUST ship as `optionalDependencies` (`@qbit-vault/cli-darwin-arm64`, etc.) and be verified against a checksum embedded in the launcher before first run.
 - R-INS-03. `init` MUST detect installed agents by their config directories and register only those present, unless `--agents` is given.
 - R-INS-04. Every config file `init` touches MUST be snapshotted first to `$QBIT_VAULT_HOME/backups/<timestamp>/<path>` and written atomically with a merge that preserves unrelated keys.

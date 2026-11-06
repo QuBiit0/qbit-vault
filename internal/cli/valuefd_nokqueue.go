@@ -1,8 +1,7 @@
-//go:build !windows && !darwin && !freebsd && !netbsd && !openbsd && !dragonfly
+//go:build !windows && !linux && !darwin && !freebsd && !netbsd && !openbsd && !dragonfly
 
 package cli
 
-// isEventPoller is false where the runtime's poller is not a kqueue: on Linux
-// it is an epoll, whose fstat reports no file type, so valueFDKindOK already
-// refuses it.
+// isEventPoller is false on the remaining Unix systems, whose runtime poller
+// is neither an epoll (valuefd_epoll.go) nor a kqueue (valuefd_kqueue.go).
 func isEventPoller(int) bool { return false }

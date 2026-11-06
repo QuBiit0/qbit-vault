@@ -2,10 +2,16 @@
 
 package cli
 
-import "syscall"
+import (
+	"syscall"
+
+	"golang.org/x/term"
+)
 
 // valueFDKindOK reports whether fd is something a host can hand a child for
-// `prompt --value`: a pipe, a socket, a regular file or a terminal. It checks
+// `prompt --value`: a pipe, a socket, a regular file or a character device
+// that is not a terminal (/dev/null). A terminal is refused: the value would
+// land on the user's screen and in its scrollback. It checks
 // with fstat, without wrapping fd in an *os.File, so a descriptor that is not
 // ours (a directory, a closed number, the Go runtime's own epoll or kqueue,
 // which takes fd 3 when the parent passed nothing there) is never closed by a
@@ -16,7 +22,9 @@ func valueFDKindOK(fd int) bool {
 		return false
 	}
 	switch st.Mode & syscall.S_IFMT {
-	case syscall.S_IFIFO, syscall.S_IFSOCK, syscall.S_IFREG, syscall.S_IFCHR:
+	case syscall.S_IFCHR:
+		return !term.IsTerminal(fd) && !isEventPoller(fd)
+	case syscall.S_IFIFO, syscall.S_IFSOCK, syscall.S_IFREG:
 		// fstat alone cannot tell a kqueue apart on macOS: it reports a
 		// file type a pipe also has. isEventPoller asks the kernel.
 		return !isEventPoller(fd)

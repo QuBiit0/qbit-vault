@@ -18,6 +18,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/hosts"
 	"github.com/QuBiit0/qbit-vault/internal/hosts/pi"
 	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
 	"github.com/QuBiit0/qbit-vault/internal/refusal"
 	"github.com/QuBiit0/qbit-vault/internal/secret"
 	"github.com/QuBiit0/qbit-vault/internal/vault"
@@ -116,6 +117,9 @@ func newInit(g *globals) *cobra.Command {
 				}
 				body.Initialized, body.Keychain = true, string(mode)
 				line = fmt.Sprintf("vault initialized at %s (keychain: %s)", home, mode)
+				if mode == keychain.ModePassphrase && !passphrase {
+					line += "\nno OS keychain found (WSL or a headless Linux?): the master key is protected by the passphrase you just set; 'qbit-vault unlock' opens it"
+				}
 			}
 
 			results := hosts.Apply(g.hostEnv(), selected)
@@ -220,8 +224,10 @@ func (g *globals) createVault(cmd *cobra.Command, passphrase, passphraseStdin bo
 		}
 		defer clear(pass)
 		opts.Passphrase = func(bool) (secret.Secret, error) { return secret.New("passphrase", pass), nil }
-	case passphrase:
-		// Asked twice on the controlling terminal, never from stdin.
+	default:
+		// Asked twice through the prompt backend, never from stdin. Without
+		// --passphrase it is only asked when no OS keychain is reachable (WSL,
+		// a headless Linux box), so init does not fail there.
 		opts.Passphrase = g.askPassphrase
 	}
 
@@ -230,6 +236,9 @@ func (g *globals) createVault(cmd *cobra.Command, passphrase, passphraseStdin bo
 	if err != nil {
 		if errors.Is(err, keychain.ErrKeyExists) {
 			return "", errors.New("a key already exists for this vault location")
+		}
+		if !passphrase && (errors.Is(err, prompt.ErrUnavailable) || errors.Is(err, keychain.ErrUnavailable)) {
+			return "", usageError{"no OS keychain found and no terminal to ask for a passphrase; run 'qbit-vault init --passphrase --passphrase-stdin'"}
 		}
 		return "", promptFail(err, "use --passphrase-stdin")
 	}

@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.7] - 2026-11-06
+
 ### Changed
 
 - Permission dialogs inside a repository: the session answer becomes `12 hours: in this project, even if the agent restarts`. A session ended whenever the agent restarted (a restarted MCP server is a new session), so the same question came back; the new answer is a project grant that ends after 12 h. Outside a repository the session answer stays. The `prompt` command and `set --grant` are unchanged.

@@ -1,6 +1,6 @@
 name: Feature request
 description: Propose a new capability or a change.
-labels: [enhancement]
+labels: [enhancement, needs-triage]
 body:
   - type: textarea
     id: problem

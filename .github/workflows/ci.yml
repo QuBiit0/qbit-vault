@@ -26,6 +26,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: agent skill copies match
+        if: matrix.os == 'ubuntu-latest'
+        # One review skill for every agent: Codex and Pi read .agents/skills,
+        # Claude Code reads .claude/skills.
+        run: cmp .agents/skills/contribution-review/SKILL.md .claude/skills/contribution-review/SKILL.md
       - name: gofmt
         if: matrix.os == 'ubuntu-latest'
         run: |

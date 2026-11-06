@@ -67,6 +67,8 @@ qbit-vault/                     (module github.com/QuBiit0/qbit-vault)
 ├── design/                     identity and TUI artboards (HTML), system.md (tokens), system.html
 ├── assets/brand/               banner, mark and icon SVGs, terminal marks (.ans), term-mark.py
 ├── tools/leakgrep/             CI leak grep over captured test output
+├── .agents/skills/contribution-review/   how an agent reviews a PR or triages issues for the
+│                               maintainer (copy in .claude/skills/, CI keeps them equal)
 ├── odd/tasks/                  work logs (what was built, decisions, commits)
 ├── .github/workflows/ci.yml    gofmt, vet, build, test on Linux/macOS/Windows, plus a latest-stable-Go job; leak grep
 ├── packages/qbit-vault-pi/     planned (Phase 4): TypeScript Pi / Gentle Shell extension

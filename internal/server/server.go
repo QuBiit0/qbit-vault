@@ -18,6 +18,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"regexp"
 	"strconv"
@@ -32,11 +33,15 @@ const (
 	// API is the major version every response carries.
 	API = 1
 	// MaxBlob bounds one sealed vault version.
-	MaxBlob    = 8 << 20
-	maxBody    = 9 << 20
-	tokenTTL   = 15 * time.Minute
-	nonceTTL   = 60 * time.Second
-	maxDevices = 20
+	MaxBlob = 8 << 20
+	// maxBody caps the three routes that carry a sealed vault; every other
+	// route is small (maxSmallBody).
+	maxBody      = 9 << 20
+	maxSmallBody = 64 << 10
+	tokenTTL     = 15 * time.Minute
+	nonceTTL     = 60 * time.Second
+	maxDevices   = 20
+	sweepEvery   = time.Minute
 )
 
 var (
@@ -50,7 +55,7 @@ type Config struct {
 	PublicURL  string           // the origin clients sign (auth binds it)
 	Now        func() time.Time // clock; time.Now when nil
 	Log        io.Writer        // request log; discarded when nil
-	TrustProxy bool             // take the client IP from X-Forwarded-For
+	TrustProxy int              // trusted proxies in front: the client IP is the Nth X-Forwarded-For entry from the right
 	Version    string
 }
 
@@ -60,11 +65,14 @@ type Server struct {
 	st    *store
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
+	// inviteMu makes claiming an invite exclusive.
+	inviteMu sync.Mutex
 
-	nonces map[string]nonceRec
-	tokens map[string]tokenRec
+	nonces    map[string]nonceRec
+	tokens    map[string]tokenRec
+	lastSweep time.Time
 
-	authLimit, pairLimit, recoveryLimit, recoveryDaily *limiter
+	authLimit, pairLimit, recoveryLimit, recoveryDaily, accountLimit *limiter
 }
 
 type nonceRec struct {
@@ -95,7 +103,8 @@ func New(cfg Config) (*Server, error) {
 	return &Server{cfg: cfg, st: &store{dir: cfg.Data}, locks: map[string]*sync.Mutex{},
 		nonces: map[string]nonceRec{}, tokens: map[string]tokenRec{},
 		authLimit: newLimiter(30, time.Minute), pairLimit: newLimiter(5, time.Minute),
-		recoveryLimit: newLimiter(5, time.Minute), recoveryDaily: newLimiter(20, 24*time.Hour)}, nil
+		recoveryLimit: newLimiter(5, time.Minute), recoveryDaily: newLimiter(20, 24*time.Hour),
+		accountLimit: newLimiter(10, time.Hour)}, nil
 }
 
 // AuthMessage is what a device signs to get a token (remote.AuthMessage).
@@ -159,7 +168,8 @@ func (s *Server) logged(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := s.cfg.Now()
 		sw := &statusWriter{ResponseWriter: w, code: 200}
-		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+		r.Body = http.MaxBytesReader(w, r.Body, bodyCap(r))
+		s.sweep(start)
 		h.ServeHTTP(sw, r)
 		pattern := r.Pattern
 		if pattern == "" {
@@ -167,6 +177,41 @@ func (s *Server) logged(h http.Handler) http.Handler {
 		}
 		fmt.Fprintf(s.cfg.Log, "%s %s %d %dms\n", start.UTC().Format(time.RFC3339), pattern, sw.code, s.cfg.Now().Sub(start).Milliseconds())
 	})
+}
+
+// bodyCap is the request body limit of a route: 9 MiB for the three that
+// carry a sealed vault, 64 KiB for the rest.
+func bodyCap(r *http.Request) int64 {
+	switch r.Method + " " + r.URL.Path {
+	case "PUT /v1/vault", "POST /v1/rekey", "POST /v1/accounts":
+		return maxBody
+	}
+	return maxSmallBody
+}
+
+// sweep drops expired nonces, tokens and pairings, at most once per
+// sweepEvery, on the request path (no goroutine to stop, and it follows the
+// injected clock). Entries are also dropped when used; this bounds the ones
+// nobody ever comes back for.
+func (s *Server) sweep(now time.Time) {
+	s.mu.Lock()
+	if now.Sub(s.lastSweep) < sweepEvery {
+		s.mu.Unlock()
+		return
+	}
+	s.lastSweep = now
+	for k, n := range s.nonces {
+		if !now.Before(n.expires) {
+			delete(s.nonces, k)
+		}
+	}
+	for k, t := range s.tokens {
+		if !now.Before(t.expires) {
+			delete(s.tokens, k)
+		}
+	}
+	s.mu.Unlock()
+	s.sweepPairings(now)
 }
 
 func reply(w http.ResponseWriter, code int, body map[string]any) {
@@ -195,11 +240,17 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
+// clientIP is the peer address, or with TrustProxy = N the Nth entry from the
+// right of X-Forwarded-For (each trusted proxy appends the address it
+// received from, so the entries to its left are client-controlled). Fewer
+// than N entries, or one that is not an IP, fall back to the peer.
 func (s *Server) clientIP(r *http.Request) string {
-	if s.cfg.TrustProxy {
-		if f := r.Header.Get("X-Forwarded-For"); f != "" {
-			ip, _, _ := strings.Cut(f, ",")
-			return strings.TrimSpace(ip)
+	if n := s.cfg.TrustProxy; n > 0 {
+		hops := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+		if len(hops) >= n {
+			if ip, err := netip.ParseAddr(strings.TrimSpace(hops[len(hops)-n])); err == nil {
+				return ip.Unmap().WithZone("").String()
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -295,6 +346,10 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		KeyEnvelope string     `json:"key_envelope"`
 		Vault       string     `json:"vault"`
 	}
+	if !s.accountLimit.allow(s.clientIP(r), s.cfg.Now()) {
+		fail(w, 429, "rate_limited", "too many attempts")
+		return
+	}
 	if !decode(w, r, &in) {
 		return
 	}
@@ -317,6 +372,23 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid", "malformed account")
 		return
 	}
+	// Claim the invite by renaming it, one request at a time (a rename alone
+	// is not exclusive on every OS): of two requests with one code only one
+	// wins. A refused request puts it back, so a typo does not burn it.
+	claimed := invitePath + ".claimed." + newToken()[:8]
+	s.inviteMu.Lock()
+	err := os.Rename(invitePath, claimed)
+	s.inviteMu.Unlock()
+	if err != nil {
+		fail(w, 401, "unauthorized", "invalid invite")
+		return
+	}
+	spent := false
+	defer func() {
+		if !spent {
+			_ = os.Rename(claimed, invitePath)
+		}
+	}()
 	defer s.lock(in.AccountID)()
 	if _, err := os.Stat(s.st.path("accounts", in.AccountID)); err == nil {
 		fail(w, 409, "conflict", "account exists")
@@ -343,7 +415,8 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "internal", "store failed")
 		return
 	}
-	_ = os.Remove(invitePath) // single use
+	spent = true // single use
+	_ = os.Remove(claimed)
 	reply(w, 200, map[string]any{"account_id": a.ID, "version": 1})
 }
 

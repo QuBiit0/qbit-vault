@@ -6,6 +6,12 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Fixed
 
+- Server hardening (`qbit-vault-server`; the client is unchanged):
+  - `QBV_SERVER_TRUST_PROXY` is now the number of trusted proxies, and the client IP for rate limits is the Nth `X-Forwarded-For` entry from the right (it was the leftmost, which anyone could forge). `1` keeps its meaning of one proxy; use `2` behind Cloudflare and Traefik. Unset or `0` ignores the header; any other value exits 2.
+  - Request bodies are capped at 64 KiB on every route except `PUT /v1/vault`, `POST /v1/rekey` and `POST /v1/accounts` (9 MiB): 413 `too_large`, nothing stored.
+  - `QBV_SERVER_BOOTSTRAP_INVITE` must have at least 12 different characters (and 24 in total); a restart no longer extends its 24 h expiry; account creation is limited to 10 per hour per IP.
+  - An invite is claimed atomically: two simultaneous account creations with one invite make one account.
+  - Expired nonces, tokens and pairings (including their files) are swept; at most 1000 pairings are pending at once (then 429); the rate limiter evicts only expired entries instead of resetting every counter.
 - Installers: without `QBIT_VAULT_VERSION` they installed the first release the GitHub API lists, which orders by tag text, so `v0.1.0-beta.10` lost to `v0.1.0-beta.9`. They now take the release with the latest publish date. The installers are served from `main`, so the fix applies as soon as it merges.
 
 ## [0.1.0-beta.10] - 2026-11-06

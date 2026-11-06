@@ -69,7 +69,7 @@ func TestBootstrapInviteRefusesAWeakCode(t *testing.T) {
 	var out, errb bytes.Buffer
 	e := env(map[string]string{"QBV_SERVER_DATA": dir, "QBV_SERVER_PUBLIC_URL": "https://vault.example.test", "QBV_SERVER_BOOTSTRAP_INVITE": "TESTSECRET_short"})
 	if code := Main(context.Background(), []string{"serve"}, e, &out, &errb); code != 2 ||
-		errb.String() != "error: QBV_SERVER_BOOTSTRAP_INVITE must be at least 24 characters\n" {
+		errb.String() != "error: QBV_SERVER_BOOTSTRAP_INVITE must be at least 24 characters with at least 12 different ones\n" {
 		t.Fatalf("code=%d err=%q", code, errb.String())
 	}
 }

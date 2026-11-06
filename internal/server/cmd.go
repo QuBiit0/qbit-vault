@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,7 +16,7 @@ import (
 //
 //	serve              run the API (QBV_SERVER_DATA, QBV_SERVER_LISTEN,
 //	                   QBV_SERVER_PUBLIC_URL, QBV_SERVER_TLS_CERT/KEY,
-//	                   QBV_SERVER_TRUST_PROXY, QBV_SERVER_BOOTSTRAP_INVITE)
+//	                   QBV_SERVER_TRUST_PROXY=N, QBV_SERVER_BOOTSTRAP_INVITE)
 //	invite [--ttl D]   print one single-use account invite (default 24h)
 //	health             exit 0 when /healthz answers on the listen address
 //
@@ -81,7 +82,12 @@ func Main(ctx context.Context, args []string, getenv func(string) string, stdout
 			fmt.Fprintln(stderr, "error: QBV_SERVER_PUBLIC_URL is required (the https:// origin clients use)")
 			return 2
 		}
-		s, err := New(Config{Data: data, PublicURL: strings.TrimRight(public, "/"), Log: stderr, TrustProxy: getenv("QBV_SERVER_TRUST_PROXY") == "1", Version: getenv("QBV_SERVER_VERSION")})
+		trust, ok := parseTrustProxy(getenv("QBV_SERVER_TRUST_PROXY"))
+		if !ok {
+			fmt.Fprintln(stderr, "error: QBV_SERVER_TRUST_PROXY must be a number of proxies (0, 1, 2...)")
+			return 2
+		}
+		s, err := New(Config{Data: data, PublicURL: strings.TrimRight(public, "/"), Log: stderr, TrustProxy: trust, Version: getenv("QBV_SERVER_VERSION")})
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 2
@@ -92,7 +98,7 @@ func Main(ctx context.Context, args []string, getenv func(string) string, stdout
 			made, err := s.BootstrapInvite(code, 24*time.Hour)
 			switch {
 			case errors.Is(err, ErrWeakInvite):
-				fmt.Fprintf(stderr, "error: QBV_SERVER_BOOTSTRAP_INVITE must be at least %d characters\n", MinBootstrapInvite)
+				fmt.Fprintf(stderr, "error: QBV_SERVER_BOOTSTRAP_INVITE must be at least %d characters with at least %d different ones\n", MinBootstrapInvite, MinBootstrapDistinct)
 				return 2
 			case err != nil:
 				fmt.Fprintln(stderr, "error: cannot store the bootstrap invite")
@@ -143,4 +149,19 @@ func or(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// parseTrustProxy reads QBV_SERVER_TRUST_PROXY: the number of trusted proxies
+// in front of the server; empty or 0 trusts none.
+func parseTrustProxy(v string) (int, bool) {
+	if v == "" {
+		return 0, true
+	}
+	for _, r := range v {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(v)
+	return n, err == nil
 }

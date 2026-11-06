@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.8] - 2026-11-06
+
 ### Changed
 
 - Windows dialogs follow the QBit Vault look (dark background, clear heading, Segoe UI, primary button on the right), and a recovery key or pairing code sits in a read-only box you can select and copy instead of typing it by hand.

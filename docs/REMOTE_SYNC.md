@@ -77,7 +77,7 @@ On an **existing** device, `qbit-vault remote approve`:
 
 3. Prompt (out of band) for the pairing code and a label for the new device. `GET /v1/pairings/{code}`; recompute the fingerprint of the returned keys and refuse (`pairing_failed`) unless it equals the code typed, so the server cannot substitute its own device key.
 4. Confirm out of band: *"Add device `<label>` to your vault on `<host>`? It will be able to read every secret."*
-5. Pull and merge (§ 7), seal a key envelope for it (issuer = this device), `POST /v1/pairings/{code}/approve`, then add the device to the roster and push (the roster entry is added after the server accepted the approval, so a refused approval leaves no entry).
+5. Pull and merge (§ 7), seal a key envelope for it (issuer = this device), `POST /v1/pairings/{code}/approve`. Once the server accepted, nothing below is an error: the code (step 6) is shown first, then the device is added to the roster and pushed (a refused approval leaves no entry); a failure of the roster write or of that sync round is a warning on stderr and the exit code stays 0.
 6. Show the **confirmation code** out of band: the first 40 bits of `HMAC-SHA256(PCK, code ‖ device_id ‖ eph_pub)` in base32, `XXXX-XXXX`, with *"Type this code on the new device."*
 
 Back on the **new** device:

@@ -126,7 +126,7 @@ Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.
 
 **OpenCode**: dropped. The original design registered an MCP entry in `~/.config/opencode/opencode.json` and a bash-rewrite plugin; no adapter exists, `--agents opencode` is an unknown agent, and none is planned for 0.1 (`odd/tasks/hosts.md` S8).
 
-**Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`pi install npm:qbit-vault-pi`, the rich path) is Phase 4 and does not exist yet.
+**Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`qbit-vault-pi`, the rich path) is Phase 4: it is not published yet, so there is no command to run.
 
 **Pi / Gentle Shell registration written by `init`** (adapter `pi`, `internal/hosts/pi`): two steps: `skill` writes `~/.agents/skills/qbit-vault/SKILL.md`, shared with Codex (§ Agent skill), and `mcp` is merged into `<Pi agent dir>/mcp.json` after a snapshot, owning only `mcpServers.qbit-vault`:
 
@@ -136,7 +136,7 @@ Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.
 
 `env` with `QBIT_VAULT_HOME` appears only when the vault home is not `~/.qbit-vault` (a path containing `${` or starting with `!` is refused, because Pi expands both in `env` values). `type` is omitted: Pi picks stdio from `command`. Format checked 2026-11-04 against the Pi docs (<https://github.com/badlogic/pi-mono>, `packages/coding-agent/docs/mcp.md`): Pi connects MCP servers natively since 0.99, reads user servers from `<agent dir>/mcp.json` (top-level `mcpServers`; stdio entries use `command`, `args`, `env`) and project servers from `.pi/mcp.json` (only after project trust; not touched). The `pi-mcp-adapter` extension reads the same file. The agent directory is `$PI_CODING_AGENT_DIR` when set (`docs/environment-variables.md`: "Override the config directory; default is `~/.pi/agent`"), else `<user home>/.pi/agent`; a leading `~` is expanded against the user home and a relative path is refused. Gentle Shell is detected by a `gentle-shell` binary on `PATH` and uses the same file when it runs on Pi; a Gentle Shell with its own agent directory (`~/.gentle-shell/agent`) is reached through `PI_CODING_AGENT_DIR`. Detection is read-only: the agent directory or `~/.pi` exists, or `pi` or `gentle-shell` is on `PATH`.
 
-The extension is **not** installed by `init` (it needs the network, invariant 8). After a successful registration `init` prints `host pi: to add the extension, run: pi install npm:qbit-vault-pi` (JSON: `install_command` on the host) and the user runs it. Not honored: `.pi/mcp.json`, and an agent directory passed with a Pi command-line option.
+The extension is **not** installed by `init` (it needs the network, invariant 8). While the extension is unpublished, `init` and `sync` print no install command for it and `--json` has no `install_command`; once it is published, `init` will print the command for the user to run. Not honored: `.pi/mcp.json`, and an agent directory passed with a Pi command-line option.
 
 **Gentle Shell** (planned, with the extension): `gentle-shell install npm:qbit-vault-pi` into `~/.gentle-shell/agent` (or `--link` home). See `GENTLE_SHELL_EXTENSION.md`.
 

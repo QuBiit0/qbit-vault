@@ -2,7 +2,7 @@
 
 **Status: design only (Phase 4, pending).** `packages/qbit-vault-pi` does not exist and nothing below is built. What works today for Pi and Gentle Shell: `qbit-vault init` registers the `qbit-vault` MCP entry in Pi's `mcp.json` (`AGENT_INTEGRATIONS.md`), so the four tools, the native dialogs and `exec` redaction are available; the bash override, paste interception, `/vault` commands and the sidebar need this extension. This document is the target design. It assumes CLI pieces that do not exist yet, noted where they appear: `set --reason`, `set --stdin --fields`, `prompt --field`, `prompt --confirm` and a `redact` command.
 
-npm package `qbit-vault-pi`. Installed by the user: `qbit-vault init` only registers the MCP entry and prints `pi install npm:qbit-vault-pi` (it never runs it, AGENTS.md invariant 8); with Gentle Shell, `gentle-shell install npm:qbit-vault-pi` (isolated home). Written in TypeScript against the Pi extension API; peer-depends on `@mariozechner/pi-coding-agent`, `@mariozechner/pi-tui`, `@sinclair/typebox`.
+npm package `qbit-vault-pi`. Installed by the user: `qbit-vault init` only registers the MCP entry; while the package is unpublished it prints no install line (when it is published the user installs it, `init` never does: AGENTS.md invariant 8); with Gentle Shell, `gentle-shell install npm:qbit-vault-pi` (isolated home). Written in TypeScript against the Pi extension API; peer-depends on `@mariozechner/pi-coding-agent`, `@mariozechner/pi-tui`, `@sinclair/typebox`.
 
 The extension never opens the vault. Every operation shells out to the `qbit-vault` binary with `--json` (or `broker --op`), passing the Pi session id as `--session pi:<id>` and values over stdin.
 

@@ -73,7 +73,7 @@ Exit criterion (met by the Docker sync battery): TESTING.md Tier 2 step 7 green;
 
 ## Phase 3 — hosts — done as scoped
 
-Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; packaging moves to Phase 5 (meanwhile: `go install`). Pi works through its MCP entry plus a printed `pi install npm:qbit-vault-pi` line; the native extension is Phase 4.
+Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; packaging moves to Phase 5 (meanwhile: `go install`). Pi works through its MCP entry; the native extension is Phase 4 (until it is published, `init` prints no install line for it).
 
 | Slice | Content | Req | Status |
 | --- | --- | --- | --- |

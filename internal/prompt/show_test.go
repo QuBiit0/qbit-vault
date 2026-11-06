@@ -105,7 +105,7 @@ func TestPowerShellShowParses(t *testing.T) {
 // typing it: on Windows the text sits in a read-only text box, not a label.
 func TestPowerShellShowTextIsSelectable(t *testing.T) {
 	s := string(powershellTool{}.build("powershell.exe", showDialog("Recovery key", "QVR1-TESTSECRET_x")).Stdin)
-	for _, want := range []string{"$sel.ReadOnly = $true", "$sel.Multiline = $true", "$sel.Text = $text.Replace(", "$p.Controls.Remove($l)"} {
+	for _, want := range []string{"$sel.ReadOnly = $true", "$sel.Multiline = $true", "$sel.Text = $code.Replace("} {
 		if !strings.Contains(s, want) {
 			t.Errorf("script lacks %q", want)
 		}
@@ -113,5 +113,62 @@ func TestPowerShellShowTextIsSelectable(t *testing.T) {
 	// Other dialogs keep the label.
 	if c := string(powershellTool{}.build("powershell.exe", dialog{kind: dialogConfirm, title: "t", text: "x"}).Stdin); strings.Contains(c, "$sel") {
 		t.Error("a confirm dialog got the selectable box")
+	}
+}
+
+// The last paragraph of a shown text is the code (recovery key, pairing
+// code); the paragraphs before it are the explanation.
+func TestSplitShown(t *testing.T) {
+	tests := []struct{ name, in, intro, code string }{
+		{"one paragraph", "QVR1-AAAA", "", "QVR1-AAAA"},
+		{"intro and code", "Write it down.\n\nQVR1-AAAA", "Write it down.", "QVR1-AAAA"},
+		{"several paragraphs", "One.\n\nTwo\nlines.\n\nQVR1-AAAA", "One.\n\nTwo\nlines.", "QVR1-AAAA"},
+		{"code of two lines", "Intro.\n\nQVR1-AAAA\nBBBB", "Intro.", "QVR1-AAAA\nBBBB"},
+		{"trailing blank lines", "Intro.\n\nQVR1-AAAA\n\n", "Intro.", "QVR1-AAAA"},
+		{"several blank lines", "Intro.\n\n\n\nQVR1-AAAA", "Intro.", "QVR1-AAAA"},
+		{"single line break is no paragraph", "Intro.\nQVR1-AAAA", "", "Intro.\nQVR1-AAAA"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			intro, code := splitShown(tt.in)
+			if intro != tt.intro || code != tt.code {
+				t.Fatalf("got %q, %q; want %q, %q", intro, code, tt.intro, tt.code)
+			}
+		})
+	}
+}
+
+// V1: the explanation wraps in the label and the code sits alone in the box,
+// whose height is measured, not counted in logical lines.
+func TestPowerShellShowLayout(t *testing.T) {
+	text := "Write this recovery key down.\n\n" + fxShown
+	s := string(powershellTool{}.build("powershell.exe", showDialog("Recovery key", text)).Stdin)
+	prelude := s[:strings.Index(s, psBodyMarker)]
+	if !strings.Contains(prelude, "$text = Dec "+psString("Write this recovery key down.")) {
+		t.Errorf("the label does not hold the explanation only:\n%s", prelude)
+	}
+	if !strings.Contains(prelude, "$code = Dec "+psString(fxShown)) {
+		t.Errorf("the box does not hold the code:\n%s", prelude)
+	}
+	if strings.Contains(s, "Lines.Count") {
+		t.Error("the box height still counts logical lines")
+	}
+	if !strings.Contains(s, "TextRenderer]::MeasureText($sel.Text") {
+		t.Error("the box height is not measured")
+	}
+	if !strings.Contains(s, "$sel.Text = $code.Replace(") {
+		t.Error("the box does not show $code")
+	}
+	// A single paragraph goes all in the box: the label is dropped.
+	one := string(powershellTool{}.build("powershell.exe", showDialog("Pairing code", fxShown)).Stdin)
+	if !strings.Contains(one, "$text = Dec "+psString("")) || !strings.Contains(one, "$code = Dec "+psString(fxShown)) {
+		t.Error("one paragraph is not all in the box")
+	}
+	if !strings.Contains(one, "if ($text.Length -eq 0) { $p.Controls.Remove($l) }") {
+		t.Error("an empty explanation still leaves a label")
+	}
+	// Other dialogs carry no $code.
+	if c := string(powershellTool{}.build("powershell.exe", dialog{kind: dialogConfirm, title: "t", text: "x"}).Stdin); strings.Contains(c, "$code") {
+		t.Error("a confirm dialog got $code")
 	}
 }

@@ -96,7 +96,7 @@ expect_empty_err "init writes nothing to stderr"
 expect_out "init: claude-code line" $'host claude-code: registered (mcp, hooks, deny, skill)\n'
 expect_out "init: codex line" $'host codex: registered (mcp, skill)\n'
 # Pi shares ~/.agents/skills with Codex, which already wrote the skill.
-expect_out "init: pi line + extension install line" $'host pi: registered (mcp)\nhost pi: to add the extension, run: pi install npm:qbit-vault-pi\n'
+expect_out "init: pi line (no extension line while it is unpublished)" $'host pi: registered (mcp)\n'
 CLAUDE_SKILL="$HOME/.claude/skills/qbit-vault/SKILL.md"
 AGENTS_SKILL="$HOME/.agents/skills/qbit-vault/SKILL.md"
 if [[ -f $CLAUDE_SKILL && -f $AGENTS_SKILL ]] && grep -q '^name: qbit-vault$' "$CLAUDE_SKILL" && cmp -s "$CLAUDE_SKILL" "$AGENTS_SKILL"; then pass "init installs the same skill for claude-code and for codex + pi"; else fail "init installs the same skill for claude-code and for codex + pi"; fi

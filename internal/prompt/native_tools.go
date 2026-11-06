@@ -36,7 +36,7 @@ func (zenityTool) build(path string, d dialog) command {
 			args = append(args, picked, fmt.Sprint(i+1), noDash(o))
 		}
 	case dialogConfirm:
-		args = []string{"--question", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--ok-label=Confirm", "--cancel-label=Decline"}
+		args = []string{"--question", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--ok-label=Confirm", "--cancel-label=Decline", "--default-cancel"}
 	}
 	return command{Path: path, Args: args}
 }
@@ -92,14 +92,26 @@ func (kdialogTool) build(path string, d dialog) command {
 			args = append(args, fmt.Sprint(i+1), rich(noDash(o)), state)
 		}
 	case dialogConfirm:
-		args = append(args, "--yes-label", "Confirm", "--no-label", "Decline", "--yesno", rich(d.text))
+		args = append(args, "--yes-label", "Decline", "--no-label", "Confirm", "--yesno", rich(d.text))
 	}
 	return command{Path: path, Args: args}
 }
 
+// classify reads a confirmation swapped: kdialog's default button is the
+// yes one, so it is labelled Decline (Enter declines) and Confirm is the no
+// button.
 func (kdialogTool) classify(d dialog, r result) status {
 	if r.Exit == 2 {
 		return statusCancel
+	}
+	if d.kind == dialogConfirm {
+		switch r.Exit {
+		case 0:
+			return statusNo
+		case 1:
+			return statusOK
+		}
+		return statusFail
 	}
 	return exitOneIsNo(d, r.Exit)
 }

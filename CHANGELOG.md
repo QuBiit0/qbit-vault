@@ -12,6 +12,12 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
   - `QBV_SERVER_BOOTSTRAP_INVITE` must have at least 12 different characters (and 24 in total); a restart no longer extends its 24 h expiry; account creation is limited to 10 per hour per IP.
   - An invite is claimed atomically: two simultaneous account creations with one invite make one account.
   - Expired nonces, tokens and pairings (including their files) are swept; at most 1000 pairings are pending at once (then 429); the rate limiter evicts only expired entries instead of resetting every counter.
+- Windows: the recovery key and pairing code dialogs always show the whole code (it sits alone in the selectable box, sized to its content; the explanation is above it).
+- Linux: pressing Enter on a yes/no confirmation (zenity, kdialog) now declines, as on macOS and Windows.
+- `init` and `sync` no longer print an install command for the Pi extension (it is not published yet), and `--json` no longer has `install_command`.
+- `SECURITY.md`: the latest release is the supported version.
+- Sync client: it never follows a redirect (a 3xx answer is `remote_unreachable`), so sealed data only goes to the configured server.
+- `remote approve`: once the server accepted the approval, the confirmation code is shown first; a later roster or sync failure is a warning, not an error.
 - Installers: without `QBIT_VAULT_VERSION` they installed the first release the GitHub API lists, which orders by tag text, so `v0.1.0-beta.10` lost to `v0.1.0-beta.9`. They now take the release with the latest publish date. The installers are served from `main`, so the fix applies as soon as it merges.
 
 ## [0.1.0-beta.10] - 2026-11-06

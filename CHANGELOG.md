@@ -4,6 +4,13 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.8] - 2026-11-06
+
+### Changed
+
+- Windows dialogs follow the QBit Vault look (dark background, clear heading, Segoe UI, primary button on the right), and a recovery key or pairing code sits in a read-only box you can select and copy instead of typing it by hand.
+- Permission questions from an agent offer three answers: `Once: only the next command` (preselected), `Always: in this project, until you revoke it` (inside a repository) and `Don't allow`. The session answer is gone (a restarted agent is a new session, so it kept asking), and so is the 12-hour answer of 0.1.0-beta.7. A global secret approved "always" is approved for that repository; another repository asks once. Outside a repository only once or no. `grant --scope session`, `set --grant session` and the `prompt` command's `--scopes` are unchanged.
+
 ## [0.1.0-beta.7] - 2026-11-06
 
 ### Changed

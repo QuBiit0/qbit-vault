@@ -64,13 +64,15 @@ func (w *world) mkRepo(name string) string {
 func TestRequestGrantsAGlobalSecretForThisProject(t *testing.T) {
 	w := newWorld(t)
 	w.mustRun("TESTSECRET_global\n", "set", "A", "--global", "--stdin")
-	f := withBackend(t, answers(pick(2)))
+	f := withBackend(t, answers(pick(1)))
 	code, m, _ := w.broker("request", reqFor(w.repo, ""))
 	if code != exitcode.OK || m["grant"].(map[string]any)["scope"] != "project" {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
-	want := []string{"Once: only the next command", twelveHours, "Project: always in this project, until you revoke it", "Don't allow"}
-	if strings.Join(f.Calls[0].Options, "|") != strings.Join(want, "|") || f.Calls[0].Default != 1 {
+	// Once, always in this project, or no: no session answer (a restarted
+	// agent is a new session), and once preselected.
+	want := []string{"Once: only the next command", "Always: in this project, until you revoke it", "Don't allow"}
+	if strings.Join(f.Calls[0].Options, "|") != strings.Join(want, "|") || f.Calls[0].Default != 0 {
 		t.Fatalf("options=%q default=%d", f.Calls[0].Options, f.Calls[0].Default)
 	}
 	// A new agent session in the same repository needs no new approval.
@@ -92,11 +94,11 @@ func TestRequestGrantsAGlobalSecretForThisProject(t *testing.T) {
 func TestOutsideARepositoryAGlobalSecretOffersNoProjectScope(t *testing.T) {
 	w := newWorld(t)
 	w.mustRun("TESTSECRET_global\n", "set", "A", "--global", "--stdin")
-	f := withBackend(t, answers(pick(1)))
-	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK {
+	f := withBackend(t, answers(pick(0)))
+	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK || m["grant"].(map[string]any)["scope"] != "once" {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
-	if o := f.Calls[0].Options; len(o) != 3 || strings.HasPrefix(o[1], "Project") || o[2] != "Don't allow" {
+	if o := f.Calls[0].Options; strings.Join(o, "|") != "Once: only the next command|Don't allow" {
 		t.Fatalf("options=%q", o)
 	}
 }

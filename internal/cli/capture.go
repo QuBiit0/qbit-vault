@@ -76,71 +76,34 @@ func ttlText(d time.Duration) string {
 	return s
 }
 
-// grantChoice is one answer of a permission question: a scope and, for a
-// project grant that ends, its lifetime.
-type grantChoice struct {
-	Scope grants.Scope
-	TTL   time.Duration
+// agentScopes is what an agent's permission question offers: once, and
+// always in this project where the record allows it. A session grant is not
+// offered there: a restarted agent is a new session, so it kept asking again.
+func agentScopes(scopes []grants.Scope) []grants.Scope {
+	return slices.DeleteFunc(slices.Clone(scopes), func(s grants.Scope) bool { return s == grants.ScopeSession })
 }
 
-// plainChoices offers the scopes as they are.
-func plainChoices(scopes []grants.Scope) []grantChoice {
-	out := make([]grantChoice, len(scopes))
-	for i, sc := range scopes {
-		out[i] = grantChoice{Scope: sc}
-	}
-	return out
-}
-
-// timedChoices is plainChoices for a dialog that creates the grant itself:
-// where a project grant is possible, the session answer becomes a project
-// grant for DefaultSessionTTL. An agent restart is a new session, so a
-// session grant would end with it; "12 hours in this project" does not.
-func timedChoices(scopes []grants.Scope) []grantChoice {
-	out := plainChoices(scopes)
-	if !slices.Contains(scopes, grants.ScopeProject) {
-		return out
-	}
-	for i, c := range out {
-		if c.Scope == grants.ScopeSession {
-			out[i] = grantChoice{Scope: grants.ScopeProject, TTL: grants.DefaultSessionTTL}
-		}
-	}
-	return out
-}
-
-// scopeLabels describes the choices for a menu and returns the index
-// preselected. A scope the user typed on their own command line (userChose)
-// wins; else the middle answer (session, or 12 hours in this project), so
-// one approval covers the work at hand; else the proposed scope; else 0 (a
-// sensitive record offers once only).
-func scopeLabels(choices []grantChoice, proposed grants.Scope, userChose bool) ([]string, int) {
-	opts := make([]string, len(choices))
+// scopeLabels describes scopes for a menu and returns the index preselected.
+// A scope the user typed on their own command line (userChose) wins; else
+// session when it is offered (set --grant only); else 0, once, the narrowest.
+func scopeLabels(scopes []grants.Scope, proposed grants.Scope, userChose bool) ([]string, int) {
+	opts := make([]string, len(scopes))
 	at := map[grants.Scope]int{}
-	middle := -1
-	for i, c := range choices {
-		switch {
-		case c.Scope == grants.ScopeOnce:
+	for i, sc := range scopes {
+		at[sc] = i
+		switch sc {
+		case grants.ScopeOnce:
 			opts[i] = "Once: only the next command"
-		case c.Scope == grants.ScopeSession:
+		case grants.ScopeSession:
 			opts[i] = "Session: until the agent restarts (max " + ttlText(grants.DefaultSessionTTL) + ")"
-			middle = i
-		case c.TTL != 0:
-			opts[i] = fmt.Sprintf("%d hours: in this project, even if the agent restarts", int(c.TTL.Hours()))
-			middle = i
-			continue // the plain project answer keeps at[ScopeProject]
 		default:
-			opts[i] = "Project: always in this project, until you revoke it"
+			opts[i] = "Always: in this project, until you revoke it"
 		}
-		at[c.Scope] = i
 	}
 	if i, ok := at[proposed]; ok && userChose {
 		return opts, i
 	}
-	if middle >= 0 {
-		return opts, middle
-	}
-	if i, ok := at[proposed]; ok {
+	if i, ok := at[grants.ScopeSession]; ok {
 		return opts, i
 	}
 	return opts, 0
@@ -227,7 +190,7 @@ func (g *globals) captureValue(ask prompt.Backend, name string, layer vault.Laye
 		return raw, "", nil
 	}
 	scopes := g.allowedScopes(name, layer, sensitive, scopeOrder)
-	opts, def := scopeLabels(plainChoices(scopes), flagScope, flagScope != "")
+	opts, def := scopeLabels(scopes, flagScope, flagScope != "")
 	opts = append(opts, "No, just save the value")
 	i, err := ask.Choose(fmt.Sprintf("Allow agents to use %s (%s) right away?", name, whereText(layer)), opts, def)
 	if err != nil {

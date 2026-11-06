@@ -100,3 +100,18 @@ func TestPowerShellShowParses(t *testing.T) {
 		t.Fatalf("parse errors: %q %v", out, err)
 	}
 }
+
+// A recovery key must be selectable so the user can copy it instead of
+// typing it: on Windows the text sits in a read-only text box, not a label.
+func TestPowerShellShowTextIsSelectable(t *testing.T) {
+	s := string(powershellTool{}.build("powershell.exe", showDialog("Recovery key", "QVR1-TESTSECRET_x")).Stdin)
+	for _, want := range []string{"$sel.ReadOnly = $true", "$sel.Multiline = $true", "$sel.Text = $text.Replace(", "$p.Controls.Remove($l)"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("script lacks %q", want)
+		}
+	}
+	// Other dialogs keep the label.
+	if c := string(powershellTool{}.build("powershell.exe", dialog{kind: dialogConfirm, title: "t", text: "x"}).Stdin); strings.Contains(c, "$sel") {
+		t.Error("a confirm dialog got the selectable box")
+	}
+}

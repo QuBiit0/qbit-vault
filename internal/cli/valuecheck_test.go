@@ -39,7 +39,7 @@ func TestValueIssues(t *testing.T) {
 
 func TestRequestOffersToDropPastedQuotes(t *testing.T) {
 	w := newWorld(t)
-	f := withBackend(t, answers(val(`"TESTSECRET_quoted"`), pick(0), pick(1)))
+	f := withBackend(t, answers(val(`"TESTSECRET_quoted"`), pick(0), pick(0)))
 	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
@@ -58,7 +58,7 @@ func TestRequestOffersToDropPastedQuotes(t *testing.T) {
 
 func TestRequestKeepsTheValueExactlyAsTypedWhenAsked(t *testing.T) {
 	w := newWorld(t)
-	withBackend(t, answers(val("'TESTSECRET_keep'"), pick(1), pick(1)))
+	withBackend(t, answers(val("'TESTSECRET_keep'"), pick(1), pick(0)))
 	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
@@ -82,7 +82,7 @@ func TestRequestCancelAtTheValueCheckSavesNothing(t *testing.T) {
 
 func TestACleanValueAsksNothingMore(t *testing.T) {
 	w := newWorld(t)
-	f := withBackend(t, answers(val("TESTSECRET_clean"), pick(1)))
+	f := withBackend(t, answers(val("TESTSECRET_clean"), pick(0)))
 	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
@@ -121,7 +121,7 @@ func TestManageReplaceOffersToDropPastedQuotes(t *testing.T) {
 // the check offers "as typed" or cancel, never a silent empty save.
 func TestAllInvisibleValueOffersNoEmptyFix(t *testing.T) {
 	w := newWorld(t)
-	f := withBackend(t, answers(val("\u200b\u200b"), pick(0), pick(1)))
+	f := withBackend(t, answers(val("\u200b\u200b"), pick(0), pick(0)))
 	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}

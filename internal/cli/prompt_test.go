@@ -244,7 +244,7 @@ func TestSetInteractiveGrantChoices(t *testing.T) {
 		answer    int
 		wantOut   string
 	}{
-		{"project layer offers project, the user's --grant project preselected", true, false, "project", []string{"Once:", "Session:", "Project:", "No, just save"}, 2, 2,
+		{"project layer offers project, the user's --grant project preselected", true, false, "project", []string{"Once:", "Session:", "Always:", "No, just save"}, 2, 2,
 			"stored A_KEY (project shop-api)\ngranted A_KEY (project shop-api): project, until revoked\n"},
 		{"sensitive offers once only", false, true, "once", []string{"Once:", "No, just save"}, 0, 0,
 			"stored A_KEY (global)\ngranted A_KEY (global): once, for pi:sess-aaaa, until TS\n"},
@@ -692,7 +692,7 @@ func TestPromptAsksLayerAndRestrictsScopes(t *testing.T) {
 	if l := f.Calls[0]; l.Kind != "choose" || len(l.Options) != 2 || l.Options[0] != "All projects (global)" || l.Options[1] != "Only this project (shop-api)" || l.Default != 0 {
 		t.Fatalf("layer question = %+v", l)
 	}
-	if s := f.Calls[1]; len(s.Options) != 2 || !strings.HasPrefix(s.Options[0], "Project:") || !strings.HasPrefix(s.Options[1], "Don't allow") {
+	if s := f.Calls[1]; len(s.Options) != 2 || !strings.HasPrefix(s.Options[0], "Always:") || !strings.HasPrefix(s.Options[1], "Don't allow") {
 		t.Fatalf("scope question = %+v", s)
 	}
 }

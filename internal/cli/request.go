@@ -193,9 +193,12 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	if len(scopes) == 0 {
 		return broker.RequestResponse{}, refusal.New(refusal.ScopeNotAllowed, firstName(fields))
 	}
-	proposed, _ := grants.ParseScope(r.SuggestedScope)
-	choices := timedChoices(scopes)
-	opts, def := scopeLabels(choices, proposed, false)
+	// suggested_scope is a hint only: the question preselects once.
+	scopes = agentScopes(scopes)
+	if len(scopes) == 0 {
+		return broker.RequestResponse{}, refusal.New(refusal.ScopeNotAllowed, firstName(fields))
+	}
+	opts, def := scopeLabels(scopes, "", false)
 	var who []string
 	for _, a := range fields {
 		if a.exists && len(fields) > 1 {
@@ -208,10 +211,10 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	if err != nil {
 		return broker.RequestResponse{}, fail(err)
 	}
-	if i >= len(choices) {
+	if i >= len(scopes) {
 		return broker.RequestResponse{}, declined("denied")
 	}
-	scope, ttl := choices[i].Scope, choices[i].TTL
+	scope := scopes[i]
 
 	if len(fresh) > 0 {
 		names := namesOf(fresh)
@@ -239,7 +242,7 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 
 	out := broker.RequestResponse{OK: true}
 	for _, a := range fields {
-		req := g.grantRequest(a.f.Name, a.layer, a.recordID, scope, ttl, a.sensitive)
+		req := g.grantRequest(a.f.Name, a.layer, a.recordID, scope, 0, a.sensitive)
 		hash, err := g.promptToken(cmd, s, req)
 		if err != nil {
 			return broker.RequestResponse{}, asRefusal(err)

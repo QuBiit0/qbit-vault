@@ -269,7 +269,7 @@ Known gaps the docs state openly: `bindings.yaml` and `config.yaml` are not load
 
 ## Contributing
 
-Contributions are welcome; the rules are in [CONTRIBUTING.md](CONTRIBUTING.md). Read [AGENTS.md](AGENTS.md) first: the security invariants there are tested, and a change that breaks one is rejected. Questions and bug reports go to [Issues](https://github.com/QuBiit0/qbit-vault/issues).
+Contributions are welcome; the rules are in [CONTRIBUTING.md](CONTRIBUTING.md). Read [AGENTS.md](AGENTS.md) first: the security invariants there are tested, and a change that breaks one is rejected. Bug reports and feature requests go to [Issues](https://github.com/QuBiit0/qbit-vault/issues) (guided forms); questions and ideas to [Discussions](https://github.com/QuBiit0/qbit-vault/discussions). How contributions are reviewed: [CONTRIBUTING.md § How contributions are reviewed](CONTRIBUTING.md#how-contributions-are-reviewed).
 
 ## Security
 

@@ -93,12 +93,13 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 	}
 	q := manageQuestion(r, en.Layer, to, targetExists, diff)
 	var (
-		ok         bool
-		grantScope grants.Scope // replace: the permission picked with it, if any
+		ok        bool
+		grantPick grantChoice // replace: the permission picked with it, if any
 	)
 	if r.Action == "replace" {
 		scopes := g.allowedScopes(r.Name, en.Layer, en.Record.Sensitive, scopeOrder)
-		labels, def := scopeLabels(e.Session, scopes, "", false)
+		choices := timedChoices(scopes)
+		labels, def := scopeLabels(choices, "", false)
 		opts := make([]string, 0, len(labels)+2)
 		for _, l := range labels {
 			opts = append(opts, "Replace, then "+l)
@@ -107,8 +108,8 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		var i int
 		i, err = ask.Choose(q, opts, def)
 		ok = err == nil && i < len(opts)-1
-		if ok && i < len(scopes) {
-			grantScope = scopes[i]
+		if ok && i < len(choices) {
+			grantPick = choices[i]
 		}
 	} else {
 		ok, err = ask.Confirm(q)
@@ -165,11 +166,11 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		return broker.ManageResponse{}, asRefusal(mapErr(err, r.Name))
 	}
 	audited("applied")
-	if grantScope != "" {
+	if grantPick.Scope != "" {
 		// The value is already replaced: a grant that cannot be stored now only
 		// means the next exec asks for one (grant_required), so the replace
 		// still reports success instead of a failure the agent would retry.
-		_ = g.grantReplaced(s, r.Name, en.Layer, en.Record.Sensitive, grantScope, e.Cwd)
+		_ = g.grantReplaced(s, r.Name, en.Layer, en.Record.Sensitive, grantPick, e.Cwd)
 	}
 	g.pushAfter(context.Background(), stderrOf(g), s)
 	return broker.ManageResponse{OK: true, Applied: true, Action: r.Action, Name: r.Name, Layer: after}, nil
@@ -179,14 +180,14 @@ func ptr(s string) *string { return &s }
 
 // grantReplaced creates the grant the user picked together with a replace,
 // on the new record, through the same prompt-token path as request.
-func (g *globals) grantReplaced(s *session, name string, layer vault.Layer, sensitive bool, scope grants.Scope, cwd string) error {
+func (g *globals) grantReplaced(s *session, name string, layer vault.Layer, sensitive bool, pick grantChoice, cwd string) error {
 	now, err := findEntry(s, name, layerFlags{global: !layer.Project, project: layer.Project}, cwd)
 	if err != nil {
 		return err
 	}
 	now.Record.Value.Wipe()
 	cmd := quiet()
-	req := g.grantRequest(name, layer, now.Record.ID, scope, 0, sensitive)
+	req := g.grantRequest(name, layer, now.Record.ID, pick.Scope, pick.TTL, sensitive)
 	hash, err := g.promptToken(cmd, s, req)
 	if err != nil {
 		return err

@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Changed
+
+- Permission dialogs inside a repository: the session answer becomes `12 hours: in this project, even if the agent restarts`. A session ended whenever the agent restarted (a restarted MCP server is a new session), so the same question came back; the new answer is a project grant that ends after 12 h. Outside a repository the session answer stays. The `prompt` command and `set --grant` are unchanged.
+
 ### Added
 
 - `qbit-vault-server`: `QBV_SERVER_BOOTSTRAP_INVITE` gives a server with no account its first invite through the environment, for hosted platforms where `invite` cannot be run inside the shell-less container. Hash only, single use, 24 h, never logged, ignored once an account exists.

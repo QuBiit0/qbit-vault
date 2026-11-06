@@ -2,7 +2,7 @@
 
 Sliced so every PR stays ≤ 400 changed lines (the review budget), each with code + tests + docs. Phases are sequential; slices within a phase are mostly parallelizable. IDs refer to `docs/PRD.md`.
 
-**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *pending* = not built. Nothing is released: there is no tag, no published package and no published image. Today QBit Vault is installed with `go install` or built from source (`INSTALL.md`).
+**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *pending* = not built. Releases `v0.1.0-beta.2` to the newest in `CHANGELOG.md` are published (archives, `checksums.txt` and build provenance), and the one-line installers pick the newest (`INSTALL.md`). Not published yet: the npm package, the Homebrew formula and the server image.
 
 | Phase | Status |
 | --- | --- |
@@ -86,7 +86,7 @@ Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for C
 | 3.6 | `init`, `sync`, `doctor`, `uninstall`, `state.json` receipts | R-INS-* | done (4373016 `init` + `doctor`, 309f37c `sync`, bff3a29 `uninstall`; Docker hosts battery `bash e2e/hosts-test.sh`, 27808b4) |
 | 3.7 | npm launcher + platform packages + goreleaser + Minisign | R-INS-02, R-NFR-03 | **moved to Phase 5** (hosts.md P9) |
 
-Dogfood round 1 (real use on Windows with Claude Code and Pi, `odd/tasks/dogfood-1.md`) added: `bash`/`sh` in `exec` never resolve to WSL and shell words stay intact (5180b22); a `once` grant is released when the child never started (5180b22); refusals answered over the broker and MCP are audited (97b796e); the dump guard stays strict and only `${#NAME}` is allowed, which the `secret_exec` description now tells agents (eaed280, after a relaxation was tried and withdrawn); session grants last 12 h and `session` is preselected in the approval dialog (2d5f944).
+Dogfood round 1 (real use on Windows with Claude Code and Pi, `odd/tasks/dogfood-1.md`) added: `bash`/`sh` in `exec` never resolve to WSL and shell words stay intact (5180b22); a `once` grant is released when the child never started (5180b22); refusals answered over the broker and MCP are audited (97b796e); the dump guard stays strict and only `${#NAME}` is allowed, which the `secret_exec` description now tells agents (eaed280, after a relaxation was tried and withdrawn); session grants last 12 h and `session` is preselected in the approval dialog (2d5f944; superseded in 0.1.0-beta.8: agent dialogs offer once, always in this project, or no, see `CHANGELOG.md`).
 
 ## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — pending
 
@@ -111,7 +111,6 @@ Nothing of `packages/qbit-vault-pi` exists yet (there is no `packages/` director
 - Security review checklist (THREAT_MODEL.md) walked for every package.
 - Docs pass; `README` quickstart verified on a clean VM per OS in < 3 min.
 - Tag `v0.1.0`, publish npm with provenance, Homebrew tap formula.
-- Make the repository public (it is private today, so `go install` needs access to it).
 
 ## TUI — done
 

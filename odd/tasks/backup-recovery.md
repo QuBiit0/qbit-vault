@@ -28,9 +28,9 @@ Branch for code changes: `feat/export`.
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| B1 | S2, S3 | inline | deploy qbit-vault-server on Dokploy (new project, GitHub source, compose `deploy/compose.yaml`, domain, DNS, volume backup), verify from outside | (infra) | pending |
-| B2 | S2 | user | `qbit-vault-server invite` (operator) and `qbit-vault remote register` on this PC; the recovery key is written down offline | (user) | pending |
-| B3 | S4-S9 | worker | `qbit-vault export` and `import --from-export`: passphrase-sealed, portable, tests, docs | | in progress |
+| B1 | S2, S3 | inline | deploy qbit-vault-server on Dokploy (new project, GitHub source, compose `deploy/compose.yaml`, domain, DNS, volume backup), verify from outside | (infra) | done (L2; volume backup dropped, L7) |
+| B2 | S2 | user | `qbit-vault-server invite` (operator) and `qbit-vault remote register` on this PC; the recovery key is written down offline | (user) | done (L5) |
+| B3 | S4-S9 | worker | `qbit-vault export` and `import --from-export`: passphrase-sealed, portable, tests, docs | PRs #15, #18, #17; #19 | done (L6-L7, beta.9-beta.10) |
 | B4 | S2 | user | join the WSL PC (`remote join`, `remote approve`) | (user) | pending |
 
 ## Log

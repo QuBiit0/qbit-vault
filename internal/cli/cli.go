@@ -38,11 +38,15 @@ type globals struct {
 	stderr io.Writer // for test prompt backends that play the terminal
 	// execStdin, when set, is the stdin of an exec child instead of ours.
 	execStdin io.Reader
-	home      string
-	JSON      bool
-	Session   string
-	Quiet     bool
-	NoColor   bool
+	// cwd is the working directory of a broker call (its envelope's cwd);
+	// empty means the process's own, except in a broker call (broker).
+	cwd     string
+	broker  bool
+	home    string
+	JSON    bool
+	Session string
+	Quiet   bool
+	NoColor bool
 }
 
 // Home returns the vault directory: --home, else $QBIT_VAULT_HOME, else

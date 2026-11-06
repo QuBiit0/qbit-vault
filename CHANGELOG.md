@@ -4,6 +4,14 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- A global secret can be granted `Project: always in this project, until you revoke it`: the permission is bound to the repository it was approved in, survives agent restarts and new conversations there, and never reaches another repository (a nested one included). Before, global secrets offered only `once` and `session`, so a restarted agent asked again.
+
+### Changed
+
+- The session choice reads `Session: until the agent restarts (max 12h)`, which is what it does: a restarted agent is a new session.
+
 ## [0.1.0-beta.5] - 2026-11-06
 
 ### Added

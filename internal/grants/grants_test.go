@@ -492,7 +492,7 @@ func TestNeedsProjectIsAScopeRefusal(t *testing.T) {
 	if !errors.Is(err, ErrNeedsProject) || !errors.Is(err, ErrScopeNotAllowed) {
 		t.Fatalf("err = %v", err)
 	}
-	if !strings.HasSuffix(err.Error(), "project scope needs a project secret") {
+	if !strings.HasSuffix(err.Error(), "project scope needs a repository: run it inside one") {
 		t.Fatalf("message = %q", err.Error())
 	}
 	_, err = Add(&Store{}, Request{Name: "A_KEY", Layer: GlobalLayer, Session: sessA, Scope: ScopeSession, Sensitive: true, RecordID: testRec}, t0)
@@ -693,5 +693,38 @@ func TestDefaultSessionTTLIs12Hours(t *testing.T) {
 	}
 	if MinTTL != time.Minute || MaxTTL != 24*time.Hour {
 		t.Fatalf("bounds = %v..%v", MinTTL, MaxTTL)
+	}
+}
+
+// A project grant on a global secret is bound to the repository it was
+// approved in: it survives new agent sessions there, never reaches another
+// repository (a nested one included), and two repositories keep their own.
+func TestProjectGrantOnAGlobalSecretIsBoundToItsRepository(t *testing.T) {
+	const shop, blog = "/work/shop", "/work/blog"
+	s := &Store{}
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec, ProjectRoot: shop}, t0)
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec, ProjectRoot: blog}, t0)
+	if len(s.Grants) != 2 {
+		t.Fatalf("grants of two repositories replaced each other: %+v", s.Grants)
+	}
+	for _, sess := range []string{sessA, "mcp:another-session", ""} {
+		if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, false, sess, shop, t0.Add(48*time.Hour)); !d.Allowed || d.Scope != ScopeProject {
+			t.Fatalf("session %q in the repository: %+v", sess, d)
+		}
+	}
+	for _, cwd := range []string{"/work/shop/vendor/lib", "/work/other", "/work/shop-old", ""} {
+		if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, false, sessA, cwd, t0); d.Allowed {
+			t.Fatalf("cwd %q was allowed by a grant bound to another repository: %+v", cwd, d)
+		}
+	}
+	if d, _ := Check(s, "A_KEY", GlobalLayer, "other-record", false, sessA, shop, t0); d.Allowed {
+		t.Fatal("a replaced value kept the grant")
+	}
+	mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec, ProjectRoot: shop}, t0)
+	if len(s.Grants) != 2 {
+		t.Fatalf("re-granting the same repository added a duplicate: %d grants", len(s.Grants))
+	}
+	if _, err := Add(&Store{}, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: ScopeProject, RecordID: testRec, ProjectRoot: shop, Sensitive: true}, t0); !errors.Is(err, ErrScopeNotAllowed) {
+		t.Fatalf("sensitive: err = %v", err)
 	}
 }

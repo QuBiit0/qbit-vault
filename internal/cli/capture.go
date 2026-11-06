@@ -23,8 +23,31 @@ func (g *globals) grantRequest(name string, layer vault.Layer, recordID string, 
 	req := grants.Request{Name: name, Layer: layer.Key(), RecordID: recordID, Scope: scope, TTL: ttl, Sensitive: sensitive}
 	if scope != grants.ScopeProject {
 		req.Session = g.Session
+	} else if !layer.Project {
+		req.ProjectRoot = g.repoRoot()
 	}
 	return req
+}
+
+// repoRoot is the canonical repository root of the working directory (the
+// broker call's, else the process's), or "" outside a repository. A project
+// grant of a global secret is bound to it.
+func (g *globals) repoRoot() string {
+	dir := g.cwd
+	if dir == "" && g.broker {
+		return "" // never the server process's own directory
+	}
+	if dir == "" {
+		var err error
+		if dir, err = getwd(); err != nil {
+			return ""
+		}
+	}
+	root, ok, err := vault.ProjectRoot(dir)
+	if err != nil || !ok {
+		return ""
+	}
+	return root
 }
 
 // allowedScopes keeps, in order, the scopes among want that a grant of name in
@@ -65,7 +88,7 @@ func scopeLabels(session string, scopes []grants.Scope, proposed grants.Scope, u
 		case grants.ScopeOnce:
 			opts[i] = "Once: only the next command"
 		case grants.ScopeSession:
-			opts[i] = "Session: this agent session, for " + ttlText(grants.DefaultSessionTTL)
+			opts[i] = "Session: until the agent restarts (max " + ttlText(grants.DefaultSessionTTL) + ")"
 		default:
 			opts[i] = "Project: always in this project, until you revoke it"
 		}

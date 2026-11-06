@@ -241,7 +241,7 @@ func TestGrantRefusesSensitiveBroadScopes(t *testing.T) {
 		}
 	}
 	// A project scope grant on a global record has no project to bind to.
-	if code, _, errs := w.run("y\n", "grant", "PLAIN_KEY", "--scope", "project"); code != exitcode.Refusal || errs != "error: project scope needs a project secret\n" {
+	if code, _, errs := w.run("y\n", "grant", "PLAIN_KEY", "--scope", "project"); code != exitcode.Refusal || errs != "error: project scope needs a repository: run it inside one\n" {
 		t.Fatalf("project on global: code=%d err=%q", code, errs)
 	}
 	if w.grantsState() != before {

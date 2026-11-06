@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.10] - 2026-11-06
+
 ### Fixed
 
 - `export`: a vault whose only secrets are project layers not linked on this device says so instead of "the vault is empty"; an export too large to import back (over 64 MiB) is refused instead of written; `import --from-export` refuses a header asking Argon2id for more than 512 MiB (was 1 GiB).

@@ -35,3 +35,15 @@ func TestIsEventPollerProbesEpoll(t *testing.T) {
 		t.Error("a pipe was taken for an epoll descriptor")
 	}
 }
+
+// terminalFD opens a pseudo-terminal; on Linux the /dev/ptmx side already
+// answers as a terminal.
+func terminalFD(t *testing.T) (int, bool) {
+	t.Helper()
+	f, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
+	if err != nil {
+		return 0, false
+	}
+	t.Cleanup(func() { f.Close() })
+	return int(f.Fd()), true
+}

@@ -89,12 +89,11 @@ func TestValueFDKindRefusesATerminalButNotDevNull(t *testing.T) {
 	if !valueFDKindOK(int(null.Fd())) {
 		t.Error("/dev/null was refused")
 	}
-	tty, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
-	if err != nil {
-		t.Skipf("no pseudo-terminal to test with: %v", err)
+	tty, ok := terminalFD(t)
+	if !ok {
+		t.Skip("no pseudo-terminal to test with on this platform")
 	}
-	defer tty.Close()
-	if valueFDKindOK(int(tty.Fd())) {
+	if valueFDKindOK(tty) {
 		t.Error("a terminal was accepted")
 	}
 }

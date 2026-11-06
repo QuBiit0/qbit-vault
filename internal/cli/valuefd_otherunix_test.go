@@ -5,3 +5,5 @@ package cli
 import "testing"
 
 func pollerFD(*testing.T) (int, bool) { return 0, false }
+
+func terminalFD(*testing.T) (int, bool) { return 0, false }

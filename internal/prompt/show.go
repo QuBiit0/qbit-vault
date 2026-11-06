@@ -62,3 +62,15 @@ func (b *tty) Show(title, text string) error {
 		return nil
 	})
 }
+
+// splitShown separates the explanation from the code in a shown text: the
+// code is the last paragraph (after the last blank line); a text with one
+// paragraph is all code.
+func splitShown(text string) (intro, code string) {
+	text = strings.TrimRight(text, "\n")
+	i := strings.LastIndex(text, "\n\n")
+	if i < 0 {
+		return "", text
+	}
+	return strings.TrimRight(text[:i], "\n"), strings.TrimLeft(text[i:], "\n")
+}

@@ -111,8 +111,12 @@ func NewClient(server, caFile string) (*Client, error) {
 		return nil, err
 	}
 	origin := u.Scheme + "://" + u.Host
-	return &Client{base: origin, origin: origin, http: &http.Client{Transport: tr, Timeout: 30 * time.Second}}, nil
+	return &Client{base: origin, origin: origin, http: &http.Client{Transport: tr, Timeout: 30 * time.Second, CheckRedirect: noRedirect}}, nil
 }
+
+// noRedirect stops the client at the first 3xx answer: a sealed body is only
+// ever sent to the configured server, and the answer is an ErrUnreachable.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func (c *Client) call(ctx context.Context, method, path string, in any, out any, hdr ...string) (int, error) {
 	var body io.Reader
@@ -139,6 +143,9 @@ func (c *Client) call(ctx context.Context, method, path string, in any, out any,
 		return 0, ErrUnreachable
 	}
 	defer res.Body.Close()
+	if res.StatusCode >= 300 && res.StatusCode < 400 && res.StatusCode != http.StatusNotModified {
+		return res.StatusCode, ErrUnreachable
+	}
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 16<<20))
 	if res.StatusCode == http.StatusNotModified {
 		return res.StatusCode, nil

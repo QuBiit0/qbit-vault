@@ -569,6 +569,8 @@ type approveBody struct {
 
 const warnApproveRoster = "warning: the new device was approved on the server but this vault could not record it in the roster; check 'qbit-vault remote devices'"
 
+const warnApproveSync = "warning: the new device was approved, but this vault could not sync afterwards; run 'qbit-vault remote sync'"
+
 func newRemoteApprove(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "approve",
@@ -658,25 +660,27 @@ func newRemoteApprove(g *globals) *cobra.Command {
 			}
 			entry := merge.Device{Label: label, SignPub: b64(keys.SignPub), BoxPub: b64(keys.BoxPub), AddedAt: nowUTC(), AddedBy: "pairing"}
 			// The server accepted: the new device can finish joining whatever
-			// happens here, so the code is shown either way.
+			// happens next, so the code is shown first and nothing after it
+			// is an error.
 			g.auditRemote(cmd, "approved "+keys.DeviceID)
-			if err := s.v.EditRoster(func(r map[string]merge.Device) { r[keys.DeviceID] = entry }); err != nil {
-				fmt.Fprintln(cmd.ErrOrStderr(), warnApproveRoster)
-			} else if _, err := g.syncRound(ctx, s, c, me.id); err != nil {
-				var ce codedError
-				if !errors.As(err, &ce) || ce.code != "remote_unreachable" {
-					return err
-				}
-				fmt.Fprintln(cmd.ErrOrStderr(), "warning: not synced (server unreachable); will retry")
-			}
-
 			eph, err := remote.EnvelopeEphPub(env)
 			if err != nil {
 				return err
 			}
 			conf := remote.ConfirmationCode(remote.Subkeys(s.key).Pairing, code, keys.DeviceID, eph)
-			if err := show.Show("Confirmation code", "Type this code on the new device.\n\n"+conf+"\n"); err != nil {
-				return userFail(err)
+			showErr := show.Show("Confirmation code", "Type this code on the new device.\n\n"+conf+"\n")
+			if err := s.v.EditRoster(func(r map[string]merge.Device) { r[keys.DeviceID] = entry }); err != nil {
+				fmt.Fprintln(cmd.ErrOrStderr(), warnApproveRoster)
+			} else if _, err := g.syncRound(ctx, s, c, me.id); err != nil {
+				var ce codedError
+				if errors.As(err, &ce) && ce.code == "remote_unreachable" {
+					fmt.Fprintln(cmd.ErrOrStderr(), "warning: not synced (server unreachable); will retry")
+				} else {
+					fmt.Fprintln(cmd.ErrOrStderr(), warnApproveSync)
+				}
+			}
+			if showErr != nil {
+				return userFail(showErr)
 			}
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), approveBody{OK: true, Approved: true, Device: keys.DeviceID, Label: label})

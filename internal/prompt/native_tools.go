@@ -36,7 +36,7 @@ func (zenityTool) build(path string, d dialog) command {
 			args = append(args, picked, fmt.Sprint(i+1), noDash(o))
 		}
 	case dialogConfirm:
-		args = []string{"--question", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--ok-label=Confirm", "--cancel-label=Decline"}
+		args = []string{"--question", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--ok-label=Confirm", "--cancel-label=Decline", "--default-cancel"}
 	}
 	return command{Path: path, Args: args}
 }
@@ -92,12 +92,29 @@ func (kdialogTool) build(path string, d dialog) command {
 			args = append(args, fmt.Sprint(i+1), rich(noDash(o)), state)
 		}
 	case dialogConfirm:
-		args = append(args, "--yes-label", "Confirm", "--no-label", "Decline", "--yesno", rich(d.text))
+		// A --yesno cannot default to no, and Escape answers like its no
+		// button, so a confirmation is a list with Decline preselected.
+		args = append(args, "--radiolist", rich(d.text), "1", "Decline", "on", "2", "Confirm", "off")
 	}
 	return command{Path: path, Args: args}
 }
 
+// classify reads a confirmation from the list: only Confirm chosen and OK
+// pressed confirms; Enter on the preselected Decline, Escape, closing the
+// window and any other answer decline.
 func (kdialogTool) classify(d dialog, r result) status {
+	if d.kind == dialogConfirm {
+		switch r.Exit {
+		case 0:
+			if i, ok := parseChoice(r.Stdout, 2); ok && i == 1 {
+				return statusOK
+			}
+			return statusNo
+		case 1:
+			return statusNo
+		}
+		return statusFail
+	}
 	if r.Exit == 2 {
 		return statusCancel
 	}

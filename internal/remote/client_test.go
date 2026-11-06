@@ -268,3 +268,28 @@ func TestClientDistinguishesDeviceRevoked(t *testing.T) {
 		})
 	}
 }
+
+// C-S10: a redirect is an error, never followed: sealed bodies go only to the
+// configured server.
+func TestClientNeverFollowsRedirects(t *testing.T) {
+	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect, http.StatusFound} {
+		var hits int
+		other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+		first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, other.URL+r.URL.Path, status)
+		}))
+		c, err := remote.NewClient(first.URL, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = c.ApprovePairing(ctx, "ABCD-EFGH", []byte("TESTSECRET_sealed"))
+		if !errors.Is(err, remote.ErrUnreachable) {
+			t.Errorf("%d: err = %v, want ErrUnreachable", status, err)
+		}
+		if hits != 0 {
+			t.Errorf("%d: the redirect target received %d requests", status, hits)
+		}
+		first.Close()
+		other.Close()
+	}
+}

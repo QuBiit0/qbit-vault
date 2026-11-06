@@ -14,8 +14,8 @@
 // rest of the user's file stays byte for byte as it was.
 //
 // The rich path (tools, hooks, masked input) is the qbit-vault-pi extension.
-// Installing it needs the network, so init never does it: it prints
-// ExtensionInstallCommand for the user to run (invariant 8, spec S5).
+// Installing it needs the network, so init never does it, and while the
+// package is unpublished init does not print its command either.
 // Nothing here reads a secret.
 package pi
 
@@ -36,8 +36,9 @@ import (
 // Name is the host name used by --agents, state.json and doctor.
 const Name = "pi"
 
-// ExtensionInstallCommand is what init prints for the user to run. It is
-// never executed by qbit-vault.
+// ExtensionInstallCommand is what init will print for the user to run once
+// the extension is published. It is not printed today and never executed by
+// qbit-vault.
 const ExtensionInstallCommand = "pi install npm:qbit-vault-pi"
 
 const (

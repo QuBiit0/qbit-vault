@@ -14,6 +14,14 @@ Full read-only audit before sharing QBit Vault with the community (five parallel
   - S4.4 (C-S13) An invite is claimed atomically: two concurrent `POST /v1/accounts` with the same code create exactly one account; the other gets the existing invalid-invite answer.
   - S4.5 (C-S02) Expired nonces, tokens and pending pairings are removed periodically (and pairing files on disk); pending pairings are capped (1000 at once, then 429); the rate limiter evicts expired entries instead of clearing every counter when it grows.
   - S4.6 Tests for every rule (RED first), docs (`docs/REMOTE_SYNC.md` § 10, `deploy/README.md`, `deploy/compose.yaml` comment), CHANGELOG [Unreleased]. Nothing changes for the client or for local-only users.
+- S5. Step 2, visible bugs (beta.11), exactly:
+  - S5.1 (V1) The Windows show dialog (recovery key, pairing/confirmation code) always shows the whole code. The text's last paragraph (after the last blank line) is the code: it goes alone in the read-only, selectable monospace box; the paragraphs before it go in the normal label above. The box is tall enough for its content (measured, not counted by logical lines). A text with one paragraph puts it all in the box. Render the dialog with the real builder and look at the screenshot (key fully visible) before calling it done.
+  - S5.2 (D-B1) On every backend Enter (the default button) on a yes/no confirmation means Decline: zenity gets `--default-cancel`; kdialog shows `Decline` on its default (yes) button and `Confirm` on the other, and the answer is read accordingly; macOS and Windows already default to Decline. Tests on the built argv and the result mapping.
+  - S5.3 (E-B1) `init` and `sync` no longer print `pi install npm:qbit-vault-pi` (and `--json` no longer carries `install_command`) while the extension is unpublished; the constant may stay for later. Docs (INSTALL.md § init step 6, AGENT_INTEGRATIONS.md) say the extension is not published yet, without a command to copy.
+  - S5.4 (E-B2) SECURITY.md "Supported versions": the latest release is supported; older betas are not.
+  - S5.5 (C-S10) The sync client never follows redirects: a 3xx answer is an error (`remote_unreachable` class, fixed message), the body is never sent to another URL. Test with an httptest server that answers 307/308 to a second server that must receive nothing.
+  - S5.6 (C-S06) `remote approve`: once the server accepted the approval, the confirmation code is shown first; a failure of the roster write or of the following sync round is then a warning on stderr (exit 0), never an error that hides the code.
+  - S5.7 Tests RED first for each rule, docs and CHANGELOG [Unreleased] in the same change.
 
 ## How to read the findings
 
@@ -144,9 +152,13 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | --- | --- | --- | --- | --- |
 | LP0 | S1, S2 | audits (5 explorers) + visual check | (this document) | done |
 | LP1 | S4 | worker | | done, awaiting review |
-| LP2-LP7 | S1-S3 | plan steps 2-7 | | pending |
+| LP2 | S5 | worker + parent correction | ab worker commit + 00799f7 (kdialog) | done, beta.11 |
+| LP3-LP7 | S1-S3 | plan steps 3-7 | | pending |
 
 ## Log
 
 - L1. User request verbatim in S1 (owner away; "tomate todo el tiempo"). Five read-only audits ran in parallel (secret boundary, crypto/storage, sync/server, dialogs/terminal, install/CLI/docs), plus eight Windows dialogs rendered with the real builders and edge cases. P0 items were re-checked against the code: C-S01 (`server.go:198-202` takes the first XFF entry), D-B1 (zenity `--question` and kdialog `--yesno` default to Confirm), C-S10 (`client.go:114` http.Client without CheckRedirect), A-F1 (`scriptOf` stops at `-o pipefail`), E-B1 (`pi.go:41`), V1 (screenshot: the key is cut off). No code changed.
 - L2. Owner chose installers from each release (S3) and asked to continue the plan (S4). Step 1 started on branch fix/server-hardening.
+- L3. Step 1 merged (PR #22); live server healthy after redeploy. QBV_SERVER_TRUST_PROXY kept at 1 behind Cloudflare + Traefik (Traefik rewrites the header unless it trusts Cloudflare). Step 2 started on branch fix/visible-bugs.
+- L3. LP2 (S5.1-S5.7) done by worker, not committed. RED first for each rule, then GREEN. S5.1 `splitShown` + `psShowText` (code alone in the box, height from `TextRenderer.MeasureText`; screenshot of the real builder at 1440-style render shows the whole key). S5.2 zenity `--default-cancel`, kdialog labels swapped (`Decline` on yes) and `classify` reads confirmations swapped. S5.3 `init` no longer prints or carries the Pi install command (constant kept); docs say the extension is unpublished. S5.4 SECURITY.md. S5.5 `CheckRedirect: http.ErrUseLastResponse` and a 3xx maps to `ErrUnreachable`. S5.6 `remote approve` shows the code right after the server accepts; roster and sync failures are warnings (new `warnApproveSync`). Left for the owner: `e2e/hosts/scenario.sh:99` still expects the old install line (outside this task's edit surface); `docs/GENTLE_SHELL_EXTENSION.md:5`, `docs/ROADMAP.md:76`, `docs/TESTING.md:43` still mention the printed line.
+- L4. Step 2 review: a CRITICAL finding (the kdialog label swap made Escape/close confirm) was corrected in 00799f7: kdialog confirmations are a list with Decline preselected. Review approved after targeted validation. Released as 0.1.0-beta.11.

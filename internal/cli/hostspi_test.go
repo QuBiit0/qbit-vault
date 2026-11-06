@@ -12,7 +12,8 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/hosts/pi"
 )
 
-const piInstallLine = "host pi: to add the extension, run: pi install npm:qbit-vault-pi\n"
+// The extension is not published yet: init prints no command for it (E-B1).
+const piInstallLine = ""
 
 func noPiEnv(string) string { return "" }
 
@@ -20,12 +21,13 @@ func piHost(uh string) *pi.Adapter {
 	return pi.NewWithExe(filepath.Join(uh, "bin", "qbit-vault")).WithLookPath(noClaudeBinary).WithGetenv(noPiEnv)
 }
 
-func TestInitRegistersPiAndPrintsTheExtensionCommand(t *testing.T) {
+func TestInitRegistersPiAndPrintsNoExtensionCommand(t *testing.T) {
 	uh := isolateUserHome(t)
 	w := newBareWorld(t)
 	withHosts(t, piHost(uh))
 	code, out, errs := w.run("", "init", "--agents", "pi")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n"+piInstallLine) || !strings.HasSuffix(out, "healthy\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n") || !strings.HasSuffix(out, "healthy\n") ||
+		strings.Contains(out, "pi install") || strings.Contains(out, "extension") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if s := doctorStatus(out, "host.pi.mcp"); s != "ok" {
@@ -39,11 +41,10 @@ func TestInitRegistersPiAndPrintsTheExtensionCommand(t *testing.T) {
 	}
 	noFixtures(t, "pi config", cfg+readFile(t, w.home, "state.json"))
 
-	// Second run: nothing changes, and the command is still shown (the
-	// extension is not something init can verify).
+	// Second run: nothing changes and still no extension command.
 	state, backups := readFile(t, w.home, "state.json"), dirNames(t, filepath.Join(w.home, "backups"))
 	code, out, errs = w.run("", "init", "--agents", "pi")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: up to date\n"+piInstallLine) {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: up to date\n") || strings.Contains(out, "pi install") {
 		t.Fatalf("second run: code=%d out=%q err=%q", code, out, errs)
 	}
 	if readFile(t, uh, ".pi", "agent", "mcp.json") != cfg || readFile(t, w.home, "state.json") != state ||
@@ -64,7 +65,7 @@ func TestInitRegistersPiAndPrintsTheExtensionCommand(t *testing.T) {
 	}
 }
 
-func TestInitPiJSONCarriesTheExtensionCommand(t *testing.T) {
+func TestInitPiJSONCarriesNoExtensionCommand(t *testing.T) {
 	uh := isolateUserHome(t)
 	w := newBareWorld(t)
 	withHosts(t, piHost(uh))
@@ -73,18 +74,17 @@ func TestInitPiJSONCarriesTheExtensionCommand(t *testing.T) {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	var body struct {
-		Hosts []struct {
-			Name           string `json:"name"`
-			InstallCommand string `json:"install_command"`
-		} `json:"hosts"`
+		Hosts []map[string]any `json:"hosts"`
 	}
-	if err := json.Unmarshal([]byte(out), &body); err != nil || len(body.Hosts) != 1 ||
-		body.Hosts[0].Name != "pi" || body.Hosts[0].InstallCommand != "pi install npm:qbit-vault-pi" {
+	if err := json.Unmarshal([]byte(out), &body); err != nil || len(body.Hosts) != 1 || body.Hosts[0]["name"] != "pi" {
 		t.Fatalf("json: %v\n%s", err, out)
+	}
+	if _, ok := body.Hosts[0]["install_command"]; ok || strings.Contains(out, "pi install") {
+		t.Fatalf("json carries an extension command:\n%s", out)
 	}
 }
 
-func TestInitDoesNotPrintTheExtensionCommandForOtherHostsOrFailures(t *testing.T) {
+func TestInitDoesNotPrintTheExtensionCommandForOtherHosts(t *testing.T) {
 	uh := isolateUserHome(t)
 	w := newBareWorld(t)
 	withHosts(t, claudeHost(uh), codexHost(uh))
@@ -122,7 +122,7 @@ func TestInitDetectsPiByItsConfigDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs = w.run("", "init")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n"+piInstallLine) {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n") || strings.Contains(out, "pi install") {
 		t.Fatalf("installed: code=%d out=%q err=%q", code, out, errs)
 	}
 }

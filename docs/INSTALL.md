@@ -161,7 +161,7 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 3 | Empty vault | Write `vault.enc` with an empty body. **Never** reads `process.env` or any `.env` | no |
 | 4 | Detect hosts | `claude-code` (`~/.claude/` or a `claude` binary on `PATH`), `codex` (`~/.codex/` or `codex`), `pi` (the Pi agent directory, `~/.pi/`, or a `pi` or `gentle-shell` binary); `--agents` names hosts explicitly. There is no OpenCode adapter (dropped, `ROADMAP.md`) | no |
 | 5 | Register hosts | Per `AGENT_INTEGRATIONS.md`, receipts to `state.json`. Claude Code: `mcpServers.qbit-vault` in `~/.claude.json`, four hooks and the `Read`/`Edit` deny rules for the vault home in `~/.claude/settings.json`. Codex: the `[mcp_servers.qbit-vault]` table in `~/.codex/config.toml`. Pi / Gentle Shell: `mcpServers.qbit-vault` in `<Pi agent dir>/mcp.json` (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`). Every host also gets the `qbit-vault` agent skill: `~/.claude/skills/qbit-vault/SKILL.md` for Claude Code, one shared `~/.agents/skills/qbit-vault/SKILL.md` for Codex and Pi (`AGENT_INTEGRATIONS.md` § Agent skill) | no |
-| 6 | Extension | Pi: `init` **prints** `host pi: to add the extension, run: pi install npm:qbit-vault-pi` for you to run and never runs it, because installing needs the network (AGENTS.md invariant 8). The extension itself does not exist yet (Phase 4); until it does, Pi uses the MCP entry from step 5 | no |
+| 6 | Extension | Pi: the extension is not published yet (Phase 4), so `init` prints no install command for it and never runs one (installing needs the network, AGENTS.md invariant 8); until it is published, Pi uses the MCP entry from step 5 | no |
 | 7 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 
 Total questions on a machine with a keychain: **zero**. Not built: verifying a binary signature, a separate check that other tools' deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`), and a "restart your agent" next-steps message.
@@ -175,7 +175,6 @@ vault initialized at /home/ana/.qbit-vault (keychain: secret-service)
 host claude-code: registered (mcp, hooks, deny, skill)
 host codex: registered (mcp, skill)
 host pi: registered (mcp)
-host pi: to add the extension, run: pi install npm:qbit-vault-pi
 ok    vault                    unlocked (keychain: secret-service)
 ok    permissions              owner-only
 ok    host.claude-code.mcp     registered
@@ -244,7 +243,7 @@ From then on every change syncs by itself, and machines that were offline catch 
 `uninstall` is a user command: it asks in the prompt backend and the agent's shell cannot run it.
 
 1. For each host recorded in `state.json`, in reverse step order: if the file is still exactly what qbit-vault wrote, restore the snapshot taken at registration byte for byte (or delete a file qbit-vault created); if the user changed it since, remove only the entries qbit-vault added and keep everything else. The host is forgotten in `state.json` only when this succeeded; otherwise it stays, the command exits 1 and you can run it again.
-2. The Pi extension (Phase 4, not built yet) would be installed by you (`pi install npm:qbit-vault-pi`), so you would remove it the same way (`pi remove`); `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from your `go/bin` directory.
+2. The Pi extension is not published yet (Phase 4); once it is, you install and remove it yourself. `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from your `go/bin` directory.
 3. Leave `~/.qbit-vault/` intact. With `--purge` you type the literal word `purge` instead of confirming; after every host reverted it deletes the keychain item and the directory, and nothing else. `uninstall` never touches the sync server, so `--purge` refuses while this vault syncs: run `qbit-vault remote logout` (or revoke the device from another machine) first.
 
 ## Self-update (planned)

@@ -221,6 +221,48 @@ func TestApproveShowsTheCodeWhenTheRosterWriteFails(t *testing.T) {
 	noFixtures(t, "stderr", errs)
 }
 
+// C-S06: the server accepted the approval, so the confirmation code is shown
+// even when the round after it fails; the failure is a warning, exit 0.
+func TestApproveShowsTheCodeWhenTheFollowingSyncFails(t *testing.T) {
+	ss := newSyncServer(t)
+	a := newWorld(t)
+	a.register(ss)
+	nk := make([]byte, 32)
+	_, _ = rand.Read(nk)
+	nc, _ := remote.NewClient(ss.ts.URL, "")
+	newID := strings.Repeat("e", 32)
+	p, err := nc.CreatePairing(context.Background(), newID, remote.DeviceFromSecret(secret.New("dk", nk)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved := false
+	ss.proxy(func(w http.ResponseWriter, r *http.Request) bool {
+		if strings.HasPrefix(r.URL.Path, "/v1/pairings/") && r.Method != "GET" {
+			approved = true
+			return false
+		}
+		if approved && r.URL.Path == "/v1/vault" {
+			w.WriteHeader(500)
+			_, _ = io.WriteString(w, "not json")
+			return true
+		}
+		return false
+	})
+	f := answers(val(p.Code), val("Laptop Y"), yes(), no())
+	asBackend(t, keepBackend{f})
+	code, out, errs := a.run("", "remote", "approve")
+	if code != exitcode.OK || out != "approved Laptop Y ("+newID+")\n" || !strings.HasPrefix(errs, "warning: ") || strings.Count(errs, "\n") != 1 {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if !approved {
+		t.Fatal("the approval never reached the server")
+	}
+	if confirmationIn(f) == "" {
+		t.Fatal("the confirmation code was not shown")
+	}
+	noFixtures(t, "stderr", errs)
+}
+
 func TestPushWarningAfterConflictRetriesNamesTheConflict(t *testing.T) {
 	ss, _, a, _ := syncPair(t)
 	var seen atomic.Int32

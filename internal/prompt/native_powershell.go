@@ -65,7 +65,13 @@ func psPrelude(d dialog) string {
 	b.WriteString("$ErrorActionPreference = 'Stop'\n")
 	b.WriteString("function Dec($s) { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($s)) }\n")
 	fmt.Fprintf(&b, "$title = Dec %s\n", psString(d.title))
-	fmt.Fprintf(&b, "$text = Dec %s\n", psString(d.text))
+	if d.kind == dialogShow {
+		intro, code := splitShown(d.text)
+		fmt.Fprintf(&b, "$text = Dec %s\n", psString(intro))
+		fmt.Fprintf(&b, "$code = Dec %s\n", psString(code))
+	} else {
+		fmt.Fprintf(&b, "$text = Dec %s\n", psString(d.text))
+	}
 	fmt.Fprintf(&b, "$okLabel = Dec %s\n", psString(okLabel))
 	fmt.Fprintf(&b, "$cancelLabel = Dec %s\n", psString(cancelLabel))
 	fmt.Fprintf(&b, "$opts = @(%s)\n", strings.Join(opts, ", "))
@@ -164,10 +170,12 @@ $tb.MaxLength = 70000
 $p.Controls.Add($tb)
 `
 
-// psShowText puts the text of a show dialog (a recovery key, a pairing code)
-// in a read-only text box instead of the label, so it can be selected and
-// copied rather than typed by hand.
-const psShowText = `$p.Controls.Remove($l)
+// psShowText puts the code of a show dialog (a recovery key, a pairing code)
+// in a read-only text box so it can be selected and copied rather than typed
+// by hand; the explanation stays in the label above it. The box is as tall as
+// the wrapped code measures, so no part of it is cut off; past 320 px it
+// scrolls.
+const psShowText = `if ($text.Length -eq 0) { $p.Controls.Remove($l) }
 $sel = New-Object System.Windows.Forms.TextBox
 $sel.Multiline = $true
 $sel.ReadOnly = $true
@@ -179,8 +187,12 @@ $sel.BackColor = Col '#000204'
 $sel.ForeColor = Col '#C7D9DE'
 $sel.Font = New-Object System.Drawing.Font('Consolas', 11)
 $sel.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
-$sel.Text = $text.Replace([string][char]10, [System.Environment]::NewLine)
-$sel.Height = [Math]::Min(320, 22 * $sel.Lines.Count + 12)
+$sel.Text = $code.Replace([string][char]10, [System.Environment]::NewLine)
+$mw = New-Object System.Drawing.Size(496, 100000)
+$mf = [System.Windows.Forms.TextFormatFlags]::WordBreak -bor [System.Windows.Forms.TextFormatFlags]::NoPadding
+$mh = [System.Windows.Forms.TextRenderer]::MeasureText($sel.Text, $sel.Font, $mw, $mf).Height
+$sel.Height = [Math]::Min(320, $mh + 24)
+if ($mh + 24 -gt 320) { $sel.ScrollBars = 'Vertical' }
 $sel.SelectionStart = 0
 $p.Controls.Add($sel)
 `

@@ -334,7 +334,7 @@ func TestZenityArgv(t *testing.T) {
 			"--column=Pick", "--column=Index", "--column=Option", "--hide-column=2", "--print-column=2",
 			"FALSE", "1", "once", "TRUE", "2", " -danger", "FALSE", "3", "deny",
 		}},
-		{"confirm", qd, []string{"--question", "--no-markup", "--title=" + qd.title, "--text=Remove X?", "--ok-label=Confirm", "--cancel-label=Decline"}},
+		{"confirm", qd, []string{"--question", "--no-markup", "--title=" + qd.title, "--text=Remove X?", "--ok-label=Confirm", "--cancel-label=Decline", "--default-cancel"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestKdialogArgv(t *testing.T) {
 	}{
 		{"secret", sd, []string{"--title", sd.title, "--password", strings.ReplaceAll(sd.text, "\n", "<br>")}},
 		{"choose", cd, []string{"--title", cd.title, "--radiolist", "Which scope?", "1", "once", "off", "2", " -danger", "on", "3", "deny", "off"}},
-		{"confirm", qd, []string{"--title", qd.title, "--yes-label", "Confirm", "--no-label", "Decline", "--yesno", "Remove X?"}},
+		{"confirm", qd, []string{"--title", qd.title, "--radiolist", "Remove X?", "1", "Decline", "on", "2", "Confirm", "off"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -422,6 +422,41 @@ func TestArgvToolsKeepHostileTextInOneElement(t *testing.T) {
 	}
 }
 
+// D-B1: Enter on a confirmation declines, as on macOS and Windows. Zenity
+// has --default-cancel. Kdialog's yes/no dialog cannot default to no, and
+// Escape or closing it answers like its no button, so a confirmation is a
+// two-item list with Decline preselected: only choosing Confirm and pressing
+// OK confirms; Enter, Escape, closing the window or empty output decline.
+func TestKdialogConfirmDefaultIsDecline(t *testing.T) {
+	qd := confirmDialog("q")
+	k := kdialogTool{}
+	for _, tt := range []struct {
+		name string
+		r    result
+		want status
+	}{
+		{"Enter keeps Decline", result{Exit: 0, Stdout: []byte("1\n")}, statusNo},
+		{"Confirm chosen", result{Exit: 0, Stdout: []byte("2\n")}, statusOK},
+		{"Escape or close", result{Exit: 1}, statusNo},
+		{"OK with no output", result{Exit: 0}, statusNo},
+		{"unknown answer", result{Exit: 0, Stdout: []byte("3")}, statusNo},
+		{"helper failure", result{Exit: 5}, statusFail},
+	} {
+		if got := k.classify(qd, tt.r); got != tt.want {
+			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		}
+	}
+	// Value dialogs keep kdialog's codes.
+	if k.classify(secretDialog(req), result{Exit: 0}) != statusOK || k.classify(secretDialog(req), result{Exit: 1}) != statusCancel {
+		t.Error("a value dialog changed codes")
+	}
+	// Zenity keeps its codes: --default-cancel changes the button, not the answer.
+	z := zenityTool{}
+	if z.classify(qd, result{Exit: 0}) != statusOK || z.classify(qd, result{Exit: 1}) != statusNo {
+		t.Error("zenity codes changed")
+	}
+}
+
 func TestZenityKdialogClassify(t *testing.T) {
 	for _, tl := range []tool{zenityTool{}, kdialogTool{}} {
 		sd, qd := secretDialog(req), confirmDialog("q")
@@ -431,7 +466,7 @@ func TestZenityKdialogClassify(t *testing.T) {
 		if tl.classify(sd, result{Exit: 1}) != statusCancel {
 			t.Errorf("%s: exit 1 on a value", tl.name())
 		}
-		if tl.classify(qd, result{Exit: 1}) != statusNo {
+		if tl.name() == "zenity" && tl.classify(qd, result{Exit: 1}) != statusNo {
 			t.Errorf("%s: exit 1 on a question", tl.name())
 		}
 		for _, code := range []int{255, -1, 127, 5} {
@@ -616,8 +651,10 @@ func TestNativeConfirm(t *testing.T) {
 	}{
 		{"zenity yes", zenityTool{}, result{Exit: 0}, true, nil},
 		{"zenity no", zenityTool{}, result{Exit: 1}, false, nil},
-		{"kdialog yes", kdialogTool{}, result{Exit: 0}, true, nil},
-		{"kdialog no", kdialogTool{}, result{Exit: 1}, false, nil},
+		// kdialog: a list with Decline preselected; only "2" (Confirm) confirms.
+		{"kdialog confirm", kdialogTool{}, ok("2\n"), true, nil},
+		{"kdialog enter keeps decline", kdialogTool{}, ok("1\n"), false, nil},
+		{"kdialog escape", kdialogTool{}, result{Exit: 1}, false, nil},
 		{"osascript yes", osascriptTool{}, ok("Confirm\n"), true, nil},
 		{"osascript decline", osascriptTool{}, result{Exit: 1, Stderr: []byte("User canceled. (-128)")}, false, nil},
 		{"powershell yes", powershellTool{}, result{Exit: 0}, true, nil},

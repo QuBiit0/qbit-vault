@@ -15,7 +15,7 @@ import (
 func TestManageReplaceGrantsInTheSameDecision(t *testing.T) {
 	w := newWorld(t)
 	w.mustRun("TESTSECRET_old\n", "set", "A", "--stdin")
-	f := withBackend(t, answers(pick(1), val("TESTSECRET_new")))
+	f := withBackend(t, answers(pick(0), val("TESTSECRET_new")))
 	code, m, out := w.broker("manage", manageReq(w.outside, `"action":"replace","name":"A","layer":"global"`))
 	if code != exitcode.OK || out != `{"ok":true,"applied":true,"action":"replace","name":"A","layer":"global"}`+"\n" {
 		t.Fatalf("code=%d m=%v out=%s", code, m, out)
@@ -24,10 +24,10 @@ func TestManageReplaceGrantsInTheSameDecision(t *testing.T) {
 		t.Fatalf("dialogs = %+v", f.Calls)
 	}
 	q := f.Calls[0]
-	if q.Q != "The agent proposes to replace the value of A (all projects). Why: "+manageReason || q.Default != 1 {
+	if q.Q != "The agent proposes to replace the value of A (all projects). Why: "+manageReason || q.Default != 0 {
 		t.Fatalf("question = %q default %d", q.Q, q.Default)
 	}
-	want := []string{"Replace, then Once: only the next command", "Replace, then Session: until the agent restarts (max 12h)", "Replace only: ask me again before it is used", "Don't replace"}
+	want := []string{"Replace, then Once: only the next command", "Replace only: ask me again before it is used", "Don't replace"}
 	if strings.Join(q.Options, "|") != strings.Join(want, "|") {
 		t.Fatalf("options = %q", q.Options)
 	}
@@ -47,7 +47,7 @@ func TestManageReplaceGrantsInTheSameDecision(t *testing.T) {
 func TestManageReplaceOnlyKeepsNoPermission(t *testing.T) {
 	w := newWorld(t)
 	w.mustRun("TESTSECRET_old\n", "set", "A", "--stdin")
-	withBackend(t, answers(pick(2), val("TESTSECRET_new")))
+	withBackend(t, answers(pick(1), val("TESTSECRET_new")))
 	if code, m, _ := w.broker("manage", manageReq(w.outside, `"action":"replace","name":"A","layer":"global"`)); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
@@ -65,7 +65,7 @@ func TestManageReplaceDeclined(t *testing.T) {
 	w := newWorld(t)
 	w.mustRun("TESTSECRET_old\n", "set", "A", "--stdin")
 	before := w.snapshot()
-	f := withBackend(t, answers(pick(3)))
+	f := withBackend(t, answers(pick(2)))
 	code, m, _ := w.broker("manage", manageReq(w.outside, `"action":"replace","name":"A","layer":"global"`))
 	if code != exitcode.Refusal || refusalType(m) != "user_declined" || len(f.Calls) != 1 {
 		t.Fatalf("code=%d m=%v calls=%d", code, m, len(f.Calls))

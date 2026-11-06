@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,11 +76,17 @@ func ttlText(d time.Duration) string {
 	return s
 }
 
+// agentScopes is what an agent's permission question offers: once, and
+// always in this project where the record allows it. A session grant is not
+// offered there: a restarted agent is a new session, so it kept asking again.
+func agentScopes(scopes []grants.Scope) []grants.Scope {
+	return slices.DeleteFunc(slices.Clone(scopes), func(s grants.Scope) bool { return s == grants.ScopeSession })
+}
+
 // scopeLabels describes scopes for a menu and returns the index preselected.
 // A scope the user typed on their own command line (userChose) wins; else
-// session when it is offered, so one approval covers the whole session; else
-// the proposed scope; else 0 (a sensitive record offers once only).
-func scopeLabels(session string, scopes []grants.Scope, proposed grants.Scope, userChose bool) ([]string, int) {
+// session when it is offered (set --grant only); else 0, once, the narrowest.
+func scopeLabels(scopes []grants.Scope, proposed grants.Scope, userChose bool) ([]string, int) {
 	opts := make([]string, len(scopes))
 	at := map[grants.Scope]int{}
 	for i, sc := range scopes {
@@ -90,16 +97,13 @@ func scopeLabels(session string, scopes []grants.Scope, proposed grants.Scope, u
 		case grants.ScopeSession:
 			opts[i] = "Session: until the agent restarts (max " + ttlText(grants.DefaultSessionTTL) + ")"
 		default:
-			opts[i] = "Project: always in this project, until you revoke it"
+			opts[i] = "Always: in this project, until you revoke it"
 		}
 	}
 	if i, ok := at[proposed]; ok && userChose {
 		return opts, i
 	}
 	if i, ok := at[grants.ScopeSession]; ok {
-		return opts, i
-	}
-	if i, ok := at[proposed]; ok {
 		return opts, i
 	}
 	return opts, 0
@@ -186,7 +190,7 @@ func (g *globals) captureValue(ask prompt.Backend, name string, layer vault.Laye
 		return raw, "", nil
 	}
 	scopes := g.allowedScopes(name, layer, sensitive, scopeOrder)
-	opts, def := scopeLabels(g.Session, scopes, flagScope, flagScope != "")
+	opts, def := scopeLabels(scopes, flagScope, flagScope != "")
 	opts = append(opts, "No, just save the value")
 	i, err := ask.Choose(fmt.Sprintf("Allow agents to use %s (%s) right away?", name, whereText(layer)), opts, def)
 	if err != nil {

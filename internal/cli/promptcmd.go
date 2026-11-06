@@ -240,7 +240,7 @@ func newPromptCmd(g *globals) *cobra.Command {
 				recordID = ""
 			}
 
-			opts, def := scopeLabels(g.Session, allowed, "", false)
+			opts, def := scopeLabels(allowed, "", false)
 			opts = append(opts, denyOption)
 			i, err := ask.Choose(allowQuestion([]string{name + " (" + whereText(layerChoice) + ")"}, reason), opts, def)
 			if err != nil {

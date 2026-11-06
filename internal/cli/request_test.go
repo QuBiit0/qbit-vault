@@ -20,9 +20,9 @@ func shape(out string) string { return norm(out) }
 
 func TestRequestNewSecretOutsideRepo(t *testing.T) {
 	w := newWorld(t)
-	f := withBackend(t, answers(val("TESTSECRET_request_value"), pick(1)))
+	f := withBackend(t, answers(val("TESTSECRET_request_value"), pick(0)))
 	code, m, out := w.broker("request", reqFor(w.outside, `,"suggested_scope":"session"`))
-	want := `{"ok":true,"refs":[{"name":"A","ref":"secret://A","layer":"global"}],"ref":"secret://A","layer":"global","grant":{"scope":"session","expires_at":"TS"}}` + "\n"
+	want := `{"ok":true,"refs":[{"name":"A","ref":"secret://A","layer":"global"}],"ref":"secret://A","layer":"global","grant":{"scope":"once","expires_at":"TS"}}` + "\n"
 	if code != exitcode.OK || shape(out) != want {
 		t.Fatalf("code=%d out=%s m=%v", code, out, m)
 	}
@@ -33,7 +33,7 @@ func TestRequestNewSecretOutsideRepo(t *testing.T) {
 	if req.Name != "A" || req.Reason != reqReason || req.Session != brokerSession || req.Host != "pi" || req.Existing {
 		t.Fatalf("prompt request=%+v", req)
 	}
-	if f.Calls[1].Default != 1 || f.Calls[1].Q != "Allow the agent to use A (all projects)? Why: "+reqReason {
+	if f.Calls[1].Default != 0 || f.Calls[1].Q != "Allow the agent to use A (all projects)? Why: "+reqReason {
 		t.Fatalf("scope question=%+v", f.Calls[1])
 	}
 	if w.value("A") != "TESTSECRET_request_value" {
@@ -44,16 +44,16 @@ func TestRequestNewSecretOutsideRepo(t *testing.T) {
 	}
 	// The grant works for this session.
 	g := w.mustRun("", "--json", "--session", brokerSession, "grants")
-	if !strings.Contains(g, `"name":"A"`) || !strings.Contains(g, `"scope":"session"`) {
+	if !strings.Contains(g, `"name":"A"`) || !strings.Contains(g, `"scope":"once"`) {
 		t.Fatalf("grants=%s", g)
 	}
 }
 
 func TestRequestExistingSecretAsksGrantOnlyAndLooksTheSame(t *testing.T) {
 	w := newWorld(t)
-	withBackend(t, answers(val("TESTSECRET_first"), pick(1)))
+	withBackend(t, answers(val("TESTSECRET_first"), pick(0)))
 	_, _, first := w.broker("request", reqFor(w.outside, ""))
-	f := withBackend(t, answers(pick(1)))
+	f := withBackend(t, answers(pick(0)))
 	code, _, second := w.broker("request", reqFor(w.outside, ""))
 	if code != exitcode.OK || len(f.Calls) != 1 || f.Calls[0].Kind != "choose" {
 		t.Fatalf("code=%d calls=%+v", code, f.Calls)
@@ -159,12 +159,12 @@ const dbFields = `"fields":[{"name":"DB_HOST","kind":"text","label":"Host"},{"na
 func TestRequestSeveralFieldsInOnePrompt(t *testing.T) {
 	w := newWorld(t)
 	w.mustRun("TESTSECRET_user\n", "set", "DB_USER", "--stdin") // already stored: no box
-	f := withBackend(t, answers(val("db.internal"), val("TESTSECRET_db_password"), pick(1)))
+	f := withBackend(t, answers(val("db.internal"), val("TESTSECRET_db_password"), pick(0)))
 	code, _, out := w.broker("request", envelope("request", w.outside, dbFields+`,"reason":"run the shop-api migrations"`))
 	if code != exitcode.OK {
 		t.Fatalf("code=%d out=%s", code, out)
 	}
-	want := `{"ok":true,"refs":[{"name":"DB_HOST","ref":"secret://DB_HOST","layer":"global"},{"name":"DB_USER","ref":"secret://DB_USER","layer":"global"},{"name":"DB_PASSWORD","ref":"secret://DB_PASSWORD","layer":"global"}],"grant":{"scope":"session","expires_at":"TS"}}` + "\n"
+	want := `{"ok":true,"refs":[{"name":"DB_HOST","ref":"secret://DB_HOST","layer":"global"},{"name":"DB_USER","ref":"secret://DB_USER","layer":"global"},{"name":"DB_PASSWORD","ref":"secret://DB_PASSWORD","layer":"global"}],"grant":{"scope":"once","expires_at":"TS"}}` + "\n"
 	if shape(out) != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -292,19 +292,19 @@ func TestRequestShowsDescriptionsAndStoredFields(t *testing.T) {
 	}
 }
 
-// The user is asked once per 12h, not once per thing: session is the preselected
-// scope whatever the agent suggested, and the label shows the real duration.
-func TestRequestPreselectsSessionScope(t *testing.T) {
+// Three answers at most: once (preselected whatever the agent suggested),
+// always in this project (inside a repository only), or no. Never session:
+// a restarted agent is a new session, so it kept asking again.
+func TestRequestOffersOnceAlwaysOrNo(t *testing.T) {
 	for _, extra := range []string{"", `,"suggested_scope":"once"`, `,"suggested_scope":"project"`, `,"suggested_scope":"session"`} {
 		w := newWorld(t)
-		f := withBackend(t, answers(val("TESTSECRET_preselect"), pick(1)))
+		f := withBackend(t, answers(val("TESTSECRET_preselect"), pick(0)))
 		code, m, _ := w.broker("request", reqFor(w.outside, extra))
 		if code != exitcode.OK {
 			t.Fatalf("%q: code=%d m=%v", extra, code, m)
 		}
 		c := f.Calls[1]
-		if c.Default != 1 || !strings.HasPrefix(c.Options[1], "Session: until the agent restarts (max 12h)") ||
-			!strings.HasPrefix(c.Options[0], "Once:") || len(c.Options) != 3 || c.Options[2] != "Don't allow" {
+		if c.Default != 0 || strings.Join(c.Options, "|") != "Once: only the next command|Don't allow" {
 			t.Fatalf("%q: default=%d options=%v", extra, c.Default, c.Options)
 		}
 	}

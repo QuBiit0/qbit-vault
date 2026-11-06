@@ -97,8 +97,8 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		grantScope grants.Scope // replace: the permission picked with it, if any
 	)
 	if r.Action == "replace" {
-		scopes := g.allowedScopes(r.Name, en.Layer, en.Record.Sensitive, scopeOrder)
-		labels, def := scopeLabels(e.Session, scopes, "", false)
+		scopes := agentScopes(g.allowedScopes(r.Name, en.Layer, en.Record.Sensitive, scopeOrder))
+		labels, def := scopeLabels(scopes, "", false)
 		opts := make([]string, 0, len(labels)+2)
 		for _, l := range labels {
 			opts = append(opts, "Replace, then "+l)

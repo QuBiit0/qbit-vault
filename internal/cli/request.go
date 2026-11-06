@@ -193,8 +193,12 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	if len(scopes) == 0 {
 		return broker.RequestResponse{}, refusal.New(refusal.ScopeNotAllowed, firstName(fields))
 	}
-	proposed, _ := grants.ParseScope(r.SuggestedScope)
-	opts, def := scopeLabels(e.Session, scopes, proposed, false)
+	// suggested_scope is a hint only: the question preselects once.
+	scopes = agentScopes(scopes)
+	if len(scopes) == 0 {
+		return broker.RequestResponse{}, refusal.New(refusal.ScopeNotAllowed, firstName(fields))
+	}
+	opts, def := scopeLabels(scopes, "", false)
 	var who []string
 	for _, a := range fields {
 		if a.exists && len(fields) > 1 {

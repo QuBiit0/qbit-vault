@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.5] - 2026-11-06
+
 ### Added
 
 - Before saving a typed value, qbit-vault points out pasted surrounding quotes or invisible characters (zero-width spaces, BOM, no-break space) and offers to drop them, the usual reason a service rejects a token that looks right. A clean value asks nothing more.

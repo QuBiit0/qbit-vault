@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"runtime"
@@ -185,12 +184,9 @@ func newPromptCmd(g *globals) *cobra.Command {
 			if len(avail) > 1 {
 				opts := make([]string, len(avail))
 				for i, l := range avail {
-					opts[i] = "global"
-					if l.Project {
-						opts[i] = "this project (" + l.Label + ")"
-					}
+					opts[i] = layerOption(l)
 				}
-				i, err := ask.Choose("Which layer is "+name+" for?", opts, 0)
+				i, err := ask.Choose("Where should "+name+" be saved?", opts, 0)
 				if err != nil {
 					return promptFail(err, "")
 				}
@@ -239,8 +235,8 @@ func newPromptCmd(g *globals) *cobra.Command {
 			}
 
 			opts, def := scopeLabels(g.Session, allowed, "", false)
-			opts = append(opts, "deny")
-			i, err := ask.Choose(fmt.Sprintf("Allow %s (%s) for: %s", name, layerText(layerChoice), reason), opts, def)
+			opts = append(opts, denyOption)
+			i, err := ask.Choose(allowQuestion([]string{name + " (" + whereText(layerChoice) + ")"}, reason), opts, def)
 			if err != nil {
 				return promptFail(err, "")
 			}

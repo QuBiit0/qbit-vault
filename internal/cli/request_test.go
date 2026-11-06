@@ -33,7 +33,7 @@ func TestRequestNewSecretOutsideRepo(t *testing.T) {
 	if req.Name != "A" || req.Reason != reqReason || req.Session != brokerSession || req.Host != "pi" || req.Existing {
 		t.Fatalf("prompt request=%+v", req)
 	}
-	if f.Calls[1].Default != 1 || f.Calls[1].Q != "Allow A (global) for: "+reqReason {
+	if f.Calls[1].Default != 1 || f.Calls[1].Q != "Allow the agent to use A (all projects)? Why: "+reqReason {
 		t.Fatalf("scope question=%+v", f.Calls[1])
 	}
 	if w.value("A") != "TESTSECRET_request_value" {
@@ -73,7 +73,7 @@ func TestRequestInsideRepoAsksLayer(t *testing.T) {
 	if code != exitcode.OK || m["layer"] != "project" || m["grant"].(map[string]any)["scope"] != "once" {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
-	if f.Calls[0].Kind != "choose" || f.Calls[0].Default != 1 || f.Calls[0].Q != "Which layer is A for?" {
+	if f.Calls[0].Kind != "choose" || f.Calls[0].Default != 1 || f.Calls[0].Q != "Where should A be saved?" {
 		t.Fatalf("layer question=%+v", f.Calls[0])
 	}
 	if !strings.Contains(w.snapshot(), `"layer":"project"`) {
@@ -149,7 +149,7 @@ func TestRequestReasonAndSensitive(t *testing.T) {
 	if code != exitcode.OK || m["grant"].(map[string]any)["scope"] != "once" {
 		t.Fatalf("sensitive: code=%d m=%v", code, m)
 	}
-	if opts := f.Calls[0].Options; len(opts) != 2 || !strings.HasPrefix(opts[0], "once") || opts[1] != "deny" {
+	if opts := f.Calls[0].Options; len(opts) != 2 || !strings.HasPrefix(opts[0], "Once:") || opts[1] != "Don't allow" {
 		t.Fatalf("sensitive offers %v", opts)
 	}
 }
@@ -175,7 +175,7 @@ func TestRequestSeveralFieldsInOnePrompt(t *testing.T) {
 	if !host.Visible || host.Label != "Host" || host.Field != 1 || host.Fields != 2 || pass.Visible || pass.Field != 2 || pass.Label != "Password" {
 		t.Fatalf("boxes: %+v / %+v", host, pass)
 	}
-	if q := f.Calls[2].Q; q != "Allow DB_HOST (global), DB_USER (global, already stored), DB_PASSWORD (global) for: run the shop-api migrations" {
+	if q := f.Calls[2].Q; q != "Allow the agent to use DB_HOST (all projects), DB_USER (all projects, already saved), DB_PASSWORD (all projects)? Why: run the shop-api migrations" {
 		t.Fatalf("scope question=%q", q)
 	}
 	w.outRepo()
@@ -287,7 +287,7 @@ func TestRequestShowsDescriptionsAndStoredFields(t *testing.T) {
 	if pass.Description != "staging db" || len(pass.Stored) != 1 || pass.Stored[0] != "DB_USER" {
 		t.Fatalf("box request=%+v", pass)
 	}
-	if q := f.Calls[2].Q; !strings.Contains(q, "DB_USER (global, already stored)") {
+	if q := f.Calls[2].Q; !strings.Contains(q, "DB_USER (all projects, already saved)") {
 		t.Fatalf("scope question=%q", q)
 	}
 }
@@ -303,8 +303,8 @@ func TestRequestPreselectsSessionScope(t *testing.T) {
 			t.Fatalf("%q: code=%d m=%v", extra, code, m)
 		}
 		c := f.Calls[1]
-		if c.Default != 1 || !strings.HasPrefix(c.Options[1], "session (12h, for "+brokerSession+")") ||
-			!strings.HasPrefix(c.Options[0], "once") || len(c.Options) != 3 || c.Options[2] != "deny" {
+		if c.Default != 1 || !strings.HasPrefix(c.Options[1], "Session: this agent session, for 12h") ||
+			!strings.HasPrefix(c.Options[0], "Once:") || len(c.Options) != 3 || c.Options[2] != "Don't allow" {
 			t.Fatalf("%q: default=%d options=%v", extra, c.Default, c.Options)
 		}
 	}
@@ -317,7 +317,7 @@ func TestRequestSensitiveKeepsOldDefault(t *testing.T) {
 	f := withBackend(t, answers(pick(0)))
 	w.broker("request", envelope("request", w.outside, `"name":"S","reason":"`+reqReason+`","suggested_scope":"project"`))
 	c := f.Calls[0]
-	if c.Default != 0 || len(c.Options) != 2 || !strings.HasPrefix(c.Options[0], "once") {
+	if c.Default != 0 || len(c.Options) != 2 || !strings.HasPrefix(c.Options[0], "Once:") {
 		t.Fatalf("default=%d options=%v", c.Default, c.Options)
 	}
 }

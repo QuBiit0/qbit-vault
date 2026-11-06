@@ -221,10 +221,10 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 		_, _ = io.WriteString(t, Header(req))
 		read := t.ReadHidden
 		if req.Visible {
-			_, _ = io.WriteString(t, "Value (visible): ")
+			_, _ = io.WriteString(t, "Value (shown as you type): ")
 			read = t.ReadLine
 		} else {
-			_, _ = io.WriteString(t, "Value (input is hidden): ")
+			_, _ = io.WriteString(t, "Value (hidden; the agent never sees it): ")
 		}
 		raw, err := read(ctx)
 		if err != nil {
@@ -240,14 +240,14 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 func (b *tty) Passphrase(confirm bool) (secret.Secret, error) {
 	var out secret.Secret
 	err := b.with(func(ctx context.Context, t Terminal) error {
-		_, _ = io.WriteString(t, "Passphrase (input is hidden): ")
+		_, _ = io.WriteString(t, "Vault passphrase (hidden): ")
 		first, err := t.ReadHidden(ctx)
 		if err != nil {
 			return readErr(err)
 		}
 		defer clear(first)
 		if confirm {
-			_, _ = io.WriteString(t, "Confirm passphrase: ")
+			_, _ = io.WriteString(t, "Type it again to confirm: ")
 			second, err := t.ReadHidden(ctx)
 			if err != nil {
 				return readErr(err)
@@ -318,52 +318,81 @@ func (b *tty) Confirm(q string) (bool, error) {
 	return yes, err
 }
 
-// Header renders what the capture prompt shows before the input: the name,
-// the requester's reason, who asks, the layer and whether the value is new.
-// Every piece of text is escaped, so a reason cannot paint over the terminal
-// or add a line of its own (R4).
+// Header renders what the capture prompt shows before the input, in plain
+// words: who asks, the secret, why, where it is saved and whether the value
+// is new. Every piece of text is escaped, so a reason cannot paint over the
+// terminal or add a line of its own (R4).
 func Header(req SecretRequest) string {
-	orDash := func(s string) string {
-		if s == "" {
-			return "-"
-		}
-		return escape(s)
-	}
-	layer, value := "global", "new"
+	saved, value := "all projects (global)", "new"
 	if req.Project != "" {
-		layer = "project " + escape(req.Project)
+		saved = "project " + escape(req.Project)
 	}
 	if req.Existing {
-		value = "already stored (it will be replaced)"
+		value = "replaces the saved value"
 	}
 	if req.Visible {
-		value += ", visible while typed"
+		value += " (shown as you type)"
+	} else {
+		value += " (hidden as you type)"
 	}
 	var b strings.Builder
-	b.WriteString("qbit-vault: secret capture\n")
-	fmt.Fprintf(&b, "  name:    %s\n", escape(req.Name))
-	fmt.Fprintf(&b, "  reason:  %s\n", escape(req.Reason))
-	fmt.Fprintf(&b, "  from:    host %s, session %s\n", orDash(req.Host), orDash(req.Session))
-	fmt.Fprintf(&b, "  layer:   %s\n", layer)
+	b.WriteString("QBit Vault: secret request\n")
+	fmt.Fprintf(&b, "  Who:      %s\n", Requester(req.Host, req.Session))
+	fmt.Fprintf(&b, "  Secret:   %s\n", escape(req.Name))
+	fmt.Fprintf(&b, "  Why:      %s\n", escape(req.Reason))
+	fmt.Fprintf(&b, "  Saved in: %s\n", saved)
 	if req.Description != "" {
-		fmt.Fprintf(&b, "  about:   %s\n", escape(req.Description))
+		fmt.Fprintf(&b, "  About:    %s\n", escape(req.Description))
 	}
 	if len(req.Stored) > 0 {
 		names := make([]string, len(req.Stored))
 		for i, n := range req.Stored {
 			names[i] = escape(n)
 		}
-		fmt.Fprintf(&b, "  stored:  %s (already stored, not asked)\n", strings.Join(names, ", "))
+		fmt.Fprintf(&b, "  Already saved, not asked again: %s\n", strings.Join(names, ", "))
 	}
 	if req.Fields > 1 {
 		label := req.Label
 		if label == "" {
 			label = req.Name
 		}
-		fmt.Fprintf(&b, "  field:   %d of %d (%s)\n", req.Field, req.Fields, escape(label))
+		fmt.Fprintf(&b, "  Field:    %d of %d (%s)\n", req.Field, req.Fields, escape(label))
 	}
-	fmt.Fprintf(&b, "  value:   %s\n", value)
+	fmt.Fprintf(&b, "  Value:    %s\n", value)
 	return b.String()
+}
+
+// Requester names who is asking, for a person: the agent by its product name
+// and the first characters of the session, enough to match the audit log.
+func Requester(host, session string) string {
+	var who string
+	switch host {
+	case "":
+		who = "an agent"
+	case "claude", "claude-code":
+		who = "Claude Code"
+	case "codex":
+		who = "Codex"
+	case "pi":
+		who = "Pi"
+	case "mcp":
+		who = "your agent"
+	case "cli":
+		who = "you (qbit-vault set)"
+	default:
+		who = escape(host)
+	}
+	_, id, found := strings.Cut(session, ":")
+	if !found {
+		id = session
+	}
+	if id == "" {
+		return who
+	}
+	if r := []rune(id); len(r) > 8 {
+		id = string(r[:8])
+	}
+	return who + " (session " + escape(id) + ")"
 }
 
 // escape makes s safe to print on one terminal line: control characters,

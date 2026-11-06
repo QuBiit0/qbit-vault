@@ -13,20 +13,20 @@ var textReq = SecretRequest{Name: "DB_HOST", Reason: "run the shop-api migration
 
 func TestHeaderShowsFieldAndInput(t *testing.T) {
 	h := Header(textReq)
-	if !strings.Contains(h, "  field:   1 of 3 (Host)\n") || !strings.Contains(h, "  value:   new, visible while typed\n") {
+	if !strings.Contains(h, "  Field:    1 of 3 (Host)\n") || !strings.Contains(h, "  Value:    new (shown as you type)\n") {
 		t.Fatalf("header=%q", h)
 	}
-	if one := Header(SecretRequest{Name: "A", Reason: "x y z"}); strings.Contains(one, "field:") {
+	if one := Header(SecretRequest{Name: "A", Reason: "x y z"}); strings.Contains(one, "Field:") {
 		t.Fatalf("single field shows a field line: %q", one)
 	}
 }
 
 func TestSecretDialogVisibleText(t *testing.T) {
 	d := secretDialog(textReq)
-	if !d.visible || !strings.HasSuffix(d.text, "Value (visible):") {
+	if !d.visible || !strings.HasSuffix(d.text, "Type the value. It is shown as you type:") {
 		t.Fatalf("dialog=%+v", d)
 	}
-	if h := secretDialog(req); h.visible || !strings.HasSuffix(h.text, "Value (input is hidden):") {
+	if h := secretDialog(req); h.visible || !strings.HasSuffix(h.text, "Type or paste the value. It stays hidden and the agent never sees it:") || h.title != "QBit Vault: secret request" {
 		t.Fatalf("hidden dialog=%+v", h)
 	}
 }
@@ -77,7 +77,7 @@ func TestTTYVisibleFieldEchoes(t *testing.T) {
 	if err != nil || string(s.Reveal()) != "db.internal" {
 		t.Fatalf("err=%v", err)
 	}
-	if ft.echoed != 1 || ft.hidden != 0 || !strings.Contains(ft.out.String(), "Value (visible): ") {
+	if ft.echoed != 1 || ft.hidden != 0 || !strings.Contains(ft.out.String(), "Value (shown as you type): ") {
 		t.Fatalf("echoed=%d hidden=%d out=%q", ft.echoed, ft.hidden, ft.out.String())
 	}
 	ft2 := &fakeTerm{nextValue: "x"}

@@ -69,9 +69,11 @@ func TestHeaderContent(t *testing.T) {
 		req  SecretRequest
 		want []string
 	}{
-		{"project new", req, []string{"GITHUB_TOKEN", "run the release", "claude-code", "claude-code:sess-aaaa", "shop-api", "new"}},
-		{"global stored", SecretRequest{Name: "A_KEY", Reason: "r", Host: "pi", Session: "pi:s-1234", Existing: true}, []string{"A_KEY", "global", "already stored"}},
-		{"no host or session", SecretRequest{Name: "A_KEY", Reason: "r"}, []string{"A_KEY", "global", "new"}},
+		{"project new", req, []string{"QBit Vault: secret request\n", "  Who:      Claude Code (session sess-aaa)\n", "  Secret:   GITHUB_TOKEN\n", "  Why:      run the release\n", "  Saved in: project shop-api\n", "  Value:    new (hidden as you type)\n"}},
+		{"global stored", SecretRequest{Name: "A_KEY", Reason: "r", Host: "pi", Session: "pi:s-1234", Existing: true}, []string{"  Who:      Pi (session s-1234)\n", "  Saved in: all projects (global)\n", "  Value:    replaces the saved value (hidden as you type)\n"}},
+		{"no host or session", SecretRequest{Name: "A_KEY", Reason: "r"}, []string{"  Who:      an agent\n", "  Saved in: all projects (global)\n"}},
+		{"cli", SecretRequest{Name: "A_KEY", Reason: "r", Host: "cli", Session: "cli:abcdefghij"}, []string{"  Who:      you (qbit-vault set) (session abcdefgh)\n"}},
+		{"mcp", SecretRequest{Name: "A_KEY", Reason: "r", Host: "mcp", Session: "mcp:1d54cd6db0bd3631"}, []string{"  Who:      your agent (session 1d54cd6d)\n"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -86,8 +88,11 @@ func TestHeaderContent(t *testing.T) {
 	if strings.Contains(Header(req), "global") {
 		t.Error("a project request must not say global")
 	}
-	if strings.Contains(Header(req), "already stored") {
-		t.Error("a new value must not say already stored")
+	if strings.Contains(Header(req), "replaces") {
+		t.Error("a new value must not say it replaces one")
+	}
+	if strings.Contains(Header(req), "claude-code:") {
+		t.Error("the raw session id is internal: only its short form is shown")
 	}
 }
 

@@ -388,7 +388,7 @@ func TestKdialogEscapesRichText(t *testing.T) {
 		}
 	}
 	c := kdialogTool{}.build("kdialog", secretDialog(SecretRequest{Name: "N", Reason: "<br>value: x<b>", Host: "h", Session: "s"}))
-	if !strings.Contains(c.Args[len(c.Args)-1], "reason:  &lt;br&gt;value: x&lt;b&gt;") {
+	if !strings.Contains(c.Args[len(c.Args)-1], "Why:      &lt;br&gt;value: x&lt;b&gt;") {
 		t.Errorf("entities missing: %q", c.Args)
 	}
 	cd := chooseDialog("<b>Q</b> & co", []string{"<i>a</i>", "b"}, 0)
@@ -448,20 +448,20 @@ func TestZenityKdialogClassify(t *testing.T) {
 // ---- dialogs ----
 
 func TestDialogsEscapeRequestText(t *testing.T) {
-	d := secretDialog(SecretRequest{Name: "N", Reason: "x\n  name:    OTHER\x1b[2J", Host: "h", Session: "s"})
-	if !strings.HasPrefix(d.text, "  name:") || strings.Contains(d.text, "\n  name:") || strings.Count(d.text, "\n") != 6 || strings.Contains(d.text, "\x1b") || !strings.Contains(d.text, `\n`) {
+	d := secretDialog(SecretRequest{Name: "N", Reason: "x\n  Secret:   OTHER\x1b[2J", Host: "h", Session: "s"})
+	if !strings.HasPrefix(d.text, "  Who:") || strings.Contains(d.text, "\n  Secret:   OTHER") || strings.Count(d.text, "\n") != 6 || strings.Contains(d.text, "\x1b") || !strings.Contains(d.text, `\n`) {
 		t.Fatalf("text %q", d.text)
 	}
-	for _, line := range []string{"name:", "reason:", "from:", "layer:", "value:"} {
+	for _, line := range []string{"Who:", "Secret:", "Why:", "Saved in:", "Value:"} {
 		if !strings.Contains(d.text, line) {
 			t.Errorf("text lacks %q", line)
 		}
 	}
-	if !strings.Contains(d.text, "layer:   global") || !strings.Contains(d.text, "value:   new") {
+	if !strings.Contains(d.text, "Saved in: all projects (global)") || !strings.Contains(d.text, "Value:    new") {
 		t.Errorf("text %q", d.text)
 	}
 	d = secretDialog(SecretRequest{Name: "N", Reason: "r", Host: "h", Session: "s", Project: "shop", Existing: true})
-	if !strings.Contains(d.text, "layer:   project shop") || !strings.Contains(d.text, "already stored") {
+	if !strings.Contains(d.text, "Saved in: project shop") || !strings.Contains(d.text, "replaces the saved value") {
 		t.Errorf("text %q", d.text)
 	}
 	cd := chooseDialog("a\nb", []string{"x\ny"}, 0)

@@ -54,8 +54,8 @@ func formDialog(reqs []SecretRequest) dialog {
 	_, body, _ := strings.Cut(Header(head), "\n")
 	return dialog{
 		kind:   dialogForm,
-		title:  "qbit-vault: secret capture",
-		text:   strings.TrimRight(body, "\n") + "\n\nFill every field (secret ones are hidden):",
+		title:  "QBit Vault: secret request",
+		text:   strings.TrimRight(body, "\n") + "\n\nFill in each field. Secret fields stay hidden and the agent never sees them:",
 		fields: fields,
 	}
 }

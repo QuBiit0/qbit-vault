@@ -219,7 +219,7 @@ func TestSetInteractiveGrant(t *testing.T) {
 	}
 	q := f.Calls[1]
 	if q.Kind != "choose" || q.Default != 1 || len(q.Options) != 3 ||
-		!strings.HasPrefix(q.Options[0], "once") || !strings.HasPrefix(q.Options[1], "session") || !strings.HasPrefix(q.Options[2], "no grant") {
+		!strings.HasPrefix(q.Options[0], "Once:") || !strings.HasPrefix(q.Options[1], "Session:") || !strings.HasPrefix(q.Options[2], "No, just save") {
 		t.Fatalf("scope question = %+v", q)
 	}
 	_, gout, _ := w.run("", "--json", "grants")
@@ -244,11 +244,11 @@ func TestSetInteractiveGrantChoices(t *testing.T) {
 		answer    int
 		wantOut   string
 	}{
-		{"project layer offers project, the user's --grant project preselected", true, false, "project", []string{"once", "session", "project", "no grant"}, 2, 2,
+		{"project layer offers project, the user's --grant project preselected", true, false, "project", []string{"Once:", "Session:", "Project:", "No, just save"}, 2, 2,
 			"stored A_KEY (project shop-api)\ngranted A_KEY (project shop-api): project, until revoked\n"},
-		{"sensitive offers once only", false, true, "once", []string{"once", "no grant"}, 0, 0,
+		{"sensitive offers once only", false, true, "once", []string{"Once:", "No, just save"}, 0, 0,
 			"stored A_KEY (global)\ngranted A_KEY (global): once, for pi:sess-aaaa, until TS\n"},
-		{"no grant stores only", false, false, "session", []string{"once", "session", "no grant"}, 1, 2,
+		{"no grant stores only", false, false, "session", []string{"Once:", "Session:", "No, just save"}, 1, 2,
 			"stored A_KEY (global)\n"},
 	}
 	for _, tt := range tests {
@@ -548,7 +548,7 @@ func TestPromptIssuesTokenForGrant(t *testing.T) {
 	}
 	q := f.Calls[0]
 	if q.Kind != "choose" || !strings.Contains(q.Q, "A_KEY") || !strings.Contains(q.Q, "run the release") ||
-		len(q.Options) != 3 || !strings.HasPrefix(q.Options[0], "once") || !strings.HasPrefix(q.Options[1], "session") || !strings.HasPrefix(q.Options[2], "deny") {
+		len(q.Options) != 3 || !strings.HasPrefix(q.Options[0], "Once:") || !strings.HasPrefix(q.Options[1], "Session:") || !strings.HasPrefix(q.Options[2], "Don't allow") {
 		t.Fatalf("question = %+v", q)
 	}
 	// The token is good for exactly the grant it was issued for.
@@ -666,7 +666,7 @@ func TestPromptRefusals(t *testing.T) {
 				t.Fatal("the vault changed")
 			}
 			if tt.name == "sensitive offers once only" {
-				if o := f.Calls[0].Options; len(o) != 2 || !strings.HasPrefix(o[0], "once") || !strings.HasPrefix(o[1], "deny") {
+				if o := f.Calls[0].Options; len(o) != 2 || !strings.HasPrefix(o[0], "Once:") || !strings.HasPrefix(o[1], "Don't allow") {
 					t.Fatalf("options = %v", o)
 				}
 			}
@@ -689,10 +689,10 @@ func TestPromptAsksLayerAndRestrictsScopes(t *testing.T) {
 	if p := decodePrompt(t, out); p.Scope != "project" || p.Layer != "project" {
 		t.Fatalf("out = %q", out)
 	}
-	if l := f.Calls[0]; l.Kind != "choose" || len(l.Options) != 2 || l.Options[0] != "global" || l.Options[1] != "this project (shop-api)" || l.Default != 0 {
+	if l := f.Calls[0]; l.Kind != "choose" || len(l.Options) != 2 || l.Options[0] != "All projects (global)" || l.Options[1] != "Only this project (shop-api)" || l.Default != 0 {
 		t.Fatalf("layer question = %+v", l)
 	}
-	if s := f.Calls[1]; len(s.Options) != 2 || !strings.HasPrefix(s.Options[0], "project") || !strings.HasPrefix(s.Options[1], "deny") {
+	if s := f.Calls[1]; len(s.Options) != 2 || !strings.HasPrefix(s.Options[0], "Project:") || !strings.HasPrefix(s.Options[1], "Don't allow") {
 		t.Fatalf("scope question = %+v", s)
 	}
 }
@@ -877,7 +877,7 @@ func TestSetGrantFlagIsTheUsersChoice(t *testing.T) {
 	if code, out, errs := w.run("", "--session", sessA, "set", "A_KEY", "--grant", "once"); code != exitcode.OK {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if q := f.Calls[1]; q.Kind != "choose" || q.Default != 0 || !strings.HasPrefix(q.Options[0], "once") {
+	if q := f.Calls[1]; q.Kind != "choose" || q.Default != 0 || !strings.HasPrefix(q.Options[0], "Once:") {
 		t.Fatalf("scope question = %+v", q)
 	}
 }
@@ -892,7 +892,7 @@ func TestPromptPreselectsSession(t *testing.T) {
 	if code, out, errs := w.run("", "--session", sessA, "prompt", "--name", "A_KEY", "--reason", "run the release"); code != exitcode.OK {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if q := f.Calls[0]; q.Default != 1 || !strings.HasPrefix(q.Options[1], "session (12h") {
+	if q := f.Calls[0]; q.Default != 1 || !strings.HasPrefix(q.Options[1], "Session: this agent session, for 12h") {
 		t.Fatalf("question = %+v", q)
 	}
 }

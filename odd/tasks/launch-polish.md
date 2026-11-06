@@ -163,7 +163,7 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | LP0 | S1, S2 | audits (5 explorers) + visual check | (this document) | done |
 | LP1 | S4 | worker | | done, awaiting review |
 | LP2 | S5 | worker + parent correction | ab worker commit + 00799f7 (kdialog) | done, beta.11 |
-| LP3 | S6 | worker | (this branch) | done, review pending |
+| LP3 | S6 | worker + parent correction | 076a8da, 80ed221, d3ba4df | done, beta.12 |
 | LP4-LP7 | S1-S3 | plan steps 4-7 | | pending |
 
 ## Log
@@ -175,3 +175,4 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L4. Step 2 review: a CRITICAL finding (the kdialog label swap made Escape/close confirm) was corrected in 00799f7: kdialog confirmations are a list with Decline preselected. Review approved after targeted validation. Released as 0.1.0-beta.11.
 - L5. beta.11 released (9 assets), this machine upgraded, doctor healthy. Step 3 started on branch fix/boundary-storage.
 - L6. LP3 (S6.1-S6.8) done by worker, not committed. RED first for each rule, then GREEN. S6.1 `scriptOf` skips `-o/+o/-O/+O VALUE` and `--long` options before `-c`. S6.2 `encodedPowerShell` in `Match`/`MatchRaw` and `encodedCommand` in the pre-bash hook. S6.3 `utf16Form` (LE and BE) in `addEncodings`; leak battery gets a UTF-16 child and needles. S6.4 `prompt --value` keeps the existing record id and `set` redeems with it. S6.5 `recover` in `broker.Handle` and the MCP handler, one fixed stderr line (`broker.PanicLine`). S6.6 snapshot uses `writeSynced` (seam `syncFile`). S6.7 `memoryBacked` seam, statfs tmpfs/ramfs on Linux, true elsewhere. S6.8 `stale()` also true for an age below minus the stale age. Docs: THREAT_MODEL (R2, R5), STORAGE, CLI, AGENT_INTEGRATIONS, TESTING, CHANGELOG.
+- L7. Step 3 review: two CRITICAL findings (encoded PowerShell after an option with a value, `-ExecutionPolicy Bypass -EncodedCommand`, passed the guard and the hook) corrected in d3ba4df and validated. Advisory follow-ups for step 7: R1-psenc-valued-option-bypass and R4-encoded-ps-option-value (binaries.go:119), R3-scriptof-valued-long-options (bash long options with a value before -c), R3-set-replace-grant-id (secrets.go:438). Released as 0.1.0-beta.12.

@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.12] - 2026-11-06
+
 ### Fixed
 
 - Dump guard: it reads the script of a shell called with options before `-c` (`bash -o pipefail -c 'printenv'`, `sh --login -c …`, `bash -O extglob -c env`), which it used to let through.

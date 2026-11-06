@@ -120,11 +120,7 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		if r.SuggestedLayer == "project" {
 			def = 1
 		}
-		verb := "is " + namesOf(fresh)[0]
-		if len(fresh) > 1 {
-			verb = "are " + strings.Join(namesOf(fresh), ", ")
-		}
-		i, err := ask.Choose("Which layer "+verb+" for?", []string{"global", "this project (" + proj.Label + ")"}, def)
+		i, err := ask.Choose("Where should "+strings.Join(namesOf(fresh), ", ")+" be saved?", layerOptions(proj), def)
 		if err != nil {
 			return broker.RequestResponse{}, fail(err)
 		}
@@ -181,6 +177,12 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		case len(a.value) > maxValueBytes:
 			return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage("value too large")
 		}
+		reviewed, err := reviewValue(ask, a.f.Name, a.value)
+		clear(a.value)
+		if err != nil {
+			return broker.RequestResponse{}, fail(err)
+		}
+		a.value = reviewed
 	}
 
 	// One scope for all: only those every field allows.
@@ -196,12 +198,12 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	var who []string
 	for _, a := range fields {
 		if a.exists && len(fields) > 1 {
-			who = append(who, fmt.Sprintf("%s (%s, already stored)", a.f.Name, layerText(a.layer)))
+			who = append(who, fmt.Sprintf("%s (%s, already saved)", a.f.Name, whereText(a.layer)))
 		} else {
-			who = append(who, fmt.Sprintf("%s (%s)", a.f.Name, layerText(a.layer)))
+			who = append(who, fmt.Sprintf("%s (%s)", a.f.Name, whereText(a.layer)))
 		}
 	}
-	i, err := ask.Choose("Allow "+strings.Join(who, ", ")+" for: "+r.Reason, append(opts, "deny"), def)
+	i, err := ask.Choose(allowQuestion(who, r.Reason), append(opts, denyOption), def)
 	if err != nil {
 		return broker.RequestResponse{}, fail(err)
 	}

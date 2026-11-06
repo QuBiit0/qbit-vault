@@ -4,6 +4,16 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- Before saving a typed value, qbit-vault points out pasted surrounding quotes or invisible characters (zero-width spaces, BOM, no-break space) and offers to drop them, the usual reason a service rejects a token that looks right. A clean value asks nothing more.
+
+### Changed
+
+- The capture and permission dialogs use plain words: who asks (the agent's name and a short session id), the secret, why, where it is saved, and that the value stays hidden from the agent. Permission choices read `Once: only the next command`, `Session: this agent session, for 12h`, `Project: always in this project, until you revoke it` and `Don't allow`.
+- The agent skill says what to do when a service rejects a credential: check presence with `${#NAME}` only, tell the user what the service expects, propose one replace, and stop if that fails too.
+- Replacing a value at the agent's request (`secret_manage replace`) is one decision that also sets its permission (`Replace, then Session: ...`), so the agent's next command needs no second permission dialog.
+
 ## [0.1.0-beta.4] - 2026-11-06
 
 ### Changed

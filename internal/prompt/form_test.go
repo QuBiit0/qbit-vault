@@ -158,7 +158,7 @@ func TestPowerShellFormBlankLastField(t *testing.T) {
 // W3, W4 in the header.
 func TestHeaderShowsDescriptionAndStored(t *testing.T) {
 	h := Header(SecretRequest{Name: "A", Reason: "x y z", Description: "staging \x1b[31mdb", Stored: []string{"B", "C"}})
-	if !strings.Contains(h, `  about:   staging \x1b[31mdb`+"\n") || !strings.Contains(h, "  stored:  B, C (already stored, not asked)\n") {
+	if !strings.Contains(h, `  About:    staging \x1b[31mdb`+"\n") || !strings.Contains(h, "  Already saved, not asked again: B, C\n") {
 		t.Fatalf("header=%q", h)
 	}
 }

@@ -9,24 +9,24 @@ import (
 // a title of its own.
 func secretDialog(req SecretRequest) dialog {
 	_, body, _ := strings.Cut(Header(req), "\n")
-	input := "Value (input is hidden):"
+	input := "Type or paste the value. It stays hidden and the agent never sees it:"
 	if req.Visible {
-		input = "Value (visible):"
+		input = "Type the value. It is shown as you type:"
 	}
 	return dialog{
 		kind:    dialogSecret,
-		title:   "qbit-vault: secret capture",
+		title:   "QBit Vault: secret request",
 		text:    strings.TrimRight(body, "\n") + "\n\n" + input,
 		visible: req.Visible,
 	}
 }
 
 func passphraseDialog(again bool) dialog {
-	text := "Passphrase (input is hidden):"
+	text := "Vault passphrase (hidden):"
 	if again {
-		text = "Confirm passphrase (input is hidden):"
+		text = "Type the passphrase again to confirm (hidden):"
 	}
-	return dialog{kind: dialogSecret, title: "qbit-vault: vault passphrase", text: text}
+	return dialog{kind: dialogSecret, title: "QBit Vault: vault passphrase", text: text}
 }
 
 func chooseDialog(q string, options []string, def int) dialog {
@@ -34,11 +34,11 @@ func chooseDialog(q string, options []string, def int) dialog {
 	for i, o := range options {
 		opts[i] = escape(o)
 	}
-	return dialog{kind: dialogChoose, title: "qbit-vault: choose", text: escape(q), options: opts, def: def}
+	return dialog{kind: dialogChoose, title: "QBit Vault", text: escape(q), options: opts, def: def}
 }
 
 func confirmDialog(q string) dialog {
-	return dialog{kind: dialogConfirm, title: "qbit-vault: confirm", text: escape(q)}
+	return dialog{kind: dialogConfirm, title: "QBit Vault: confirm", text: escape(q)}
 }
 
 // noDash keeps a row of text from reading as an option to helpers that take

@@ -308,7 +308,7 @@ expect_eq "7. a further secret_exec needs a new grant (once is consumed)" "$(ref
 
 # one prompt only: the approval of step 4, nothing was asked again
 expect_eq "one prompt in the whole session (the scope choice of step 4)" "$(grep -c '^ASK ' "$QBIT_VAULT_SCRIPTED_TRANSCRIPT")" 1
-has "the only prompt was the scope choice for $TOKEN_NAME" "$QBIT_VAULT_SCRIPTED_TRANSCRIPT" "ASK choose q=\"Allow $TOKEN_NAME (global) for: e2e: measure the length of the test token\""
+has "the only prompt was the scope choice for $TOKEN_NAME" "$QBIT_VAULT_SCRIPTED_TRANSCRIPT" "ASK choose q=\"Allow the agent to use $TOKEN_NAME (all projects)? Why: e2e: measure the length of the test token\""
 if grep -q '^EXHAUSTED' "$QBIT_VAULT_SCRIPTED_TRANSCRIPT"; then fail "no prompt ran out of scripted answers"; else pass "no prompt ran out of scripted answers"; fi
 
 # audit (D4): the refusals of this MCP session are recorded, names only

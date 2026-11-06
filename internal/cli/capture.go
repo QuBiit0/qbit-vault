@@ -63,11 +63,11 @@ func scopeLabels(session string, scopes []grants.Scope, proposed grants.Scope, u
 		at[sc] = i
 		switch sc {
 		case grants.ScopeOnce:
-			opts[i] = "once (one command, for " + session + ")"
+			opts[i] = "Once: only the next command"
 		case grants.ScopeSession:
-			opts[i] = "session (" + ttlText(grants.DefaultSessionTTL) + ", for " + session + ")"
+			opts[i] = "Session: this agent session, for " + ttlText(grants.DefaultSessionTTL)
 		default:
-			opts[i] = "project (this project, until revoked)"
+			opts[i] = "Project: always in this project, until you revoke it"
 		}
 	}
 	if i, ok := at[proposed]; ok && userChose {
@@ -82,6 +82,36 @@ func scopeLabels(session string, scopes []grants.Scope, proposed grants.Scope, u
 	return opts, 0
 }
 
+// denyOption is the last choice of every permission question.
+const denyOption = "Don't allow"
+
+// allowQuestion is the permission question: the secrets (each with where it is
+// saved) and the agent's reason.
+func allowQuestion(secrets []string, reason string) string {
+	return "Allow the agent to use " + strings.Join(secrets, ", ") + "? Why: " + reason
+}
+
+// whereText is where a layer's secrets apply, in plain words.
+func whereText(l vault.Layer) string {
+	if l.Project {
+		return "project " + l.Label
+	}
+	return "all projects"
+}
+
+// layerOption is one answer of "Where should NAME be saved?".
+func layerOption(l vault.Layer) string {
+	if l.Project {
+		return "Only this project (" + l.Label + ")"
+	}
+	return "All projects (global)"
+}
+
+// layerOptions are the two answers, global first, for a request in project p.
+func layerOptions(p vault.Layer) []string {
+	return []string{layerOption(vault.Global()), layerOption(p)}
+}
+
 // layerRequest is how the prompt names the project of a layer: its label, or
 // "" for the global layer.
 func layerRequest(layer vault.Layer) string {
@@ -91,9 +121,9 @@ func layerRequest(layer vault.Layer) string {
 	return ""
 }
 
-// askValue asks for a masked value and checks it (R-CAP-04). The caller wipes
-// the returned bytes, which are the value as typed: trim them with
-// bytes.TrimSpace to get the value. Blank and oversized input are usage
+// askValue asks for a masked value and checks it (R-CAP-04), then offers to
+// drop pasted quotes or invisible characters (reviewValue). The caller wipes
+// the returned bytes, the trimmed value. Blank and oversized input are usage
 // errors; nothing has been written either way.
 func askValue(ask prompt.Backend, req prompt.SecretRequest, hint string) ([]byte, error) {
 	sec, err := ask.Secret(req)
@@ -102,15 +132,19 @@ func askValue(ask prompt.Backend, req prompt.SecretRequest, hint string) ([]byte
 	}
 	raw := sec.Reveal()
 	sec.Wipe()
-	switch v := bytes.TrimSpace(raw); {
+	defer clear(raw)
+	v := bytes.TrimSpace(raw)
+	switch {
 	case len(v) == 0:
-		clear(raw)
 		return nil, usageError{"empty value"}
 	case len(v) > maxValueBytes:
-		clear(raw)
 		return nil, usageError{"value too large"}
 	}
-	return raw, nil
+	reviewed, err := reviewValue(ask, req.Name, v)
+	if err != nil {
+		return nil, promptFail(err, hint)
+	}
+	return reviewed, nil
 }
 
 // captureValue runs the interactive part of set on the prompt backend: the
@@ -130,8 +164,8 @@ func (g *globals) captureValue(ask prompt.Backend, name string, layer vault.Laye
 	}
 	scopes := g.allowedScopes(name, layer, sensitive, scopeOrder)
 	opts, def := scopeLabels(g.Session, scopes, flagScope, flagScope != "")
-	opts = append(opts, "no grant (store the value only)")
-	i, err := ask.Choose(fmt.Sprintf("Grant %s (%s)? Choose a scope:", name, layerText(layer)), opts, def)
+	opts = append(opts, "No, just save the value")
+	i, err := ask.Choose(fmt.Sprintf("Allow agents to use %s (%s) right away?", name, whereText(layer)), opts, def)
 	if err != nil {
 		clear(raw)
 		return nil, "", promptFail(err, "use --stdin")

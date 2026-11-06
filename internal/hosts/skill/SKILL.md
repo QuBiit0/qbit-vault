@@ -20,7 +20,16 @@ qbit-vault is the user's local secrets broker. You can run commands that need a 
 2. Missing a name, or need permission for one: `secret_request` with every name the task needs in one call (up to 8 fields) and a concrete reason ("run `gh release create` for v1.2", not "needed"). The user types new values or approves existing ones in a dialog outside the chat. You get references and a grant, never the value.
 3. Run the command with `secret_exec`: the command plus `secrets: [{name}]`; each secret becomes an environment variable of that one process. Reference it the way the shell expects (`$GITHUB_TOKEN`, `%GITHUB_TOKEN%`, `$env:GITHUB_TOKEN`).
 4. Read the redacted output. `[REDACTED:NAME]` in it is expected; never try to recover what is behind it.
-5. To change a secret (remove it, edit its metadata, move it between global and this project, or replace its value) use `secret_manage` with a concrete reason; the user confirms outside the chat.
+5. To change a secret (remove it, edit its metadata, move it between global and this project, or replace its value) use `secret_manage` with a concrete reason; the user confirms outside the chat. A replace also lets the user set the new value's permission in the same dialog, so retry `secret_exec` right after it.
+
+## When a service rejects the credential
+
+An `exec` that runs but gets `401`, `403`, "invalid token" or "authentication failed" back means the stored value is wrong for that service, not that qbit-vault failed. Do not loop:
+
+1. Check presence only: `${#NAME}` prints the length. Never print, echo, dump, encode or hash the value to inspect it (that is refused as `dump_command`, and it would leak it).
+2. Tell the user what the service expects, as precisely as you can: the credential type (for Cloudflare an API Token, not the Global API Key), the scopes or permissions, the account or zone.
+3. Propose **one** `secret_manage` replace with that in the reason. qbit-vault points out pasted quotes or invisible characters before saving, which is a common cause.
+4. If the new value is rejected too, stop and report what the service answered; do not ask again.
 
 ## Rules
 

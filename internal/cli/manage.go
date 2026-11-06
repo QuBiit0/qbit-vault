@@ -37,8 +37,12 @@ func (g *globals) coolDown(s *session, name string) {
 }
 
 // Manage is CONTRACT.md § manage (R-API-07, R-API-08): the agent proposes,
-// the user confirms out of band, and only then the change is applied. It
-// never creates a grant. A decline starts the same cooldown as request.
+// the user confirms out of band, and only then the change is applied. A
+// decline starts the same cooldown as request. Only replace can create a
+// grant, and only the one the user picks in its single decision (approve,
+// for how long the new value may be used, or replace only): a replaced value
+// drops its old grants, and asking for a new one right after would be a
+// second dialog for the same intent.
 func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.ManageRequest) (broker.ManageResponse, error) {
 	g := b.hot(e)
 	s, err := g.openSession()
@@ -88,7 +92,27 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		return refusal.New(refusal.UserDeclined, r.Name)
 	}
 	q := manageQuestion(r, en.Layer, to, targetExists, diff)
-	ok, err := ask.Confirm(q)
+	var (
+		ok         bool
+		grantScope grants.Scope // replace: the permission picked with it, if any
+	)
+	if r.Action == "replace" {
+		scopes := g.allowedScopes(r.Name, en.Layer, en.Record.Sensitive, scopeOrder)
+		labels, def := scopeLabels(e.Session, scopes, "", false)
+		opts := make([]string, 0, len(labels)+2)
+		for _, l := range labels {
+			opts = append(opts, "Replace, then "+l)
+		}
+		opts = append(opts, "Replace only: ask me again before it is used", "Don't replace")
+		var i int
+		i, err = ask.Choose(q, opts, def)
+		ok = err == nil && i < len(opts)-1
+		if ok && i < len(scopes) {
+			grantScope = scopes[i]
+		}
+	} else {
+		ok, err = ask.Confirm(q)
+	}
 	switch {
 	case errors.Is(err, prompt.ErrUnavailable):
 		return broker.ManageResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
@@ -133,11 +157,34 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		return broker.ManageResponse{}, asRefusal(mapErr(err, r.Name))
 	}
 	audited("applied")
+	if grantScope != "" {
+		if err := g.grantReplaced(s, r.Name, en.Layer, en.Record.Sensitive, grantScope, e.Cwd); err != nil {
+			return broker.ManageResponse{}, asRefusal(err)
+		}
+	}
 	g.pushAfter(context.Background(), stderrOf(g), s)
 	return broker.ManageResponse{OK: true, Applied: true, Action: r.Action, Name: r.Name, Layer: after}, nil
 }
 
 func ptr(s string) *string { return &s }
+
+// grantReplaced creates the grant the user picked together with a replace,
+// on the new record, through the same prompt-token path as request.
+func (g *globals) grantReplaced(s *session, name string, layer vault.Layer, sensitive bool, scope grants.Scope, cwd string) error {
+	now, err := findEntry(s, name, layerFlags{global: !layer.Project, project: layer.Project}, cwd)
+	if err != nil {
+		return err
+	}
+	now.Record.Value.Wipe()
+	cmd := quiet()
+	req := g.grantRequest(name, layer, now.Record.ID, scope, 0, sensitive)
+	hash, err := g.promptToken(cmd, s, req)
+	if err != nil {
+		return err
+	}
+	_, err = g.create(cmd, s, req, hash)
+	return err
+}
 
 // applyChanges edits rec and returns the before/after diff the user sees.
 // Clearing sensitive or emptying an allowlist widens access and is marked.
@@ -191,7 +238,7 @@ func manageQuestion(r broker.ManageRequest, from, to vault.Layer, targetExists b
 	case "edit":
 		what = fmt.Sprintf("edit %s (%s): %s", r.Name, layerText(from), diff)
 	case "replace":
-		what = fmt.Sprintf("replace the value of %s (%s); you will type the new value", r.Name, layerText(from))
+		return fmt.Sprintf("The agent proposes to replace the value of %s (%s). Why: %s", r.Name, whereText(from), r.Reason)
 	default:
 		what = fmt.Sprintf("remove %s (%s)", r.Name, layerText(from))
 	}

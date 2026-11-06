@@ -87,7 +87,7 @@ func TestManageMoveAndReplace(t *testing.T) {
 	if w.value("A") != "TESTSECRET_move" {
 		t.Fatal("value lost in move")
 	}
-	f := withBackend(t, answers(yes(), val("TESTSECRET_replaced")))
+	f := withBackend(t, answers(pick(1), val("TESTSECRET_replaced")))
 	code, m, _ = w.broker("manage", manageReq(w.repo, `"action":"replace","name":"A","layer":"project"`))
 	if code != exitcode.OK || m["action"] != "replace" {
 		t.Fatalf("replace: code=%d m=%v", code, m)

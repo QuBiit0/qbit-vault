@@ -9,9 +9,14 @@ services:
     image: qbit-vault-server:local
     environment:
       QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
-      QBV_SERVER_TRUST_PROXY: "1"
+      # How many proxies are in front of the server (the client IP for rate
+      # limits is the Nth X-Forwarded-For entry from the right). 1: Traefik
+      # alone, or Cloudflare + Traefik where Traefik does not trust Cloudflare
+      # (it then rewrites the header). 2: Cloudflare + Traefik with Cloudflare's
+      # ranges in Traefik's forwardedHeaders.trustedIPs. 0: reached directly.
+      QBV_SERVER_TRUST_PROXY: ${QBV_SERVER_TRUST_PROXY:-1}
       # Optional first invite for a server with no account yet (at least 24
-      # characters; ignored once an account exists; never logged). For hosts
+      # characters, 12 of them different; ignored once an account exists; never logged). For hosts
       # where `exec ... invite` is not possible. Remove it after registering.
       QBV_SERVER_BOOTSTRAP_INVITE: ${QBV_SERVER_BOOTSTRAP_INVITE:-}
     volumes:

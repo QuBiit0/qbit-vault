@@ -19,7 +19,7 @@ docker compose -f deploy/compose.yaml up -d --build
 docker compose -f deploy/compose.yaml exec server /qbit-vault-server invite --ttl 24h
 ```
 
-No shell on the host? Set `QBV_SERVER_BOOTSTRAP_INVITE` (a code of your own, at least 24 characters) in the service environment and redeploy: while the server has no account it accepts that code once as the invite. Remove it afterwards.
+No shell on the host? Set `QBV_SERVER_BOOTSTRAP_INVITE` (a code of your own: at least 24 characters, at least 12 of them different, so not `aaaa…`) in the service environment and redeploy: while the server has no account it accepts that code once as the invite. Remove it afterwards.
 
 Then, on the first machine: `qbit-vault remote register --server https://vault.example.com`. The invite is an operator credential, not a vault secret.
 
@@ -27,6 +27,6 @@ Without compose: `docker build -f deploy/Dockerfile .` from the repository root.
 
 ## Settings
 
-Set through the environment (`QBV_SERVER_DATA` defaults to `/data`, `QBV_SERVER_LISTEN` to `:8080`; `QBV_SERVER_TRUST_PROXY=1` is set by `compose.yaml` because the proxy terminates TLS; `QBV_SERVER_TLS_CERT` and `QBV_SERVER_TLS_KEY` exist for serving TLS directly). The full list and the admin commands (`serve`, `invite`, `health`) are in [../docs/REMOTE_SYNC.md](../docs/REMOTE_SYNC.md) § 10.
+Set through the environment (`QBV_SERVER_DATA` defaults to `/data`, `QBV_SERVER_LISTEN` to `:8080`; `QBV_SERVER_TRUST_PROXY` is the number of proxies in front of the server and `compose.yaml` defaults it to `1` because Traefik terminates TLS; keep `1` behind Cloudflare too unless Traefik trusts Cloudflare's ranges (`forwardedHeaders.trustedIPs`), then `2`, and `0` if the server is reachable directly: a wrong number weakens the per-IP rate limits, never the data; `QBV_SERVER_TLS_CERT` and `QBV_SERVER_TLS_KEY` exist for serving TLS directly). The full list and the admin commands (`serve`, `invite`, `health`) are in [../docs/REMOTE_SYNC.md](../docs/REMOTE_SYNC.md) § 10.
 
 Back up the `vault-data` volume: it holds every account's sealed vault, invites and device records.

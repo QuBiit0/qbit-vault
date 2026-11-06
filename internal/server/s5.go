@@ -14,6 +14,7 @@ const (
 	pairingTTL     = 10 * time.Minute
 	recoveryTTL    = 10 * time.Minute
 	keepAnchors    = 100
+	maxPairings    = 1000
 	maxAnchorBytes = 4096
 )
 
@@ -60,6 +61,26 @@ func (s *Server) loadPairing(code string) (*pairing, bool) {
 	return &p, true
 }
 
+// sweepPairings removes the expired pairings from disk and returns how many
+// are left.
+func (s *Server) sweepPairings(now time.Time) int {
+	entries, _ := os.ReadDir(s.st.path("pairings"))
+	live := 0
+	for _, e := range entries {
+		path := s.st.path("pairings", e.Name())
+		var p pairing
+		if readJSON(path, &p) != nil {
+			continue
+		}
+		if exp, err := time.Parse(time.RFC3339Nano, p.ExpiresAt); err != nil || !now.Before(exp) {
+			_ = os.Remove(path)
+			continue
+		}
+		live++
+	}
+	return live
+}
+
 // createPairing: a new device announces its keys under the code that
 // fingerprints them; the server checks the fingerprint so a pairing can only
 // ever carry the keys its code names.
@@ -86,6 +107,10 @@ func (s *Server) createPairing(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := s.st.accountOfDevice(in.DeviceID); err == nil {
 		fail(w, 409, "conflict", "device exists")
+		return
+	}
+	if s.sweepPairings(s.cfg.Now()) >= maxPairings {
+		fail(w, 429, "rate_limited", "too many pairings")
 		return
 	}
 	secret := newToken()

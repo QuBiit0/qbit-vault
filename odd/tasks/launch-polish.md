@@ -1,0 +1,152 @@
+# Launch polish: audit findings and step-by-step plan
+
+Full read-only audit before sharing QBit Vault with the community (five parallel audits plus a visual check of the real Windows dialogs). No code was changed. Every phase below is a small PR (about 400 lines), test-first, with no new features.
+
+## Specs
+
+- S1. User (verbatim): "necesito que te tomes todo el tiempo que consideres necesario y analices el repo de manera exhautiva buscando vulnerabilidades y bugs. veas posibles mejoras (sin perder la sencilles y practicidad de uso). Mejora en la ventana emergente, mensajes, botones, etc. tambien a nivel de consola o terminal cuando pida las credenciales que sea bonito, prolijo y no contenga erroes. quiero darle mucho amor para largarlo bien y compartirlo con la comunidad. Anota todo y armamos un plan paso a paso para ir mejorandolo (sin agregarle o llenarlo de mas funcionalidades). La idea es que quede bien sencillo y simple. de facil isntlaacion, configuracion y uso, tanto en local como poder sincronizar con la nube"
+- S2. Constraint: no new features. Fixes, hardening, copy and simplification only. Local-only use stays exactly as simple as today.
+- S3. Owner decision 1 (verbatim): "de cada reléase". The one-line installers are served from each release (release assets), not from `main` (plan step 5).
+- S4. Owner (verbatim): "continua con el plan". Step 1, live server hardening, exactly:
+  - S4.1 (C-S01) `QBV_SERVER_TRUST_PROXY=N`, N = number of trusted proxies in front of the server (1 keeps today's meaning of "one proxy"). The client IP is the Nth address counted from the **right** of `X-Forwarded-For` (each proxy appends the address it received from), skipping nothing else; with fewer than N entries, or a malformed one, the IP is `RemoteAddr`. Unset or `0`: `RemoteAddr` only. Any other value: `serve` exits 2 with `error: QBV_SERVER_TRUST_PROXY must be a number of proxies (0, 1, 2...)`. Documented with the Cloudflare + Traefik case.
+  - S4.2 (C-S03) Request body caps per route: 9 MiB only for `PUT /v1/vault`, `POST /v1/rekey` and `POST /v1/accounts`; 64 KiB for every other route. Over the cap: 413 with the server's existing error shape and code `too_large`, nothing stored.
+  - S4.3 (C-S09) Bootstrap invite: refused unless at least 24 characters **and** at least 12 distinct characters (`aaaa…` is refused) with the existing exit-2 message extended to say so; registering it never refreshes an existing expiry (a restart while the same code is set keeps the first 24 h); `POST /v1/accounts` is rate-limited per client IP (10 per hour) with the existing 429 shape.
+  - S4.4 (C-S13) An invite is claimed atomically: two concurrent `POST /v1/accounts` with the same code create exactly one account; the other gets the existing invalid-invite answer.
+  - S4.5 (C-S02) Expired nonces, tokens and pending pairings are removed periodically (and pairing files on disk); pending pairings are capped (1000 at once, then 429); the rate limiter evicts expired entries instead of clearing every counter when it grows.
+  - S4.6 Tests for every rule (RED first), docs (`docs/REMOTE_SYNC.md` § 10, `deploy/README.md`, `deploy/compose.yaml` comment), CHANGELOG [Unreleased]. Nothing changes for the client or for local-only users.
+
+## How to read the findings
+
+IDs keep the audit they came from: **A** secret boundary, **B** crypto and storage, **C** sync and server, **D** dialogs and terminal, **E** install/CLI/docs, **V** visual check of the rendered Windows dialogs. Severity: P0 = before telling anyone, P1 = before the announcement, P2 = polish soon, P3 = when convenient. "Confirmed" means re-checked against the code by the parent session; the rest comes from careful reading and must get a RED test before any fix.
+
+## Findings
+
+### P0: fix before sharing
+
+| ID | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| V1 (confirmed, rendered) | `internal/prompt/native_powershell.go` psShowText | **The recovery key is not visible on Windows.** The box height counts logical lines (3), the explanation wraps to 5 rows, the box has no scrollbar: the key is cut off. Regression of beta.8. | Explanation in the label, the key alone in the selectable monospace box; or measure with `TextRenderer.MeasureText`. Render test + screenshot. |
+| D-B1 (confirmed) | `native_tools.go:39` zenity `--question`, `:95` kdialog `--yesno` | **Enter confirms on Linux** (zenity, kdialog) but declines on macOS and Windows. A stray Enter removes a secret, deletes the dotenv file, creates a grant or links a project. | zenity `--default-cancel`; kdialog equivalent or swap labels so the default is Decline. |
+| C-S01 (confirmed) | `internal/server/server.go:198` clientIP | Trusts the **leftmost** `X-Forwarded-For` (client-controlled). `deploy/compose.yaml` sets `QBV_SERVER_TRUST_PROXY=1`. Rate limits on auth, pairing and recovery can be bypassed with a forged header, or (behind Cloudflare + Traefik) every user can share one bucket. Affects the live server. | Take the rightmost hop added by the trusted proxy (configurable hop count); verify what Traefik/Cloudflare send on the live server first. |
+| E-B1 (confirmed) | `internal/hosts/pi/pi.go:41`, `internal/cli/init.go` | `init` prints `pi install npm:qbit-vault-pi` on every run; the package does not exist (Phase 4). A new user copies it and gets an npm error. | Do not print it until the package is published. |
+| E-B2 | `SECURITY.md` | "Supported: main until the first tagged release", releases beta.2-beta.10 exist. | "Supported: the latest release." |
+
+### P1: before the announcement
+
+**Secret boundary (A)**
+
+| ID | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| A-F1 (confirmed) | `internal/dumpguard/binaries.go:62-81` scriptOf | `bash -o pipefail -c 'printenv'` and `sh --login -c '…'` are not split, so the inner dump runs (raw value still redacted, encodings not). | Skip `-o/+o VALUE` and `--long` options while looking for `-c`. |
+| A-F2 | `binaries.go:84`, `hook/prebash.go:251` | `pwsh -EncodedCommand <base64>` is not inspected. | Refuse `-e/-ec/-enc/-EncodedCommand` while secrets are injected. |
+| A-F4 | `internal/redact/redact.go:172` | No UTF-16 forms: Windows PowerShell 5.1 `>`/`Out-File` writes UTF-16LE, the post-read hook does not see the value. | Add UTF-16LE/BE (and BOM) variants of each value. |
+| A-F7 | `internal/cli/promptcmd.go` (`--value`) | Prompt token issued with an empty record id for an existing name redeems against a replaced record. | Keep the record id when the record exists. |
+| A-F12 | `internal/broker`, `internal/mcp/server.go` | No `recover`: a panic kills the MCP server and prints a Go trace. | Recover in the MCP handler, answer `internal`. |
+
+**Crypto and storage (B)**
+
+| ID | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| B-F1 | `internal/vault/atomic.go:187` | Backups (the previous consistent pair) are written without fsync; a power loss can leave a torn restore point. | `writeSynced` for the snapshot. |
+| B-F3 | `internal/lockfile/lockfile.go:111` | A lock with a future mtime (clock skew, copied home) is never stale: every command says "vault is busy" forever. | Treat `age < -StaleAfter` as stale too. |
+| B-F2 | `internal/keychain/cache.go:26` | Unlock cache trusts any existing absolute `XDG_RUNTIME_DIR`; on a disk path the master key lands on disk for 8 h. | Require tmpfs (statfs magic) or skip the cache. |
+
+**Sync and server (C)**
+
+| ID | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| C-S10 (confirmed) | `internal/remote/client.go:114` | The client follows redirects: a 307/308 sends sealed blobs to another host (invariant 8). | `CheckRedirect` returning `http.ErrUseLastResponse`. |
+| C-S03 | `server.go` logged, `s5.go` | Unauthenticated routes accept and decode bodies up to 9 MiB. | Per-route caps (64 KiB small routes). |
+| C-S02 | `s5.go:66`, `server.go:377,423`, `limit.go` | Pairings, nonces and tokens are never swept; the limiter clears all counters at 100 000 keys. | Periodic sweep; global cap on pending pairings. |
+| C-S09 | `bootstrap.go:23,33`, `server.go:289` | Bootstrap code only length-checked, its 24 h expiry is refreshed on every start, `POST /v1/accounts` has no rate limit. | Require >=128 bits (hex/base64), keep the first-seen time, rate-limit account creation. |
+| C-S13 | `server.go:301` | Two concurrent requests with the same invite both create accounts. | Atomic claim (rename) of the invite. |
+| C-S06 | `internal/cli/remoteacct.go` approve | A sync error after the server accepted the approval returns before the confirmation code is shown; the new device is registered but cannot finish. | Show the code first, make the post-approval sync non-fatal. |
+
+**Dialogs and terminal (D, V)**
+
+| ID | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| D-B3 | `capture.go:118` allowQuestion, `request.go:210` | The permission question does not say **who** asks (the capture dialog does). | "Allow Claude Code to use GITHUB_TOKEN (all projects)?" |
+| D-B4 / V5 | `exportcmd.go:85`, `dialogs.go:25`, `prompt.go:243` | Export asks "Vault passphrase": users may reuse the wrong secret. | A label on `Passphrase`: "Export passphrase (protects this backup file)". |
+| D-B2 | `prompt.go:381` | "Who: you (qbit-vault set)" also shown by `remote register/join/recovery-key`. | "you (qbit-vault)". |
+| D-B6 / V7 | `form.go:52` | Multi-field form header says "hidden as you type" even for visible fields. | Drop the Value line from the shared header (each box says it). |
+| D-B10 | `show.go:41`, `remote.go:122` | kdialog-only Linux cannot show the recovery key; should fall back to the terminal. | Treat kdialog as no `Shower`. |
+
+**Install, CLI, docs (E)**
+
+| ID | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| E-B5/B6 | `install.sh`/`install.ps1` last line, `init.go` summary | Three "next" options and no "restart your agent" after `init`. | One next step: `qbit-vault init`; `init` ends with "restart your agents to load QBit Vault". |
+| E-B3/B4 | `docs/INSTALL.md` Uninstall, `docs/CLI.md` uninstall | Says "delete it from go/bin"; installers use `~/.local/bin` or `%LOCALAPPDATA%\Programs\qbit-vault` and add a user PATH entry nothing removes. | Document all locations and the PATH entry. |
+| E-B8 | `.github/workflows/*.yml` | Actions pinned to floating majors in a secrets project. | Pin to commit SHAs (Dependabot updates them). |
+| E-sync | README, CLI.md | `qbit-vault sync` (agent registrations) vs `qbit-vault remote sync` (devices) share a verb. | Docs callout + `sync` prints "for devices: qbit-vault remote sync". No rename. |
+| E-exec | `docs/CLI.md` | No copy-pasteable manual example of set -> grant -> exec. | Add one short example. |
+| C-wiped | `docs/REMOTE_SYNC.md`, `INSTALL.md` | No documented procedure for a lost or wiped server. | "logout everywhere, register once, join the rest" (as answered to the user). |
+
+### P2: polish (copy, consistency)
+
+- **V2/D-B11** Titles: `QBit Vault: …` vs `qbit-vault: …` (show dialog); heading repeats the window title. One brand, heading without the prefix.
+- **V3** Header labels "Who / Secret / Why / Saved in / Value" are space-aligned for the terminal and misaligned in the proportional dialog font: render them as a two-column grid.
+- **V4/D-#42-45** Buttons: secret dialog `Save`/`Cancel`; show dialog `I saved it` (not OK/Cancel); choose `Continue`/`Cancel`.
+- **V8** Confirm dialog styles Confirm as primary while Enter declines: style Decline as the default, Confirm neutral (red for removals).
+- **D-B9** Layer wording: one function and one phrase everywhere: "all projects" / "only this project (label)".
+- **D copy table** (Audit D items 1-45): shorter, consistent texts. Key ones: "Paste or type the value. The agent never sees it:"; tty "Value (hidden): "; `invalid choice` -> "Type a number from 1 to N, or press Enter for the default."; `No, just save the value` -> "Save it, don't allow yet"; manage options "Replace, allow once" / "Replace, but ask me before each use"; quotes check "The value of X has quotes around it… Which one should be saved?"; `prompt timed out` -> "No answer in time; nothing was saved."; TUI "asked in the terminal prompt" -> "asked in a secure prompt"; "masked" -> "hidden"; pairing "Confirmation code" title consistent with the README.
+- **D-B12** Ctrl-C in cooked terminal reads (choose/confirm/show) should return `cancelled`, not kill the process.
+- **D-B14/B15/B16** zenity `--width=480`, icons (`note` for requests, `caution` for removals), no `Pick/Index` headers.
+- **E-B9/B10/B11** Actionable errors: untyped "a key already exists…", host failures without "run 'qbit-vault doctor'", flag typos without "see --help".
+- **E-B16/B17** TUI "Update · planned / Phase 5" -> "Re-run the install command to upgrade"; remove internal slice numbers from comments.
+- **E-B18/B19** Installer: PATH duplicate check with trailing backslash; GitHub API rate-limit message on Windows.
+- **E-B20** GoReleaser notes from commits: link the CHANGELOG section instead.
+- **C friction** Origin must match byte for byte (`https://Vault.x` or `:443` -> generic "refused"): normalize and say "server URL mismatch". Join: default the device label to the hostname, fold the consent into the label step. Register: recovery-key check loop has a dead end after 5 tries. `remote status` exits 1 on warnings (pending push, conflicts).
+
+### P3: hardening and edge cases
+
+- **A-F3** Pre-bash hook bypassable (`cp` binary, `eval` of decoded text): refuse non-literal `eval`/encoded shells; document the hook as best effort in THREAT_MODEL (the real boundary is the out-of-band prompt).
+- **A-F5/F6** POSIX tree kill reaches the process group only; doc says "no descendant outlives Run". Fix the doc; kill before Wait.
+- **A-F8** Project identity is a path: a different repo cloned at the same path inherits layer and grants. Document (or bind to origin).
+- **A-F9** Cooldown keyed by session; add a short per-name cooldown.
+- **A-F10/F11** Env name denylist (`LD_PRELOAD`, `BASH_ENV`, `PATH`), cap the dump-guard compile cache.
+- **A-F13** request -> store not atomic against a concurrent `set` (confirm first).
+- **B-F4** Missing `audit.head` disables truncation detection: write the head at creation and treat a missing one as `head_mismatch`, or state the limit (owner decision).
+- **B-F5..F18** restore hides rekey-recovery errors; staged key promote without retry on Windows; temp files `O_EXCL`; `retired.enc` no rollback counter; Windows empty-DACL/owner check; racy stale-lock break; Setup ignores keychain errors; nits.
+- **C-S04** Joiner has no version floor (can accept an old version once). **C-S05** conflicts pruned after 30 days/100 silently. **C-S07** orphan server device blocks rekey/revoke. **C-S08** a revoked device cannot rejoin as REMOTE_SYNC § 4.5 says. **C-S11/S12/S15/S16/S17** pairing overwrite, rekey writes before validation, recovery-key prefix parse, origin normalization, token device-id regex.
+
+### Looks solid (all five audits)
+
+`secret.Secret` never prints values; redaction core (leftmost-longest, hold-back across writes, fail closed); exec output always redacted, values never in argv or parent env; Windows job-object tree kill; strict broker decoding; grants (once consumption under lock, hashed single-use prompt tokens, sensitive = once only); nonces/AAD/rollback counters; Argon2 bounds before derivation; atomic writes; audit chain; recovery key (160-bit, never on stdout); pairing fingerprint + HMAC confirmation code; server paths regex-validated; distroless non-root read-only container; dialog escaping (quotes, `&`, `<tag>` rendered literally, checked visually).
+
+## Plan (step by step)
+
+Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green on the four jobs. Releases only at the marked points.
+
+| Step | Contents | Release |
+| --- | --- | --- |
+| 1 | **Live server** (C-S01, C-S03, C-S09, C-S13, C-S02): rightmost trusted hop, per-route body caps, bootstrap code >=128 bits without refresh, rate-limited and atomic account creation, sweeps. Verify the forwarded headers on the live Dokploy server before and after. | server redeploys on merge |
+| 2 | **Visible bugs** (V1, D-B1, E-B1, E-B2, C-S10, C-S06): recovery key visible, Enter declines everywhere, no pi install line, SECURITY.md, no redirects, approve shows the code first. | **beta.11** |
+| 3 | **Secret boundary and storage** (A-F1, A-F2, A-F4, A-F7, A-F12, B-F1, B-F2, B-F3). | **beta.12** |
+| 4 | **Dialogs, one voice** (D-B2, D-B3, D-B4, D-B6, D-B10, V2-V4, V8, D-B9, D copy table, D-B12): same words on Windows, macOS, Linux and terminal; who asks in every permission question; export passphrase labelled. Render every dialog again and check screenshots. | |
+| 5 | **First run and docs** (E-B5/B6, uninstall, sync naming callout, manual exec example, wiped-server procedure, actionable errors, TUI planned text, comments, installer robustness, release notes, SHA-pinned actions). | **beta.13** = launch candidate |
+| 6 | **Sync friction** (origin normalization, join label default, register confirm loop, remote status exit code) and **C-S04..S08**. | beta.14 |
+| 7 | **P3 hardening** as time allows. | |
+
+## Decisions for the owner
+
+1. Installers served from `main` (today) or published as release assets (`releases/latest/download/install.sh`): main is simpler and fixes reach everyone at once; release assets pin the script to a reviewed version.
+2. Missing `audit.head` (B-F4): enforce (head written at init, missing = mismatch) or document the limit.
+3. `remote status` exit code with warnings: keep 1 or return 0 and keep warnings in the output.
+4. Passphrase mismatch: end the command (today) or ask again (up to 3 tries).
+5. README tagline "by qbitdev" vs GitHub owner QuBiit0: intended?
+6. The four same-day betas in the CHANGELOG stay as they are (published releases are never rewritten); a short note at the top can explain the beta cadence.
+
+## Tasks
+
+| ID | Specs | Route | Commit | Status |
+| --- | --- | --- | --- | --- |
+| LP0 | S1, S2 | audits (5 explorers) + visual check | (this document) | done |
+| LP1 | S4 | worker | | done, awaiting review |
+| LP2-LP7 | S1-S3 | plan steps 2-7 | | pending |
+
+## Log
+
+- L1. User request verbatim in S1 (owner away; "tomate todo el tiempo"). Five read-only audits ran in parallel (secret boundary, crypto/storage, sync/server, dialogs/terminal, install/CLI/docs), plus eight Windows dialogs rendered with the real builders and edge cases. P0 items were re-checked against the code: C-S01 (`server.go:198-202` takes the first XFF entry), D-B1 (zenity `--question` and kdialog `--yesno` default to Confirm), C-S10 (`client.go:114` http.Client without CheckRedirect), A-F1 (`scriptOf` stops at `-o pipefail`), E-B1 (`pi.go:41`), V1 (screenshot: the key is cut off). No code changed.
+- L2. Owner chose installers from each release (S3) and asked to continue the plan (S4). Step 1 started on branch fix/server-hardening.

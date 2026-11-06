@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- `qbit-vault-server`: `QBV_SERVER_BOOTSTRAP_INVITE` gives a server with no account its first invite through the environment, for hosted platforms where `invite` cannot be run inside the shell-less container. Hash only, single use, 24 h, never logged, ignored once an account exists.
+
 ## [0.1.0-beta.6] - 2026-11-06
 
 ### Added

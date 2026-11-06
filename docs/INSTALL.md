@@ -23,7 +23,7 @@ irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps
 What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them before piping them to a shell):
 
 1. Pick the archive for your OS and architecture: `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows).
-2. Resolve the version: `QBIT_VAULT_VERSION` if set, else the newest release **including pre-releases** (GitHub's `releases/latest` skips them).
+2. Resolve the version: `QBIT_VAULT_VERSION` if set, else the newest release **including pre-releases** (GitHub's `releases/latest` skips them): the one with the latest publish date among the last 100, because the releases API orders by tag text (`v0.1.0-beta.10` sorts after `v0.1.0-beta.9`).
 3. Download the archive and `checksums.txt` over HTTPS and compare the SHA-256. On a mismatch, or an archive not listed, they stop with `checksum mismatch for <archive>: nothing was installed` (or `<archive> is not listed in checksums.txt`) and install nothing.
 4. Choose the directory: `QBIT_VAULT_INSTALL_DIR` if set; else the directory of the `qbit-vault` already first on your `PATH`, when you can write to it (an upgrade in place, see below); else `~/.local/bin` (Linux, macOS) or `%LOCALAPPDATA%\Programs\qbit-vault` (Windows).
 5. Replace the binary atomically: the new file is written beside the old one and renamed over it, so a failed download or a full disk never leaves a half-written `qbit-vault`. On Windows a running `qbit-vault.exe` (an agent's MCP server) is renamed aside to `qbit-vault.exe.old-<id>` first, which Windows allows, so the upgrade works with your agents open; if the copy fails the old binary is put back. The aside file stays while that process runs and the next install removes it. On Windows the directory is added to your **user** `PATH` (open a new terminal); on Linux and macOS the script tells you if the directory is not on `PATH`.
@@ -32,6 +32,7 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 | Variable | Effect |
 | --- | --- |
 | `QBIT_VAULT_VERSION` | Tag to install, for example `v0.1.0-beta.2` |
+| `QBIT_VAULT_RELEASES_API` | Release list to choose the newest from (default: the GitHub releases API; the tests use a local file) |
 | `QBIT_VAULT_INSTALL_DIR` | Target directory |
 | `QBIT_VAULT_NO_PATH=1` | Windows only: leave the user `PATH` unchanged |
 | `QBIT_VAULT_NO_SYNC=1` | Do not run `qbit-vault sync` after installing over a set-up vault |

@@ -4,6 +4,7 @@
 #
 # Environment:
 #   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
+#   QBIT_VAULT_RELEASES_API release list to pick the newest from (default: the GitHub releases API)
 #   QBIT_VAULT_INSTALL_DIR  target directory (default: where qbit-vault already is, else %LOCALAPPDATA%\Programs\qbit-vault)
 #   QBIT_VAULT_RELEASE_URL  base download URL or local directory (default: the GitHub releases)
 #   QBIT_VAULT_NO_PATH      set to 1 to leave the user PATH unchanged
@@ -42,9 +43,13 @@ function Install-QBitVault {
     }
 
     if (-not $version) {
-        # releases/latest skips pre-releases, so ask for the newest release of any kind.
-        $releases = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/$repo/releases?per_page=1"
-        $version = @($releases)[0].tag_name
+        # releases/latest skips pre-releases, so list releases of any kind. The API
+        # orders them by tag text (v0.1.0-beta.10 after v0.1.0-beta.9), so take the
+        # newest publish date; a draft has none.
+        $api = if ($env:QBIT_VAULT_RELEASES_API) { $env:QBIT_VAULT_RELEASES_API } else { "https://api.github.com/repos/$repo/releases?per_page=100" }
+        $releases = if ($api -match '^https://') { Invoke-RestMethod -UseBasicParsing -Uri $api } else { Get-Content -Raw -LiteralPath $api | ConvertFrom-Json }
+        $newest = @($releases | ForEach-Object { $_ }) | Where-Object { -not $_.draft -and $_.published_at } | Sort-Object { [datetime]$_.published_at } -Descending | Select-Object -First 1
+        $version = $newest.tag_name
         if (-not $version) { throw "qbit-vault install: no release of $repo found" }
     }
 

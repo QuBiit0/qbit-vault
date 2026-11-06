@@ -146,6 +146,37 @@ check "explicit dir installs there" test "$("$work/dest11/qbit-vault")" = fake-q
 check "explicit dir leaves the old copy" grep -q v0.0.0-old <<<"$("$work/prev/qbit-vault" version)"
 check "explicit dir warns about the shadowing copy" grep -q "another qbit-vault at $work/prev/qbit-vault comes first on your PATH" <<<"$out"
 
+# 12. Without QBIT_VAULT_VERSION the newest published release wins, wherever the
+# API lists it (GitHub orders by tag text, so v0.1.0-beta.10 comes after beta.9).
+cat >"$work/releases.json" <<'JSON'
+[
+  {
+    "tag_name": "v0.0.9-old",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-11-06T16:37:55Z",
+    "published_at": "2026-11-06T16:41:42Z",
+    "assets": [{"name": "checksums.txt", "created_at": "2026-11-06T18:00:00Z"}]
+  },
+  {
+    "tag_name": "v0.0.0-draft",
+    "draft": true,
+    "created_at": "2026-11-06T19:00:00Z",
+    "published_at": null
+  },
+  {
+    "tag_name": "v0.0.0-test",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-11-06T16:57:22Z",
+    "published_at": "2026-11-06T17:00:26Z"
+  }
+]
+JSON
+run "$work/bin-x86" "$work/good" "$work/dest12" QBIT_VAULT_VERSION= QBIT_VAULT_RELEASES_API="$(fileurl "$work/releases.json")"
+check "newest published release is chosen" grep -q "installing qbit-vault v0.0.0-test (linux/amd64)" <<<"$out"
+check "newest published release installs" test "$("$work/dest12/qbit-vault" 2>/dev/null)" = fake-qbit-vault-amd64
+
 if [ "$fails" -ne 0 ]; then
 	echo "$fails check(s) failed"
 	exit 1

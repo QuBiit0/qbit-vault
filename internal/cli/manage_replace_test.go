@@ -90,3 +90,24 @@ func TestManageReplaceSensitiveOffersOnceOnly(t *testing.T) {
 		t.Fatalf("once grant missing: %v", err)
 	}
 }
+
+// Inside a repository replace offers "always in this project" too, and the
+// grant it makes covers a new agent session there, not another repository.
+func TestManageReplaceInARepositoryCanGrantAlways(t *testing.T) {
+	w := newWorld(t)
+	w.mustRun("TESTSECRET_old\n", "set", "A", "--global", "--stdin")
+	f := withBackend(t, answers(pick(1), val("TESTSECRET_new")))
+	if code, m, _ := w.broker("manage", manageReq(w.repo, `"action":"replace","name":"A","layer":"global"`)); code != exitcode.OK {
+		t.Fatalf("code=%d m=%v", code, m)
+	}
+	want := []string{"Replace, then Once: only the next command", "Replace, then Always: in this project, until you revoke it", "Replace only: ask me again before it is used", "Don't replace"}
+	if strings.Join(f.Calls[0].Options, "|") != strings.Join(want, "|") || f.Calls[0].Default != 0 {
+		t.Fatalf("options=%q default=%d", f.Calls[0].Options, f.Calls[0].Default)
+	}
+	if err := w.checkIn("A", "mcp:restarted", w.repo); err != nil {
+		t.Fatalf("after a restart: %v", err)
+	}
+	if err := w.checkIn("A", brokerSession, w.mkRepo("blog")); !errors.Is(err, grants.ErrGrantRequired) {
+		t.Fatalf("another repository: err = %v", err)
+	}
+}

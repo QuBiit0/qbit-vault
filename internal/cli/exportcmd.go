@@ -72,6 +72,9 @@ func newExport(g *globals) *cobra.Command {
 			for _, l := range layers {
 				secrets += len(l.Records)
 			}
+			if secrets == 0 && unlinked > 0 {
+				return usageError{fmt.Sprintf("nothing to export on this device: %d %s in project layers not linked here; run 'qbit-vault link' or export from the device that has them", unlinked, plural(unlinked, "secret is", "secrets are"))}
+			}
 			if secrets == 0 {
 				return usageError{"the vault is empty; nothing to export"}
 			}
@@ -90,6 +93,9 @@ func newExport(g *globals) *cobra.Command {
 			payload := exportPayload(layers)
 			defer payload.Wipe()
 			data, err := exportfile.Seal(pass, payload, clock())
+			if errors.Is(err, exportfile.ErrTooLarge) {
+				return usageError{"the export would be larger than 64 MiB and could not be imported back"}
+			}
 			if err != nil {
 				return err
 			}

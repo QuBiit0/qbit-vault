@@ -95,6 +95,7 @@ func TestOpenRefusesEverythingUntrusted(t *testing.T) {
 		"kdf t changed":   setKDF("t", 2),
 		"kdf m too low":   setKDF("m_kib", 8),
 		"kdf m too high":  setKDF("m_kib", maxMKiB+1),
+		"kdf m 1 GiB":     setKDF("m_kib", 1<<20),
 		"kdf p zero":      setKDF("p", 0),
 		"kdf alg":         setKDF("alg", "scrypt"),
 		"salt not base64": setKDF("salt", "!!"),
@@ -170,5 +171,17 @@ func TestReadIsBounded(t *testing.T) {
 	}
 	if b, err := Read(p); err != nil || len(b) != 10 {
 		t.Fatalf("read: %v", err)
+	}
+}
+
+// An export is refused when it would be larger than Read accepts: a file
+// that cannot be imported back is not a backup.
+func TestSealRefusesAFileTooLargeToReadBack(t *testing.T) {
+	lowCost(t)
+	old := maxFileBytes
+	maxFileBytes = 200
+	t.Cleanup(func() { maxFileBytes = old })
+	if _, err := Seal(pass("correct horse battery"), sample(), time.Now()); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("err = %v, want ErrTooLarge", err)
 	}
 }

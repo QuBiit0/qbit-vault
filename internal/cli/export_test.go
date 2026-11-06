@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/exportfile"
 	"github.com/QuBiit0/qbit-vault/internal/perm"
 	"github.com/QuBiit0/qbit-vault/internal/prompt"
 	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
@@ -729,5 +730,22 @@ func TestExportImportLeakBattery(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+// A vault whose only secrets are in project layers from another device that
+// are not linked here exports nothing, and says why instead of "empty".
+func TestExportOfOnlyUnlinkedSecretsSaysWhy(t *testing.T) {
+	w := newWorld(t)
+	w.syncedProject()
+	f := withBackend(t, answers(val(fxExport)))
+	file := exportFile(t)
+	code, out, errs := w.run("", "export", file)
+	want := usageErr("nothing to export on this device: 1 secret is in project layers not linked here; run 'qbit-vault link' or export from the device that has them")
+	if code != exitcode.Usage || out != "" || errs != want {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if len(f.Calls) != 0 || exportfile.Exists(file) {
+		t.Fatal("asked for a passphrase or wrote a file for nothing")
 	}
 }

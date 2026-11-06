@@ -44,9 +44,12 @@ const (
 	keySize     = 32
 
 	maxT    = 10
-	maxMKiB = 1 << 20 // 1 GiB
+	maxMKiB = 1 << 19 // 512 MiB: a crafted header cannot make Open use more
 	maxP    = 16
 )
+
+// maxFileBytes is MaxFileBytes; tests lower it.
+var maxFileBytes = MaxFileBytes
 
 var (
 	// ErrOpen means the file could not be opened: wrong passphrase, a changed
@@ -59,6 +62,9 @@ var (
 	ErrExists = errors.New("export file exists")
 	// ErrWrite means the file could not be written.
 	ErrWrite = errors.New("cannot write the export file")
+	// ErrTooLarge means the sealed file would be larger than Read accepts, so
+	// it could never be imported back.
+	ErrTooLarge = errors.New("the export would be too large to import back")
 )
 
 // KDF describes how the key was derived. Its canonical JSON is part of the
@@ -192,6 +198,9 @@ func Seal(pass secret.Secret, p Payload, at time.Time) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("exportfile: file encoding failed")
 	}
+	if len(out)+1 > maxFileBytes {
+		return nil, ErrTooLarge
+	}
 	return append(out, '\n'), nil
 }
 
@@ -257,8 +266,8 @@ func Read(path string) ([]byte, error) {
 		return nil, ErrRead
 	}
 	defer fh.Close()
-	data, err := io.ReadAll(io.LimitReader(fh, MaxFileBytes+1))
-	if err != nil || len(data) > MaxFileBytes {
+	data, err := io.ReadAll(io.LimitReader(fh, int64(maxFileBytes)+1))
+	if err != nil || len(data) > maxFileBytes {
 		return nil, ErrRead
 	}
 	return data, nil

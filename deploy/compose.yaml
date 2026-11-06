@@ -10,6 +10,10 @@ services:
     environment:
       QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
       QBV_SERVER_TRUST_PROXY: "1"
+      # Optional first invite for a server with no account yet (at least 24
+      # characters; ignored once an account exists; never logged). For hosts
+      # where `exec ... invite` is not possible. Remove it after registering.
+      QBV_SERVER_BOOTSTRAP_INVITE: ${QBV_SERVER_BOOTSTRAP_INVITE:-}
     volumes:
       - vault-data:/data
     read_only: true

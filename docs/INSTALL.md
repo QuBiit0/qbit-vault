@@ -199,6 +199,8 @@ docker compose -f deploy/compose.yaml up -d --build
 docker compose -f deploy/compose.yaml exec server /qbit-vault-server invite --ttl 24h
 ```
 
+No shell on the host (a hosted Dokploy)? Set `QBV_SERVER_BOOTSTRAP_INVITE` to a code of your own of at least 24 characters in the service's environment and redeploy: while no account exists the server accepts that code once, as the invite of step 2 (it is never logged). Remove the variable after registering.
+
 **2. First machine** (the one that already has your secrets):
 
 ```bash

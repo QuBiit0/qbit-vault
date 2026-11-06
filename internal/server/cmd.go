@@ -15,7 +15,7 @@ import (
 //
 //	serve              run the API (QBV_SERVER_DATA, QBV_SERVER_LISTEN,
 //	                   QBV_SERVER_PUBLIC_URL, QBV_SERVER_TLS_CERT/KEY,
-//	                   QBV_SERVER_TRUST_PROXY)
+//	                   QBV_SERVER_TRUST_PROXY, QBV_SERVER_BOOTSTRAP_INVITE)
 //	invite [--ttl D]   print one single-use account invite (default 24h)
 //	health             exit 0 when /healthz answers on the listen address
 //
@@ -85,6 +85,23 @@ func Main(ctx context.Context, args []string, getenv func(string) string, stdout
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 2
+		}
+		// The first invite of a server with no account, for operators who
+		// cannot exec `invite` in the container. Never logged.
+		if code := getenv("QBV_SERVER_BOOTSTRAP_INVITE"); code != "" {
+			made, err := s.BootstrapInvite(code, 24*time.Hour)
+			switch {
+			case errors.Is(err, ErrWeakInvite):
+				fmt.Fprintf(stderr, "error: QBV_SERVER_BOOTSTRAP_INVITE must be at least %d characters\n", MinBootstrapInvite)
+				return 2
+			case err != nil:
+				fmt.Fprintln(stderr, "error: cannot store the bootstrap invite")
+				return 1
+			case made:
+				fmt.Fprintln(stderr, "bootstrap invite registered (single use, expires in 24h)")
+			default:
+				fmt.Fprintln(stderr, "bootstrap invite ignored: an account already exists; remove QBV_SERVER_BOOTSTRAP_INVITE")
+			}
 		}
 		return serve(ctx, s, listen, getenv("QBV_SERVER_TLS_CERT"), getenv("QBV_SERVER_TLS_KEY"), stderr)
 	}

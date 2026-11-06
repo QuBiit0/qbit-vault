@@ -240,9 +240,7 @@ func newPromptCmd(g *globals) *cobra.Command {
 				recordID = ""
 			}
 
-			// The token is redeemed by `grant`, whose --ttl is for the session
-			// scope only: no timed project answer here.
-			opts, def := scopeLabels(plainChoices(allowed), "", false)
+			opts, def := scopeLabels(g.Session, allowed, "", false)
 			opts = append(opts, denyOption)
 			i, err := ask.Choose(allowQuestion([]string{name + " (" + whereText(layerChoice) + ")"}, reason), opts, def)
 			if err != nil {

@@ -85,6 +85,8 @@ func psScript(d dialog) string {
 		b.WriteString(psSecretInput)
 	case dialogChoose:
 		b.WriteString(psChooseInput)
+	case dialogShow:
+		b.WriteString(psShowText)
 	case dialogConfirm:
 		accept = "$no" // Enter declines
 	}
@@ -108,9 +110,12 @@ func psScript(d dialog) string {
 
 // The dialog is TopMost so it cannot hide behind the agent's window; labels
 // do not treat & as an accelerator, so a name with & is shown as written.
+// Colors are the design system's (design/system.md): deep background, frost
+// text, blue-glow heading, qubit-blue primary button, line borders.
 const psFormTop = `Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
+function Col($h) { [System.Drawing.ColorTranslator]::FromHtml($h) }
 $f = New-Object System.Windows.Forms.Form
 $f.Text = $title
 $f.TopMost = $true
@@ -120,40 +125,93 @@ $f.MinimizeBox = $false
 $f.MaximizeBox = $false
 $f.AutoSize = $true
 $f.AutoSizeMode = 'GrowAndShrink'
-$f.Padding = New-Object System.Windows.Forms.Padding(12)
+$f.BackColor = Col '#07121B'
+$f.ForeColor = Col '#C7D9DE'
+$f.Font = New-Object System.Drawing.Font('Segoe UI', 10)
 $p = New-Object System.Windows.Forms.FlowLayoutPanel
 $p.FlowDirection = 'TopDown'
 $p.WrapContents = $false
 $p.AutoSize = $true
+$p.Padding = New-Object System.Windows.Forms.Padding(20, 16, 20, 16)
+$h = New-Object System.Windows.Forms.Label
+$h.UseMnemonic = $false
+$h.AutoSize = $true
+$h.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 12)
+$h.ForeColor = Col '#7FD0EC'
+$h.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 10)
+$heading = $title; if ($heading.StartsWith('qbit-vault: ')) { $heading = $heading.Substring(12) }
+if ($heading.Length -gt 0) { $heading = $heading.Substring(0, 1).ToUpper() + $heading.Substring(1) }
+$h.Text = $heading
+$p.Controls.Add($h)
 $l = New-Object System.Windows.Forms.Label
 $l.UseMnemonic = $false
 $l.AutoSize = $true
-$l.MaximumSize = New-Object System.Drawing.Size(480, 0)
+$l.MaximumSize = New-Object System.Drawing.Size(520, 0)
+$l.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
 $l.Text = $text
 $p.Controls.Add($l)
 `
 
 const psSecretInput = `$tb = New-Object System.Windows.Forms.TextBox
 $tb.UseSystemPasswordChar = $hide
-$tb.Width = 480
+$tb.Width = 520
+$tb.BorderStyle = 'FixedSingle'
+$tb.BackColor = Col '#000204'
+$tb.ForeColor = Col '#C7D9DE'
+$tb.Font = New-Object System.Drawing.Font('Consolas', 11)
+$tb.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
 $tb.MaxLength = 70000
 $p.Controls.Add($tb)
 `
 
+// psShowText puts the text of a show dialog (a recovery key, a pairing code)
+// in a read-only text box instead of the label, so it can be selected and
+// copied rather than typed by hand.
+const psShowText = `$p.Controls.Remove($l)
+$sel = New-Object System.Windows.Forms.TextBox
+$sel.Multiline = $true
+$sel.ReadOnly = $true
+$sel.WordWrap = $true
+$sel.ScrollBars = 'None'
+$sel.Width = 520
+$sel.BorderStyle = 'FixedSingle'
+$sel.BackColor = Col '#000204'
+$sel.ForeColor = Col '#C7D9DE'
+$sel.Font = New-Object System.Drawing.Font('Consolas', 11)
+$sel.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
+$sel.Text = $text.Replace([string][char]10, [System.Environment]::NewLine)
+$sel.Height = [Math]::Min(320, 22 * $sel.Lines.Count + 12)
+$sel.SelectionStart = 0
+$p.Controls.Add($sel)
+`
+
 const psChooseInput = `$radios = @()
-for ($i = 0; $i -lt $opts.Count; $i++) { $r = New-Object System.Windows.Forms.RadioButton; $r.UseMnemonic = $false; $r.AutoSize = $true; $r.MaximumSize = New-Object System.Drawing.Size(480, 0); $r.Text = $opts[$i]; $r.Checked = ($i -eq $def); $p.Controls.Add($r); $radios += $r }
+for ($i = 0; $i -lt $opts.Count; $i++) { $r = New-Object System.Windows.Forms.RadioButton; $r.UseMnemonic = $false; $r.AutoSize = $true; $r.MaximumSize = New-Object System.Drawing.Size(520, 0); $r.Margin = New-Object System.Windows.Forms.Padding(0, 2, 0, 6); $r.Text = $opts[$i]; $r.Checked = ($i -eq $def); $p.Controls.Add($r); $radios += $r }
 `
 
 const psButtons = `$bp = New-Object System.Windows.Forms.FlowLayoutPanel
 $bp.FlowDirection = 'LeftToRight'
 $bp.AutoSize = $true
+$bp.Anchor = 'Right'
+$bp.Margin = New-Object System.Windows.Forms.Padding(0, 6, 0, 0)
 $ok = New-Object System.Windows.Forms.Button
 $ok.Text = $okLabel
 $ok.AutoSize = $true
+$ok.MinimumSize = New-Object System.Drawing.Size(104, 34)
+$ok.FlatStyle = 'Flat'
+$ok.FlatAppearance.BorderSize = 0
+$ok.BackColor = Col '#2E9BE0'
+$ok.ForeColor = Col '#FFFFFF'
+$ok.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 10)
 $ok.DialogResult = [System.Windows.Forms.DialogResult]::OK
 $no = New-Object System.Windows.Forms.Button
 $no.Text = $cancelLabel
 $no.AutoSize = $true
+$no.MinimumSize = New-Object System.Drawing.Size(104, 34)
+$no.FlatStyle = 'Flat'
+$no.FlatAppearance.BorderColor = Col '#16303D'
+$no.BackColor = Col '#07121B'
+$no.ForeColor = Col '#C7D9DE'
 $no.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
 $bp.Controls.Add($ok)
 $bp.Controls.Add($no)

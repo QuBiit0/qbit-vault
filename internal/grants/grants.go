@@ -69,8 +69,8 @@ func ProjectRootOf(layer string) (string, bool) {
 	return root, ok && root != ""
 }
 
-// Grant is one permission. Session is empty for project scope, and
-// ExpiresAt nil unless it was granted for a time ("12 hours in this project"); ProjectRoot is set only for project scope.
+// Grant is one permission. Session is empty and ExpiresAt nil for project
+// scope; ProjectRoot is set only for project scope.
 type Grant struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
@@ -158,10 +158,10 @@ func Validate(req Request) error {
 	if req.Scope != ScopeProject && req.Session == "" {
 		return ErrInvalidRequest
 	}
-	if req.TTL != 0 && req.Scope == ScopeOnce {
+	if req.TTL != 0 && req.Scope != ScopeSession {
 		return ErrInvalidTTL
 	}
-	if req.TTL != 0 && (req.TTL < MinTTL || req.TTL > MaxTTL) {
+	if req.Scope == ScopeSession && req.TTL != 0 && (req.TTL < MinTTL || req.TTL > MaxTTL) {
 		return ErrInvalidTTL
 	}
 	return nil
@@ -197,9 +197,6 @@ func Add(s *Store, req Request, now time.Time) (Grant, error) {
 		var isProject bool
 		if g.ProjectRoot, isProject = ProjectRootOf(req.Layer); !isProject {
 			g.ProjectRoot = req.ProjectRoot
-		}
-		if req.TTL != 0 { // "12 hours in this project": survives agent restarts, then ends
-			g.ExpiresAt = at(now.Add(req.TTL))
 		}
 	}
 	kept := s.Grants[:0]

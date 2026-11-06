@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -143,6 +144,59 @@ func TestCallsGoThroughTheBrokerWithEnvelope(t *testing.T) {
 	m, isErr = callJSON(t, cs, "secret_request", map[string]any{"name": "A", "reason": "needed!!!"})
 	if !isErr || m["refusal"].(map[string]any)["type"] != "reason_too_vague" {
 		t.Fatalf("vague: %v", m)
+	}
+}
+
+// A-F12: a panic in a tool handler (here in the Cwd callback, outside the
+// broker's own recover) answers the typed internal refusal and the server
+// keeps serving.
+func TestPanicInAToolHandlerIsAnInternalRefusal(t *testing.T) {
+	var logged bytes.Buffer
+	old := panicLog
+	panicLog = &logged
+	t.Cleanup(func() { panicLog = old })
+	boom := true
+	ctx := context.Background()
+	srv := NewServer(&fake{}, Options{Session: "claude:sess1234", Version: "test", Cwd: func() (string, error) {
+		if boom {
+			panic("TESTSECRET_cwd_panic")
+		}
+		return filepath.Abs(".")
+	}})
+	st, ct := sdk.NewInMemoryTransports()
+	if _, err := srv.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+
+	res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "secret_list", Arguments: map[string]any{}})
+	if err != nil || !res.IsError || len(res.Content) != 1 {
+		t.Fatalf("err=%v res=%+v", err, res)
+	}
+	txt := res.Content[0].(*sdk.TextContent).Text
+	var m struct {
+		OK      bool `json:"ok"`
+		Refusal struct{ Type, Message string }
+	}
+	if json.Unmarshal([]byte(txt), &m) != nil || m.OK || m.Refusal.Type != "internal" || m.Refusal.Message != "internal error" {
+		t.Fatalf("answer = %q", txt)
+	}
+	if logged.String() != "qbit-vault: internal error while handling a request\n" {
+		t.Fatalf("stderr line = %q", logged.String())
+	}
+	for _, leaked := range []string{txt, logged.String()} {
+		if strings.Contains(leaked, "TESTSECRET_") || strings.Contains(leaked, "goroutine") {
+			t.Fatal("panic text leaked")
+		}
+	}
+	// Still serving.
+	boom = false
+	if m, isErr := callJSON(t, cs, "secret_list", map[string]any{}); isErr || m["ok"] != true {
+		t.Fatalf("after a panic: %v", m)
 	}
 }
 

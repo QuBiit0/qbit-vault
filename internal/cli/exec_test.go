@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/QuBiit0/qbit-vault/internal/audit"
 	"github.com/QuBiit0/qbit-vault/internal/refusal"
@@ -207,6 +208,27 @@ func TestExecRefusalsNeverRun(t *testing.T) {
 	t.Run("dump_command names the injected env var", func(t *testing.T) {
 		w.wantRefusal(refusal.DumpCommand, "", execArgs(sessA, []string{"GH_TOKEN=GITHUB_TOKEN"}, "echo ${GH_TOKEN}; "+run)...)
 	})
+	if ran(mk) {
+		t.Fatal("a refused command ran")
+	}
+}
+
+// A-F1, A-F2: options before -c and encoded PowerShell do not hide a dump.
+func TestExecDumpGuardShellOptionsAndEncodedPowerShell(t *testing.T) {
+	w := newExecWorld(t)
+	w.setSecret("GITHUB_TOKEN", xv, "--global")
+	w.grantTo(sessA, "GITHUB_TOKEN", "session")
+	mk := marker(t)
+	run := child(t, "mark", mk, 0)
+	for _, c := range []string{
+		"bash -o pipefail -c 'printenv'; " + run,
+		"sh --login -c 'echo $GITHUB_TOKEN'; " + run,
+		"bash -O extglob -c env; " + run,
+		"pwsh -enc SQBFAFgA; " + run,
+		"powershell -EncodedCommand SQBFAFgA; " + run,
+	} {
+		w.wantRefusal(refusal.DumpCommand, "", execArgs(sessA, []string{"GITHUB_TOKEN"}, c)...)
+	}
 	if ran(mk) {
 		t.Fatal("a refused command ran")
 	}
@@ -467,6 +489,26 @@ func TestExecHumanStreamsRedactedOutput(t *testing.T) {
 	}
 }
 
+// A-F4: a granted command that writes the value as UTF-16LE (PowerShell 5.1
+// Out-File) is redacted on both streams.
+func TestExecRedactsUTF16Output(t *testing.T) {
+	w := newExecWorld(t)
+	w.setSecret("GITHUB_TOKEN", xv, "--global")
+	w.grantTo(sessA, "GITHUB_TOKEN", "session")
+	run := child(t, "utf16", "GITHUB_TOKEN", 0)
+	enc := []byte{}
+	for _, u := range utf16.Encode([]rune(xv)) {
+		enc = append(enc, byte(u), byte(u>>8))
+	}
+	for _, extra := range [][]string{nil, {"--stream"}} {
+		code, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, run, extra...)...)
+		if code != 0 || strings.Contains(out+errs, string(enc)) || !strings.Contains(out, "[REDACTED:GITHUB_TOKEN]") || !strings.Contains(errs, "[REDACTED:GITHUB_TOKEN]") {
+			t.Fatalf("%v: code=%d outlen=%d errlen=%d", extra, code, len(out), len(errs))
+		}
+		noFixtures(t, "exec output", out+errs)
+	}
+}
+
 func TestExecNDJSONStream(t *testing.T) {
 	w := newExecWorld(t)
 	w.setSecret("GITHUB_TOKEN", xv, "--global")
@@ -689,7 +731,11 @@ func TestExecLeakBattery(t *testing.T) {
 			captured.WriteString(out + errs)
 		}
 	}
-	_, out, errs := w.run("", "--session", sessA, "exec", "--secret", "GITHUB_TOKEN", "--", "echo", "$GITHUB_TOKEN")
+	// A command that writes the value as UTF-16LE (PowerShell 5.1 Out-File).
+	_, out, errs := w.run("", execArgs(sessA, []string{"GITHUB_TOKEN"}, child(t, "utf16", "GITHUB_TOKEN", 0))...)
+	captured.WriteString(out + errs)
+	run = child(t, "leaks", "GITHUB_TOKEN", 0)
+	_, out, errs = w.run("", "--session", sessA, "exec", "--secret", "GITHUB_TOKEN", "--", "echo", "$GITHUB_TOKEN")
 	captured.WriteString(out + errs)
 	_, out, errs = w.run("", "--json", "list")
 	captured.WriteString(out + errs)
@@ -699,6 +745,17 @@ func TestExecLeakBattery(t *testing.T) {
 		"b64":  base64.StdEncoding.EncodeToString([]byte(xv)),
 		"b64u": base64.URLEncoding.EncodeToString([]byte(xv)),
 		"pct":  url.QueryEscape(xv),
+	}
+	for name, be := range map[string]bool{"utf16le": false, "utf16be": true} {
+		var b []byte
+		for _, u := range utf16.Encode([]rune(xv)) {
+			if be {
+				b = append(b, byte(u>>8), byte(u))
+			} else {
+				b = append(b, byte(u), byte(u>>8))
+			}
+		}
+		needles[name] = string(b)
 	}
 	check := func(where string, data []byte) {
 		for enc, n := range needles {

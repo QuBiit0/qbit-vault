@@ -289,6 +289,47 @@ func TestBackendErrorsBecomeRefusals(t *testing.T) {
 	}
 }
 
+// panicker is a backend whose every op panics with text that must not leave.
+type panicker struct{ fake }
+
+func (panicker) List(context.Context, Envelope) (ListResult, error) {
+	panic("TESTSECRET_panic_text at /home/me")
+}
+func (panicker) Exec(context.Context, Envelope, ExecRequest) (ExecResponse, error) {
+	panic(errors.New("TESTSECRET_panic_text"))
+}
+
+// A-F12: a panic in an op becomes the typed internal refusal; the panic text
+// never reaches the answer and stderr gets one fixed line.
+func TestPanicInAnOpBecomesInternalRefusal(t *testing.T) {
+	var logged bytes.Buffer
+	old := panicLog
+	panicLog = &logged
+	t.Cleanup(func() { panicLog = old })
+	for _, raw := range []string{env("list", ""), env("exec", `"command":"x","secrets":[{"name":"A"}]`)} {
+		logged.Reset()
+		out := Handle(context.Background(), []byte(raw), &panicker{}, TransportModel)
+		if typ, msg := refusalOf(t, mustJSON(t, out)); typ != "internal" || msg != "internal error" {
+			t.Fatalf("%s %q", typ, msg)
+		}
+		if !bytes.HasSuffix(out, []byte("\n")) || bytes.Count(out, []byte("\n")) != 1 {
+			t.Fatalf("not one line: %q", out)
+		}
+		if logged.String() != "qbit-vault: internal error while handling a request\n" {
+			t.Fatalf("stderr line = %q", logged.String())
+		}
+		for _, leaked := range []string{string(out), logged.String()} {
+			if strings.Contains(leaked, "TESTSECRET_") || strings.Contains(leaked, "goroutine") || strings.Contains(leaked, "/home/me") {
+				t.Fatal("panic text leaked")
+			}
+		}
+	}
+	// The next request is answered normally.
+	if m := mustJSON(t, Handle(context.Background(), []byte(env("capabilities", "")), &fake{}, TransportModel)); m["ok"] == false {
+		t.Fatalf("after a panic: %v", m)
+	}
+}
+
 func mustJSON(t *testing.T, b []byte) map[string]any {
 	t.Helper()
 	var m map[string]any

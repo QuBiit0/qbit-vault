@@ -4,6 +4,17 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Fixed
+
+- Dump guard: it reads the script of a shell called with options before `-c` (`bash -o pipefail -c 'printenv'`, `sh --login -c …`, `bash -O extglob -c env`), which it used to let through.
+- `pwsh`/`powershell` with an encoded command (`-e`, `-ec`, `-enc`, `-EncodedCommand`) is refused as `dump_command` while a secret is injected, and by the pre-bash hook.
+- Redaction also matches the value in UTF-16LE and UTF-16BE (Windows PowerShell 5.1 `Out-File`), in command output and in files read by the post-read hook.
+- `prompt --value` for a name that already exists issues a token bound to that record, so it cannot be redeemed against a record that replaced it.
+- A panic in an MCP tool handler or a broker op answers the typed `internal` refusal and the server keeps serving; no panic text or stack is printed.
+- The backup of the previous vault files is written with `fsync` like the live files.
+- Linux: the unlock cache is used only when `XDG_RUNTIME_DIR` is on tmpfs; otherwise the passphrase is asked each time and nothing is written.
+- A lock file stamped more than the stale age in the future (clock skew, a copied home) is treated as stale instead of "vault is busy" forever.
+
 ## [0.1.0-beta.11] - 2026-11-06
 
 ### Fixed

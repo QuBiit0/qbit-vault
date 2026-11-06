@@ -73,12 +73,21 @@ func scriptOf(w []string) (string, bool) {
 		}
 		return strings.Join(args, " "), true
 	case shellNames[name]:
-		for i, a := range args {
-			if len(a) < 2 || a[0] != '-' || a[1] == '-' {
+		// Options may precede -c: `-o NAME` and `+o NAME` (and bash's -O/+O)
+		// take a value, `--long` options stand alone, and the first short
+		// cluster that contains c takes the next word as the script.
+		for i := 0; i < len(args); i++ {
+			a := args[i]
+			switch {
+			case a == "-o" || a == "+o" || a == "-O" || a == "+O":
+				i++
+			case strings.HasPrefix(a, "--"):
+			case len(a) >= 2 && (a[0] == '-' || a[0] == '+'):
+				if a[0] == '-' && strings.Contains(a, "c") && i+1 < len(args) {
+					return args[i+1], true
+				}
+			default:
 				return "", false
-			}
-			if strings.Contains(a, "c") && i+1 < len(args) {
-				return args[i+1], true
 			}
 		}
 	case psNames[name]:
@@ -95,6 +104,30 @@ func scriptOf(w []string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// encodedPowerShell reports whether w runs pwsh/powershell with an encoded
+// command (-e, -ec, -en, -enc, ... -encodedcommand, any case, - or / prefix):
+// the script is base64 and cannot be inspected. Only the options before the
+// command or file are read.
+func encodedPowerShell(w []string) bool {
+	idx, bare := resolve(w)
+	if idx < 0 || bare || !psNames[strings.ToLower(baseName(w[idx]))] {
+		return false
+	}
+	for _, a := range w[idx+1:] {
+		if len(a) < 2 || (a[0] != '-' && a[0] != '/') {
+			return false
+		}
+		f := strings.ToLower(a[1:])
+		switch {
+		case f == "ec" || strings.HasPrefix("encodedcommand", f):
+			return true
+		case psCmdFlags["-"+f] || f == "f" || f == "file":
+			return false
+		}
+	}
+	return false
 }
 
 // ProgramName is the name a program is compared by: its base name without a

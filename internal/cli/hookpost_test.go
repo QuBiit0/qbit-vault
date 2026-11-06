@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 )
 
 const (
@@ -84,6 +85,27 @@ func TestHookPostReadRedacts(t *testing.T) {
 	if code != 0 || errs != "" || out != want {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
+}
+
+// A-F4: a file PowerShell 5.1 wrote as UTF-16LE is redacted by post-read.
+func TestHookPostReadRedactsUTF16(t *testing.T) {
+	w := hookWorld(t)
+	var enc strings.Builder
+	enc.WriteString("ÿþ")
+	for _, u := range utf16.Encode([]rune(hkA)) {
+		enc.WriteByte(byte(u))
+		enc.WriteByte(byte(u >> 8))
+	}
+	ev, _ := json.Marshal(map[string]any{
+		"hook_event_name": "PostToolUse", "tool_name": "Read",
+		"tool_input":    map[string]any{"file_path": "/p/x"},
+		"tool_response": map[string]any{"type": "text", "file": map[string]any{"filePath": "/p/x", "content": enc.String(), "numLines": 1}},
+	})
+	code, out, errs := w.run(string(ev), "hook", "post-read")
+	if code != 0 || errs != "" || !strings.Contains(out, "[REDACTED:API_KEY]") || !strings.Contains(out, "redacted 1 occurrence(s)") {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	noFixtures(t, "hook output", out+errs)
 }
 
 func TestHookPostNoMatchPrintsNothing(t *testing.T) {

@@ -22,6 +22,16 @@ Full read-only audit before sharing QBit Vault with the community (five parallel
   - S5.5 (C-S10) The sync client never follows redirects: a 3xx answer is an error (`remote_unreachable` class, fixed message), the body is never sent to another URL. Test with an httptest server that answers 307/308 to a second server that must receive nothing.
   - S5.6 (C-S06) `remote approve`: once the server accepted the approval, the confirmation code is shown first; a failure of the roster write or of the following sync round is then a warning on stderr (exit 0), never an error that hides the code.
   - S5.7 Tests RED first for each rule, docs and CHANGELOG [Unreleased] in the same change.
+- S6. Step 3, secret boundary and storage (beta.12), exactly:
+  - S6.1 (A-F1) The dump guard splits the script of a shell called with options before `-c`: `-o VALUE` / `+o VALUE` and bash's `-O VALUE` / `+O VALUE` are skipped with their value, `--long` options are skipped, and the first short-option cluster that contains `c` takes the next word as the script. `bash -o pipefail -c 'printenv'`, `sh --login -c 'echo $NAME'` and `bash -O extglob -c env` are refused (`dump_command`) while a secret is injected; `bash -o pipefail -c 'echo hi'` still runs.
+  - S6.2 (A-F2) While a secret is injected, `pwsh`/`powershell` with an encoded command (`-e`, `-ec`, `-en`, `-enc`, ..., `-encodedcommand`, any case, `-`/`/` prefix) is refused as `dump_command`; the pre-bash hook refuses it the same way.
+  - S6.3 (A-F4) Redaction also matches each value encoded as UTF-16LE and UTF-16BE (a BOM before it is not needed to match); a granted command that writes the value in UTF-16 (PowerShell 5.1 `Out-File`) is redacted in stdout/stderr and by the post-read hook.
+  - S6.4 (A-F7) `prompt --value` for a name that already exists issues a token bound to that record id; only a new record gets an empty id.
+  - S6.5 (A-F12) A panic in an MCP tool handler (and in the broker op dispatch) answers the typed `internal` refusal and the server keeps serving; the panic text and stack never reach stdout or the MCP result (stderr gets one fixed line).
+  - S6.6 (B-F1) The backup snapshot of the previous vault pair is written with fsync like the live files (same synced writer).
+  - S6.7 (B-F2) On Linux the unlock cache is used only when `XDG_RUNTIME_DIR` is on tmpfs (statfs); otherwise there is no cache (the passphrase is asked each time), and nothing is written.
+  - S6.8 (B-F3) A lock file whose mtime is more than the stale age in the future is stale too (clock skew, copied home).
+  - S6.9 Tests RED first for each rule (S6.6 may be structural: the snapshot path uses the synced writer), leak battery extended for S6.3, docs (THREAT_MODEL, STORAGE, CLI where they describe these) and CHANGELOG [Unreleased] in the same change.
 
 ## How to read the findings
 
@@ -153,7 +163,8 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | LP0 | S1, S2 | audits (5 explorers) + visual check | (this document) | done |
 | LP1 | S4 | worker | | done, awaiting review |
 | LP2 | S5 | worker + parent correction | ab worker commit + 00799f7 (kdialog) | done, beta.11 |
-| LP3-LP7 | S1-S3 | plan steps 3-7 | | pending |
+| LP3 | S6 | worker | (this branch) | done, review pending |
+| LP4-LP7 | S1-S3 | plan steps 4-7 | | pending |
 
 ## Log
 
@@ -162,3 +173,5 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L3. Step 1 merged (PR #22); live server healthy after redeploy. QBV_SERVER_TRUST_PROXY kept at 1 behind Cloudflare + Traefik (Traefik rewrites the header unless it trusts Cloudflare). Step 2 started on branch fix/visible-bugs.
 - L3. LP2 (S5.1-S5.7) done by worker, not committed. RED first for each rule, then GREEN. S5.1 `splitShown` + `psShowText` (code alone in the box, height from `TextRenderer.MeasureText`; screenshot of the real builder at 1440-style render shows the whole key). S5.2 zenity `--default-cancel`, kdialog labels swapped (`Decline` on yes) and `classify` reads confirmations swapped. S5.3 `init` no longer prints or carries the Pi install command (constant kept); docs say the extension is unpublished. S5.4 SECURITY.md. S5.5 `CheckRedirect: http.ErrUseLastResponse` and a 3xx maps to `ErrUnreachable`. S5.6 `remote approve` shows the code right after the server accepts; roster and sync failures are warnings (new `warnApproveSync`). Left for the owner: `e2e/hosts/scenario.sh:99` still expects the old install line (outside this task's edit surface); `docs/GENTLE_SHELL_EXTENSION.md:5`, `docs/ROADMAP.md:76`, `docs/TESTING.md:43` still mention the printed line.
 - L4. Step 2 review: a CRITICAL finding (the kdialog label swap made Escape/close confirm) was corrected in 00799f7: kdialog confirmations are a list with Decline preselected. Review approved after targeted validation. Released as 0.1.0-beta.11.
+- L5. beta.11 released (9 assets), this machine upgraded, doctor healthy. Step 3 started on branch fix/boundary-storage.
+- L6. LP3 (S6.1-S6.8) done by worker, not committed. RED first for each rule, then GREEN. S6.1 `scriptOf` skips `-o/+o/-O/+O VALUE` and `--long` options before `-c`. S6.2 `encodedPowerShell` in `Match`/`MatchRaw` and `encodedCommand` in the pre-bash hook. S6.3 `utf16Form` (LE and BE) in `addEncodings`; leak battery gets a UTF-16 child and needles. S6.4 `prompt --value` keeps the existing record id and `set` redeems with it. S6.5 `recover` in `broker.Handle` and the MCP handler, one fixed stderr line (`broker.PanicLine`). S6.6 snapshot uses `writeSynced` (seam `syncFile`). S6.7 `memoryBacked` seam, statfs tmpfs/ramfs on Linux, true elsewhere. S6.8 `stale()` also true for an age below minus the stale age. Docs: THREAT_MODEL (R2, R5), STORAGE, CLI, AGENT_INTEGRATIONS, TESTING, CHANGELOG.

@@ -10,6 +10,7 @@ import "strings"
 // redirections (`< file`) folded into plain arguments; and each of those with
 // wrappers and the program path resolved, the program lowercased (so
 // `/usr/bin/env`, `sudo env`, `command env` and `ENV` all look like `env`).
+// A PowerShell encoded command is refused outright: its script is opaque.
 func (g *Guard) Match(cmd string, injected []string) (refused bool) {
 	if len(injected) == 0 {
 		return false
@@ -22,6 +23,9 @@ func (g *Guard) Match(cmd string, injected []string) (refused bool) {
 		segs = append(segs, rawSegment(strings.NewReplacer("\r", " ", "\n", " ").Replace(cmd)))
 	}
 	for _, seg := range segs {
+		if encodedPowerShell(seg.Words) {
+			return true
+		}
 		for _, form := range forms(seg) {
 			for _, re := range res {
 				if re.MatchString(form) {
@@ -113,6 +117,9 @@ func (g *Guard) MatchRaw(cmd string, injected []string) bool {
 	clean := rawCleaner.Replace(cmd)
 	pieces := strings.FieldsFunc(clean, func(r rune) bool { return strings.ContainsRune("&|;(){}\r\n", r) })
 	for _, text := range append([]string{clean}, pieces...) {
+		if encodedPowerShell(rawSegment(text).Words) {
+			return true
+		}
 		for _, form := range forms(rawSegment(text)) {
 			for _, re := range res {
 				if re.MatchString(form) {

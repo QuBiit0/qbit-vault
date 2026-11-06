@@ -43,14 +43,9 @@ func TestValueFDKindRefusesWhatAHostCannotPass(t *testing.T) {
 	if valueFDKindOK(int(dir.Fd())) {
 		t.Error("a directory was accepted")
 	}
-	fd, err := syscall.Dup(int(dir.Fd()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := syscall.Close(fd); err != nil {
-		t.Fatal(err)
-	}
-	if valueFDKindOK(fd) {
+	// A number far above any descriptor this process opens: closed for sure,
+	// with no window for another goroutine to reuse it (a dup+close would).
+	if valueFDKindOK(1 << 20) {
 		t.Error("a closed descriptor was accepted")
 	}
 	if pfd, ok := pollerFD(t); ok && valueFDKindOK(pfd) {
@@ -79,5 +74,27 @@ func TestOpenValueFDRefusesAPollerAndLeavesItOpen(t *testing.T) {
 	var st syscall.Stat_t
 	if err := syscall.Fstat(pfd, &st); err != nil {
 		t.Fatalf("the poller descriptor was closed: %v", err)
+	}
+}
+
+// A terminal on the value descriptor would put the captured value on the
+// user's screen and in its scrollback, so it is refused; a character device
+// that only discards, /dev/null, is still accepted.
+func TestValueFDKindRefusesATerminalButNotDevNull(t *testing.T) {
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	if !valueFDKindOK(int(null.Fd())) {
+		t.Error("/dev/null was refused")
+	}
+	tty, err := os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
+	if err != nil {
+		t.Skipf("no pseudo-terminal to test with: %v", err)
+	}
+	defer tty.Close()
+	if valueFDKindOK(int(tty.Fd())) {
+		t.Error("a terminal was accepted")
 	}
 }

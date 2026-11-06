@@ -197,6 +197,10 @@ These are the invariants the code is tested against ([AGENTS.md](AGENTS.md)); th
 
 Also in place: tamper-evident audit log (`audit --verify`), grants bound to one record with a scope and a TTL, a guard that refuses `env`/`printenv`-style dump commands while secrets are injected, and per-secret allowlists of binaries and hosts.
 
+## Backup
+
+A broken machine should not cost you the vault. `qbit-vault export FILE` writes one encrypted, portable copy (it asks for an export passphrase of at least 12 characters), and on a new machine `qbit-vault init` then `qbit-vault import --from-export FILE` brings every secret back with its metadata. It needs no server and no account; keep the file and its passphrase in different places, because together they are a full copy. See [docs/INSTALL.md](docs/INSTALL.md#backup-without-a-server).
+
 ## Several machines (optional)
 
 Keep one vault on several machines with `qbit-vault-server`, a small service you host yourself. On a single machine you do not need it.
@@ -220,7 +224,7 @@ Step by step: [docs/INSTALL.md](docs/INSTALL.md#several-machines-optional). Prot
 | Group | Commands |
 | --- | --- |
 | Setup | `init`, `sync`, `doctor`, `uninstall`, `version`, `tui` (also what bare `qbit-vault` runs in a terminal) |
-| Secrets | `set`, `rm`, `mv`, `list`, `describe`, `edit`, `link`, `relink`, `import`, `rekey`, `lock`, `unlock`, `restore` |
+| Secrets | `set`, `rm`, `mv`, `list`, `describe`, `edit`, `link`, `relink`, `import`, `export`, `rekey`, `lock`, `unlock`, `restore` |
 | Grants | `grant`, `revoke`, `grants` |
 | Run | `exec` (run a command with granted secrets injected and the output redacted) |
 | Audit | `audit` (`--tail`, `--since`, `--name`, `--event`), `audit --verify` |

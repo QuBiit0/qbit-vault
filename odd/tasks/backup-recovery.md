@@ -8,6 +8,21 @@ Branch for code changes: `feat/export`.
 - S1. User (verbatim): "que pasa si se rompio mi sistema? pierdo todo? como se hace backup del vault?"
 - S2. User choice (verbatim): "Las dos" (sync on Dokploy first, then an encrypted offline export).
 - S3. User choice (verbatim): domain "vault.leandroalvarez.com.ar (Recomendado)".
+- S4. User constraint (verbatim): "pero que esto no cambie la simplicidad para usarlo local. pensa que van a haber usuarios que solo quiere guardar sus secretos de manera local." Export is one command, needs no server, no sync, no account; a vault that never exports behaves exactly as before.
+- S5. User choice (verbatim): "Una contraseña que elegís al exportar (recomendado)". The export file is protected by a passphrase chosen at export time; restoring on another machine needs only the file and that passphrase.
+- S6. `qbit-vault export FILE [--force] [--json]`:
+  - Asks a NEW export passphrase twice through the prompt backend (masked; never from argv, env, stdin or a file). Shorter than 12 characters: usage error `the export passphrase must be at least 12 characters`; the two differ: usage error `the passphrases do not match`; cancel or timeout: `cancelled` (exit 1). Nothing is written in any of these cases.
+  - FILE already exists: refused before any question with usage error `FILE exists; pass --force to overwrite` (the path is the user's own argument, it may be echoed). With `--force` it is replaced atomically.
+  - Writes FILE atomically (temp file in the same directory, fsync, rename), owner-only permissions (internal/perm). Format `qbit-vault-export/1`: a JSON header (format, created_at, kdf argon2id with t/m/p/salt, a random nonce) and the ciphertext of the payload sealed with the AEAD of internal/envelope (XChaCha20-Poly1305) under a key derived from the passphrase with Argon2id (same parameters as key.enc passphrase mode or stronger); the whole header is the AAD so any changed byte fails to open.
+  - Payload: every layer (global and each project layer with its root and label) and every record with its value and metadata (kind, description, sensitive, binaries, hosts, created/updated). NOT included: grants, prompt tokens, cooldowns, audit log, backups, keychain material, remote/sync state, device keys.
+  - Human output: `exported N secrets (global: G, projects: P) to FILE` then on stderr `keep the file and its passphrase in different places; anyone with both can read every secret`. `--json`: `{"ok":true,"file":"FILE","secrets":N,"layers":L}`. Audited as event `export` with the count only. No network call; works in keychain and passphrase mode; works whether or not sync is enabled.
+- S7. `qbit-vault import --from-export FILE [--yes] [--json]` (a third source next to `--from-env` / `--from-file`; exactly one source as today; `--names`, `--remove-source`, `--global`/`--project` are usage errors with it):
+  - Asks the export passphrase once through the prompt backend. Wrong passphrase, a changed byte, a truncated file or an unknown format: `cannot open the export: wrong passphrase or damaged file` (exit 1), nothing written. Unreadable file: `cannot read the export file`.
+  - Each record returns to its own layer: global to global; a project layer to the project with the same root path (created if absent; its label kept). Records whose name already exists in the target layer are replaced, but unless `--yes` the user is first asked `Import N secrets from the export? These replace existing ones: A, B` (only `Import N secrets from the export?` when nothing is replaced); a no is `cancelled`; no prompt backend: `confirmation required; pass --yes`. A replaced record keeps nothing from the old one (the export is the source of truth) and loses its grants. Grants are never imported. One locked write for everything. Audited as `capture` with reason `import from export`.
+  - Human: `imported N secrets from the export` plus ` (replaced: A, B)`; `--json` reuses the import shape with `"source":"export"`.
+  - Works on a vault that `init` just created on a new machine (the documented recovery path).
+- S8. No value ever reaches stdout, stderr, argv, logs, the audit log or a temp file in clear (AGENTS.md invariants 1, 2). Tests use `TESTSECRET_` fixtures and assert: round trip (export then import into a fresh home restores every value and metadata, project layers included); the export file contains no fixture in clear; wrong passphrase and a flipped byte refuse and leave the vault unchanged (snapshot compare); existing FILE refused without --force and left unchanged; short and mismatched passphrases write nothing; replace question lists exactly the clashing names; grants are not exported or imported; no network call.
+- S9. Docs in the same change: docs/CLI.md rows for `export` and the new `import --from-export`, docs/STORAGE.md § Export file format, docs/INSTALL.md "Backup without a server" (two commands: export, and on a new machine init + import), README one short paragraph under backup, docs/THREAT_MODEL.md (the export file + passphrase is a full copy; offline brute force bounded by Argon2id and the 12-character floor), CHANGELOG [Unreleased] Added.
 
 ## Tasks
 
@@ -15,7 +30,7 @@ Branch for code changes: `feat/export`.
 | --- | --- | --- | --- | --- | --- |
 | B1 | S2, S3 | inline | deploy qbit-vault-server on Dokploy (new project, GitHub source, compose `deploy/compose.yaml`, domain, DNS, volume backup), verify from outside | (infra) | pending |
 | B2 | S2 | user | `qbit-vault-server invite` (operator) and `qbit-vault remote register` on this PC; the recovery key is written down offline | (user) | pending |
-| B3 | S2 | inline | `qbit-vault export` / restore from an export file: passphrase-sealed, portable, tests, docs | | pending |
+| B3 | S4-S9 | worker | `qbit-vault export` and `import --from-export`: passphrase-sealed, portable, tests, docs | | in progress |
 | B4 | S2 | user | join the WSL PC (`remote join`, `remote approve`) | (user) | pending |
 
 ## Log

@@ -80,8 +80,8 @@ func TestImportUsageErrorsChangeNothing(t *testing.T) {
 		args []string
 		msg  string
 	}{
-		{[]string{"import", "--yes"}, "choose --from-env or --from-file"},
-		{[]string{"import", "--from-env", "GH_TOKEN", "--from-file", dotenv, "--yes"}, "choose --from-env or --from-file"},
+		{[]string{"import", "--yes"}, "choose --from-env, --from-file or --from-export"},
+		{[]string{"import", "--from-env", "GH_TOKEN", "--from-file", dotenv, "--yes"}, "choose --from-env, --from-file or --from-export"},
 		{[]string{"import", "--from-env", "GH_TOKEN", "--names", "A", "--yes"}, "--names needs --from-file"},
 		{[]string{"import", "--from-env", "GH_TOKEN", "--remove-source", "--yes"}, "--remove-source needs --from-file"},
 		{[]string{"import", "--from-env", "MISSING_VAR", "--yes"}, "MISSING_VAR is not set or empty in the environment"},

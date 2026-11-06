@@ -26,6 +26,7 @@ func TestValueIssues(t *testing.T) {
 		{`TESTSECRET_"inside"`, "", ""},   // quotes only inside: left alone
 		{`"TESTSECRET_mismatch'`, "", ""}, // different quotes: not a pair
 		{`"`, "", ""},                     // a lone quote is a value, not a pair
+		{`""`, "", ""},                    // only a pair of quotes: nothing to keep inside
 		{"TESTSECRET_é ñ", "", ""},        // visible non-ASCII and a normal space are fine
 	}
 	for _, tt := range tests {
@@ -112,6 +113,22 @@ func TestManageReplaceOffersToDropPastedQuotes(t *testing.T) {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
 	if w.value("A") != "TESTSECRET_new" {
+		t.Fatalf("stored %q", w.value("A"))
+	}
+}
+
+// A value made only of invisible characters has nothing left without them:
+// the check offers "as typed" or cancel, never a silent empty save.
+func TestAllInvisibleValueOffersNoEmptyFix(t *testing.T) {
+	w := newWorld(t)
+	f := withBackend(t, answers(val("\u200b\u200b"), pick(0), pick(1)))
+	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK {
+		t.Fatalf("code=%d m=%v", code, m)
+	}
+	if o := f.Calls[1].Options; len(o) != 2 || o[0] != "Exactly as typed" || o[1] != "Cancel" {
+		t.Fatalf("options=%q", o)
+	}
+	if w.value("A") != "\u200b\u200b" {
 		t.Fatalf("stored %q", w.value("A"))
 	}
 }

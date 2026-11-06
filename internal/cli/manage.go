@@ -166,9 +166,10 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 	}
 	audited("applied")
 	if grantScope != "" {
-		if err := g.grantReplaced(s, r.Name, en.Layer, en.Record.Sensitive, grantScope, e.Cwd); err != nil {
-			return broker.ManageResponse{}, asRefusal(err)
-		}
+		// The value is already replaced: a grant that cannot be stored now only
+		// means the next exec asks for one (grant_required), so the replace
+		// still reports success instead of a failure the agent would retry.
+		_ = g.grantReplaced(s, r.Name, en.Layer, en.Record.Sensitive, grantScope, e.Cwd)
 	}
 	g.pushAfter(context.Background(), stderrOf(g), s)
 	return broker.ManageResponse{OK: true, Applied: true, Action: r.Action, Name: r.Name, Layer: after}, nil

@@ -13,10 +13,10 @@ Branch `feat/prompt-ux`.
 
 | ID | Specs | Route | Change | Commit | Status |
 | --- | --- | --- | --- | --- | --- |
-| U1 | S2 | inline | dialog and terminal text: plain words, host name instead of the session id, no internal jargon | | pending |
-| U2 | S1 | inline | `secret_manage replace`: one decision (replace + permission scope) before the value, so no second permission dialog | | pending |
-| U3 | S1 | inline | value check at capture: surrounding quotes, invisible characters, line breaks inside; ask before saving | | pending |
-| U4 | S1 | inline | skill: what to do when a service rejects a credential; docs, CHANGELOG | | pending |
+| U1 | S2 | inline | dialog and terminal text: plain words, host name instead of the session id, no internal jargon | 15f8cfc | done |
+| U2 | S1 | inline | `secret_manage replace`: one decision (replace + permission scope) before the value, so no second permission dialog | ed9f0fa | done |
+| U3 | S1 | inline | value check at capture: surrounding quotes and invisible characters; ask before saving (line breaks dropped: the capture boxes are single-line) | a7a15dc | done |
+| U4 | S1 | inline | skill: what to do when a service rejects a credential; docs, CHANGELOG | 40c1a84 | done |
 
 ## Log
 
@@ -25,3 +25,4 @@ Branch `feat/prompt-ux`.
 - L3. Capture fidelity checked on Windows with the real WinForms dialog driven by a scratch test (not committed): a cfut_-shaped token, quotes, ñ/€/emoji, shell metacharacters and a 2400-byte value all came back byte for byte; the multi-field form returns base64 per field. So the dialog stores exactly what is pasted.
 - L4. Client/group layer: not now (S3). If repos of one client end up duplicating secrets, start with "several repositories share one project layer" (no new resolution level, no contract change) before a separate client layer.
 - L5. U1 15f8cfc, U2 ed9f0fa, U3 a7a15dc; U4: skill section 'When a service rejects the credential'.
+- L6. Checks: go vet + go test ./... green on Windows; e2e/hosts-test.sh 147 passed 0 failed (incl. the new permission question text). Native review (lineage review-0f6285dc700db4dd, lenses risk + readability + reliability): approved, acknowledged, authority burned. Advisory findings fixed after the receipt: R2-fixed-empty-silent-cancel / R3-reviewvalue-empty-fixed-is-cancel (a value of only invisible characters offered "Without them", which saved nothing and cancelled silently; now that choice is not offered, and a bare pair of quotes is not flagged), R3-replace-grant-failure-after-apply (a grant that could not be stored after the replace turned an applied replace into a refusal; now the replace reports success and the next exec asks), R2-task-doc-stale (this table). R2-replace-index-coupling left: the scope options are built from the same slice the index reads.

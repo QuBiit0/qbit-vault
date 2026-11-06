@@ -20,7 +20,8 @@ var invisible = map[rune]bool{
 // words and the value without them, or "" and nil when the value is clean.
 // The fixed value is a fresh slice; v is not changed.
 func valueIssues(v []byte) (problem string, fixed []byte) {
-	quoted := len(v) >= 2 && v[0] == v[len(v)-1] && (v[0] == '"' || v[0] == '\'' || v[0] == '`')
+	// A pair only counts with something inside: `""` alone is left as typed.
+	quoted := len(v) >= 3 && v[0] == v[len(v)-1] && (v[0] == '"' || v[0] == '\'' || v[0] == '`')
 	hidden := false
 	out := make([]byte, 0, len(v))
 	for i := 0; i < len(v); {
@@ -60,14 +61,22 @@ func reviewValue(ask prompt.Backend, name string, v []byte) ([]byte, error) {
 		return bytes.Clone(v), nil
 	}
 	q := "The value of " + name + " " + problem + ". Keys and tokens usually don't, and a pasted extra breaks the login. Save it:"
-	i, err := ask.Choose(q, []string{"Without them (recommended)", "Exactly as typed", "Cancel"}, 0)
-	switch {
-	case err != nil:
+	// Without the extras nothing may be left (a value of invisible characters
+	// only): then that choice is not offered, rather than saving nothing.
+	const withoutThem, asTyped, cancel = "Without them (recommended)", "Exactly as typed", "Cancel"
+	opts := []string{withoutThem, asTyped, cancel}
+	if len(fixed) == 0 {
+		opts = opts[1:]
+	}
+	i, err := ask.Choose(q, opts, 0)
+	if err != nil {
 		clear(fixed)
 		return nil, err
-	case i == 0 && len(fixed) > 0:
+	}
+	switch opts[i] {
+	case withoutThem:
 		return fixed, nil
-	case i == 1:
+	case asTyped:
 		clear(fixed)
 		return bytes.Clone(v), nil
 	default:

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/QuBiit0/qbit-vault/internal/grants"
 	"github.com/QuBiit0/qbit-vault/internal/prompt"
 	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
 )
@@ -106,11 +107,41 @@ func TestRequestDeclineStartsCooldown(t *testing.T) {
 	if len(cd) != 1 || cd[0].(map[string]any)["name"] != "A" {
 		t.Fatalf("policy cooldowns=%v", cd)
 	}
-	// Another session is not blocked.
-	withBackend(t, answers(val("TESTSECRET_other"), pick(0)))
+}
+
+// A decline also starts a short cooldown for the name and layer, so another
+// session cannot re-prompt it at once; it ends sooner than the session one.
+func TestRequestDeclineCoolsTheNameForOtherSessionsBriefly(t *testing.T) {
+	w := newWorld(t)
+	at := pinClock(t)
+	before := w.snapshot()
+	withBackend(t, answers(val("TESTSECRET_declined"), pick(3))) // once, session, deny
+	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.Refusal || refusalType(m) != "user_declined" {
+		t.Fatalf("deny: code=%d m=%v", code, m)
+	}
 	other := strings.Replace(reqFor(w.outside, ""), brokerSession, "pi:other5678", 1)
+	f := withBackend(t, answers())
+	code, m, _ := w.broker("request", other)
+	if code != exitcode.Refusal || refusalType(m) != "rate_limited" || m["refusal"].(map[string]any)["name"] != "A" || len(f.Calls) != 0 {
+		t.Fatalf("other session: code=%d m=%v calls=%d", code, m, len(f.Calls))
+	}
+	if w.snapshot() != before {
+		t.Fatal("a refused request stored the value")
+	}
+	// Another name is not blocked.
+	withBackend(t, answers(val("TESTSECRET_b"), pick(0)))
+	if code, _, out := w.broker("request", strings.Replace(other, `"name":"A"`, `"name":"B"`, 1)); code != exitcode.OK {
+		t.Fatalf("other name: %s", out)
+	}
+	// The shared cooldown is shorter than the session one: the declining
+	// session is still blocked, another one is free.
+	at(gt0.Add(grants.SharedCooldown))
+	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.Refusal || refusalType(m) != "rate_limited" {
+		t.Fatalf("declining session: code=%d m=%v", code, m)
+	}
+	withBackend(t, answers(val("TESTSECRET_other"), pick(0)))
 	if code, _, out := w.broker("request", other); code != exitcode.OK {
-		t.Fatalf("other session: %s", out)
+		t.Fatalf("after the shared cooldown: %s", out)
 	}
 }
 
@@ -319,5 +350,51 @@ func TestRequestSensitiveKeepsOldDefault(t *testing.T) {
 	c := f.Calls[0]
 	if c.Default != 0 || len(c.Options) != 2 || !strings.HasPrefix(c.Options[0], "Once:") {
 		t.Fatalf("default=%d options=%v", c.Default, c.Options)
+	}
+}
+
+// midPrompt runs hook once, when the scope question is asked: the moment a
+// `set` of the same name can land while a request waits for its answer.
+type midPrompt struct {
+	*prompttest.Fake
+	hook func()
+}
+
+func (m *midPrompt) Choose(q string, options []string, def int) (int, error) {
+	if m.hook != nil {
+		h := m.hook
+		m.hook = nil
+		h()
+	}
+	return m.Fake.Choose(q, options, def)
+}
+
+// A `set` of the same name between the request's lookup and its store must
+// win: the store re-checks under the vault lock and never overwrites.
+func TestRequestDoesNotOverwriteASetThatLandedWhileAsking(t *testing.T) {
+	w := newWorld(t)
+	f := answers(val("TESTSECRET_from_request"), pick(0))
+	m := &midPrompt{Fake: f}
+	m.hook = func() { w.mustRun("TESTSECRET_from_set", "set", "A", "--global", "--stdin") }
+	old := newPrompt
+	newPrompt = func(*globals) (prompt.Backend, error) { return m, nil }
+	t.Cleanup(func() { newPrompt = old })
+
+	code, r, out := w.broker("request", reqFor(w.outside, ""))
+	if code != exitcode.Failure && code != exitcode.Refusal {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	if refusalType(r) != "internal" || r["refusal"].(map[string]any)["message"] != "A changed while it was being asked; ask again" ||
+		r["refusal"].(map[string]any)["retryable"] != true {
+		t.Fatalf("refusal = %s", out)
+	}
+	if w.value("A") != "TESTSECRET_from_set" {
+		t.Fatal("the request overwrote the value `set` stored")
+	}
+	if strings.Count(w.auditText(), `"event":"capture"`) != 1 {
+		t.Fatalf("a refused store was audited as a capture: %s", w.auditText())
+	}
+	if g := w.mustRun("", "--json", "--session", brokerSession, "grants"); strings.Contains(g, `"name":"A"`) {
+		t.Fatalf("a refused store left a grant: %s", g)
 	}
 }

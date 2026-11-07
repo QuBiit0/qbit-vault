@@ -49,3 +49,29 @@ func TestCooldownsRoundTripAndPurge(t *testing.T) {
 		t.Fatalf("empty store: %s", b)
 	}
 }
+
+func TestSharedCooldownPerNameAndLayerForAllSessions(t *testing.T) {
+	s := &Store{}
+	CoolShared(s, "A", GlobalLayer, t0)
+	if !CoolingDownShared(s, "A", GlobalLayer, t0.Add(SharedCooldown-time.Second)) {
+		t.Fatal("not cooling down")
+	}
+	if CoolingDownShared(s, "A", "project:/r", t0) || CoolingDownShared(s, "B", GlobalLayer, t0) {
+		t.Fatal("cooldown leaked to another layer or name")
+	}
+	if CoolingDownShared(s, "A", GlobalLayer, t0.Add(SharedCooldown)) {
+		t.Fatal("cooldown outlived SharedCooldown")
+	}
+	// It is not a session cooldown, and a session cooldown is not shared.
+	if _, on := CoolingDown(s, "A", sessA, t0); on {
+		t.Fatal("shared entry acted as a session cooldown")
+	}
+	Cool(s, "B", sessA, t0)
+	if CoolingDownShared(s, "B", GlobalLayer, t0) {
+		t.Fatal("session entry acted as a shared cooldown")
+	}
+	CoolShared(s, "A", GlobalLayer, t0.Add(time.Second))
+	if len(s.Cooldowns) != 2 {
+		t.Fatalf("entries=%d", len(s.Cooldowns))
+	}
+}

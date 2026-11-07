@@ -4,6 +4,14 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Fixed
+
+- `audit --verify` and `doctor` report a missing `audit.head` next to two or more audit records as `head_mismatch` (it was valid, so deleting the head hid a truncation); a log of one record without a head is still fine.
+- A declined or cancelled `request` also blocks the same name and layer for every session for 30 s, so a new session cannot re-prompt it at once.
+- `request` no longer overwrites a value that `set` stored while the prompt was open: it answers `internal` (retryable) `<NAME> changed while it was being asked; ask again` and stores nothing.
+- `import` refuses names that change how a child starts (`LD_PRELOAD`, `PATH`, …), with the same message as `set` and `exec`.
+- The dump guard inspects the script of `pwsh -c`, `-co`, `-com`, … (any prefix of `-Command`).
+
 ## [0.1.0-beta.17] - 2026-11-07
 
 This release also carries the build provenance attestation and the `ghcr.io/qubiit0/qbit-vault-server` image that 0.1.0-beta.16 lacks: its attestation step failed on a transient error of the Sigstore transparency log after the release was published, so its server-image job did not run. The beta.16 binaries and checksums are unaffected.

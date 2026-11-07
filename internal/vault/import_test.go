@@ -70,3 +70,28 @@ func TestPutManyWithGrantsRejectsBadInputWithoutWriting(t *testing.T) {
 		t.Fatalf("project layer without root: %v", err)
 	}
 }
+
+func TestPutMissingNeverReplacesAndWritesNothingOnAConflict(t *testing.T) {
+	v, home := newVault(t)
+	mustPut(t, v, Global(), "B", rec("TESTSECRET_old"))
+	live, _ := os.ReadFile(filepath.Join(home, vaultFile))
+	err := v.PutMissing(Global(), []string{"A", "B"}, map[string]Record{"A": rec("TESTSECRET_a"), "B": rec("TESTSECRET_b")})
+	if !errors.Is(err, ErrExists) {
+		t.Fatalf("err = %v, want ErrExists", err)
+	}
+	if after, _ := os.ReadFile(filepath.Join(home, vaultFile)); string(after) != string(live) {
+		t.Fatal("vault.enc changed on a refused store")
+	}
+	if _, _, err := v.Resolve("A", t.TempDir()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("A was stored: %v", err)
+	}
+	if err := v.PutMissing(Global(), []string{"A"}, map[string]Record{"A": rec("TESTSECRET_a")}); err != nil {
+		t.Fatal(err)
+	}
+	if a, _, err := v.Resolve("A", t.TempDir()); err != nil || !sameValue(a, "TESTSECRET_a") || a.ID == "" {
+		t.Fatalf("A=%+v err=%v", a, err)
+	}
+	if err := v.PutMissing(Global(), []string{"bad name"}, map[string]Record{"bad name": rec("TESTSECRET_x")}); err == nil {
+		t.Fatal("invalid name accepted")
+	}
+}

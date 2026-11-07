@@ -36,6 +36,31 @@ func (g *globals) coolDown(s *session, name string) {
 	})
 }
 
+// coolingDownIn reports whether name is cooling down in this session or, in
+// any of layers, for every session.
+func (g *globals) coolingDownIn(s *session, name string, layers []string) (bool, error) {
+	on := false
+	err := g.mutateGrants(io.Discard, s, func(st *grants.Store) (bool, error) {
+		_, on = grants.CoolingDown(st, name, g.Session, clock())
+		for _, l := range layers {
+			on = on || grants.CoolingDownShared(st, name, l, clock())
+		}
+		return false, nil
+	})
+	return on, err
+}
+
+// coolDownIn is coolDown plus the all-sessions cooldown of name in layers.
+func (g *globals) coolDownIn(s *session, name string, layers []string) {
+	_ = g.mutateGrants(io.Discard, s, func(st *grants.Store) (bool, error) {
+		grants.Cool(st, name, g.Session, clock())
+		for _, l := range layers {
+			grants.CoolShared(st, name, l, clock())
+		}
+		return true, nil
+	})
+}
+
 // Manage is CONTRACT.md § manage (R-API-07, R-API-08): the agent proposes,
 // the user confirms out of band, and only then the change is applied. A
 // decline starts the same cooldown as request. Only replace can create a

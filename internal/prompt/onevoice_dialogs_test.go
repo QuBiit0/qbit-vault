@@ -21,7 +21,7 @@ func TestEveryDialogHasOneTitleAHeadingAndActionButtons(t *testing.T) {
 		{"choice", chooseDialog("Where should A be saved?", []string{"All projects", "Only this project (shop)"}, 0), "", "Continue", "Cancel"},
 		{"confirm", confirmDialog("Remove A (all projects)?"), "Confirm", "Confirm", "Decline"},
 		{"recovery key", showDialog("Recovery key", "QVR1-X"), "Recovery key", "Done", "Cancel"},
-		{"pairing code", showDialog("Pairing code", "123456"), "Pairing code", "Done", "Cancel"},
+		{"confirmation code", showDialog("Confirmation code", "123456"), "Confirmation code", "Done", "Cancel"},
 		{"vault passphrase", passphraseDialog(VaultPassphrase, false), "Vault passphrase", "Continue", "Cancel"},
 		{"export passphrase", passphraseDialog(ExportPassphrase, false), "Export passphrase", "Continue", "Cancel"},
 	}

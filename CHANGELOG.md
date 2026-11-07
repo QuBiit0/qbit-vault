@@ -8,9 +8,13 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 - Dump guard and pre-bash hook: `pwsh -EncodedCommand` is refused after any valued option (`-WorkingDirectory /f`, `-ep:Bypass`, quoted values), as `-e:VALUE`, and with typographic dashes; `bash --rcfile FILE -c …` no longer hides its script. The hook's command scanner keeps non-ASCII bytes intact.
 - The dump guard's compiled-pattern cache is capped (64 name sets).
+- `remote rekey` and `remote revoke-device` print the unknown-device notice and audit the revocations as soon as the server accepted the rotation, so a later local failure cannot skip them.
+- `install.sh` picks the newest release from minified (one-line) JSON too.
+- The dialog that shows the confirmation code on the approving device is headed `Confirmation code`, not `Pairing code`.
 
 ### Security
 
+- Docs: the pre-bash hook is best effort (the boundary is the prompt plus redaction), the POSIX tree kill reaches the process group only, and a project is identified by its path (`THREAT_MODEL.md` R17-R19, `STORAGE.md`).
 - `exec` refuses to inject a secret under an environment name that changes how the child starts (`LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`, `DYLD_*`, `BASH_ENV`, `ENV`, `PATH`, `PATHEXT`, `PYTHONSTARTUP`, `NODE_OPTIONS`, `PERL5OPT`, `RUBYOPT`, `COMSPEC`, `PROMPT_COMMAND`); `set` refuses such a name. Usage error naming the variable, never a value.
 
 ## [0.1.0-beta.16] - 2026-11-07

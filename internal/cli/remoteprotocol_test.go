@@ -16,9 +16,10 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
-// S11.2 (C-S07): a device the server lists but the roster lacks (an approve
-// whose roster write failed) is revoked by the rotation instead of blocking it.
-func TestRekeyRevokesADeviceMissingFromTheRoster(t *testing.T) {
+// orphanedDevice registers a world and leaves on its server a device that is
+// in no roster (an approve whose roster write failed).
+func orphanedDevice(t *testing.T) (*syncServer, *world, string) {
+	t.Helper()
 	ss := newSyncServer(t)
 	a := newWorld(t)
 	a.register(ss)
@@ -42,6 +43,13 @@ func TestRekeyRevokesADeviceMissingFromTheRoster(t *testing.T) {
 	if ids, _ := serverView(t, ss, a); !slices.Contains(ids, orphan) {
 		t.Fatalf("the server should list the orphan: %v", ids)
 	}
+	return ss, a, orphan
+}
+
+// S11.2 (C-S07): a device the server lists but the roster lacks (an approve
+// whose roster write failed) is revoked by the rotation instead of blocking it.
+func TestRekeyRevokesADeviceMissingFromTheRoster(t *testing.T) {
+	ss, a, orphan := orphanedDevice(t)
 
 	asBackend(t, keepBackend{answers(yes(), no())})
 	code, out, errs := a.run("", "rekey")

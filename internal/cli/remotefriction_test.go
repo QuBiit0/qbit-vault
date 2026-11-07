@@ -205,3 +205,26 @@ func TestRegisterCancelAtTheRecoveryCheckSaysHowToRotate(t *testing.T) {
 		t.Fatalf("status: code=%d err=%q", code, errs)
 	}
 }
+
+// S12.5: the dialog that shows the confirmation code says so; "Pairing code"
+// is the code the new device prints and the approver types.
+func TestApproveShowsTheConfirmationCodeUnderItsOwnHeading(t *testing.T) {
+	ss := newSyncServer(t)
+	a := newWorld(t)
+	a.register(ss)
+	code, _ := pending(t, ss, "a")
+	f := answers(val(code), val("Desk"), no())
+	asBackend(t, keepBackend{f})
+	if c, _, errs := a.run("", "remote", "approve"); c != exitcode.OK || errs != "" {
+		t.Fatalf("code=%d err=%q", c, errs)
+	}
+	var titles []string
+	for _, call := range f.Calls {
+		if call.Kind == "show" {
+			titles = append(titles, call.Q)
+		}
+	}
+	if len(titles) != 1 || titles[0] != "Confirmation code" {
+		t.Fatalf("show titles = %q, want [Confirmation code]", titles)
+	}
+}

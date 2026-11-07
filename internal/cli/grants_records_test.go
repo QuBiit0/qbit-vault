@@ -451,3 +451,84 @@ func auditCount(t *testing.T, w *world) string {
 }
 
 func keychainName() string { return string(keychain.NewOS().Name()) }
+
+// grantRecordIDs are the record ids the stored grants of NAME point at, for
+// assertions only.
+func (w *world) grantRecordIDs(name string) []string {
+	w.t.Helper()
+	g := &globals{getenv: envFrom(nil), home: w.home}
+	s, err := g.openSession()
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	defer s.close()
+	var ids []string
+	if _, err := s.v.MutateGrants(func(body []byte, _ bool) ([]byte, error) {
+		st, err := grants.Decode(body)
+		if err != nil {
+			return nil, err
+		}
+		for _, gr := range st.Grants {
+			if gr.Name == name {
+				ids = append(ids, gr.RecordID)
+			}
+		}
+		return nil, nil
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return ids
+}
+
+// R3-set-replace-grant-id: replacing a value with a grant option grants the
+// record that was just stored, never the replaced one.
+func TestSetReplaceGrantIsForTheNewRecord(t *testing.T) {
+	pinClock(t)
+	asTerminal(t, false)
+	w := newWorld(t)
+	w.mustRun(fxVal+"1", "set", "A_KEY", "--global", "--stdin")
+	oldID := w.recordID("A_KEY")
+
+	tok := w.issueTokenFor("A_KEY", "global", oldID, grants.ScopeSession, sessA, 0)
+	code, out, errs := w.run(fxVal+"2", "--session", sessA, "set", "A_KEY", "--global", "--stdin", "--grant", "session", "--from-prompt-token", tok)
+	want := "stored A_KEY (global)\ngranted A_KEY (global): session, for pi:sess-aaaa, until 2026-11-04T00:00:00Z\n"
+	if code != 0 || out != want || errs != "" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	if w.value("A_KEY") != fxVal+"2" {
+		t.Fatal("the new value was not stored")
+	}
+	newID := w.recordID("A_KEY")
+	if newID == oldID {
+		t.Fatal("a replaced value kept the record id")
+	}
+	if ids := w.grantRecordIDs("A_KEY"); len(ids) != 1 || ids[0] != newID {
+		t.Fatalf("grant record ids = %v, want [%s]", ids, newID)
+	}
+	if err := w.execCheck("A_KEY", sessA); err != nil {
+		t.Fatalf("the grant does not apply to the stored value: %v", err)
+	}
+}
+
+func TestSetReplaceInteractiveGrantIsForTheNewRecord(t *testing.T) {
+	pinClock(t)
+	w := newWorld(t)
+	w.mustRun(fxVal+"1", "set", "A_KEY", "--global", "--stdin")
+	oldID := w.recordID("A_KEY")
+
+	withBackend(t, answers(val(fxVal+"2"), pick(1)))
+	code, out, errs := w.run("", "--session", sessA, "set", "A_KEY", "--grant", "session")
+	if code != 0 || !strings.Contains(out, "stored A_KEY (global)\ngranted A_KEY (global): session") || errs != "" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	newID := w.recordID("A_KEY")
+	if newID == oldID {
+		t.Fatal("a replaced value kept the record id")
+	}
+	if ids := w.grantRecordIDs("A_KEY"); len(ids) != 1 || ids[0] != newID {
+		t.Fatalf("grant record ids = %v, want [%s]", ids, newID)
+	}
+	if err := w.execCheck("A_KEY", sessA); err != nil {
+		t.Fatalf("the grant does not apply to the stored value: %v", err)
+	}
+}

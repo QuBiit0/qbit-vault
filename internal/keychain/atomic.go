@@ -43,7 +43,7 @@ func writeAtomic(dir, name string, data []byte) (err error) {
 	if err != nil {
 		return fmt.Errorf("keychain: write temp file: %w", bare(err))
 	}
-	if err = os.Rename(tmp, filepath.Join(dir, name)); err != nil {
+	if err = renameWithRetry(tmp, filepath.Join(dir, name)); err != nil {
 		return fmt.Errorf("keychain: replace file: %w", bare(err))
 	}
 	if runtime.GOOS != "windows" {

@@ -5,7 +5,9 @@ package perm
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -100,5 +102,73 @@ func TestWindowsEnsureDirIsInheritedByNewFiles(t *testing.T) {
 	assertOwnerOnly(t, f, false)
 	if ok, detail := Check(f); !ok {
 		t.Fatalf("file created in a private dir is not private: %s", detail)
+	}
+}
+
+// B-F14: a DACL with no entries is not "owner-only": nobody can open the
+// file. Check must say so, and EnsureFile must repair it.
+func TestWindowsCheckRejectsAnEmptyDACL(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(f, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// ACLFromEntries cannot build an empty ACL: lay out the 8-byte header
+	// (revision 2, size 8, no entries) by hand.
+	hdr := [8]byte{2, 0, 8, 0, 0, 0, 0, 0}
+	empty := (*windows.ACL)(unsafe.Pointer(&hdr[0]))
+	if err := windows.SetNamedSecurityInfo(f, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, empty, nil); err != nil {
+		t.Fatal(err)
+	}
+	runtime.KeepAlive(&hdr)
+	if ok, detail := Check(f); ok || detail == "" {
+		t.Fatalf("Check = %v, %q; want a report of the empty ACL", ok, detail)
+	}
+	if err := EnsureFile(f); err != nil {
+		t.Fatal(err)
+	}
+	assertOwnerOnly(t, f, true)
+	if ok, detail := Check(f); !ok {
+		t.Fatalf("Check after repair: %s", detail)
+	}
+}
+
+// B-F14: the owner can always rewrite the DACL, so a file owned by someone
+// else is not private even when its ACL looks right.
+func TestWindowsOwnerAcceptable(t *testing.T) {
+	me := currentSID(t)
+	everyone, _ := windows.CreateWellKnownSid(windows.WinWorldSid)
+	admins, _ := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	system, _ := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	for _, c := range []struct {
+		name  string
+		owner *windows.SID
+		want  bool
+	}{
+		{"current user", me, true},
+		{"administrators (elevated process)", admins, true},
+		{"another account", everyone, false},
+		{"system", system, false},
+		{"unknown", nil, false},
+	} {
+		if got := ownerAcceptable(c.owner, me); got != c.want {
+			t.Errorf("%s: ownerAcceptable = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestWindowsCheckReadsTheOwnerOfARealFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(f, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureFile(f); err != nil {
+		t.Fatal(err)
+	}
+	info, err := inspect(f)
+	if err != nil || info.owner == nil {
+		t.Fatalf("inspect did not read an owner: %v", err)
+	}
+	if !ownerAcceptable(info.owner, currentSID(t)) {
+		t.Fatal("a file this user created is not owned by an acceptable owner")
 	}
 }

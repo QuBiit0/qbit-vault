@@ -6,6 +6,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Fixed
 
+- `restore` reports an unreadable `keys/retired.enc` instead of "backup cannot be opened"; vault temp files are created with `O_EXCL`; promoting a staged key (`rekey`) and `key.enc` writes retry the transient sharing errors of Windows; `init --passphrase` stops when the OS keychain cannot be read instead of assuming it holds no key.
+- Windows: `doctor` and `perm.Check` no longer call a file with an empty ACL (nobody can open it) or an unrelated owner private, and `EnsureFile` repairs the ACL.
+- A stale lock is broken under a `.break` guard that re-checks its age, so two processes cannot delete a lock another one just took.
+- Documented limit: `keys/retired.enc` has no rollback counter in `state.json` (THREAT_MODEL R8, STORAGE § Retired keys).
 - `audit --verify` and `doctor` report a missing `audit.head` next to two or more audit records as `head_mismatch` (it was valid, so deleting the head hid a truncation); a log of one record without a head is still fine.
 - A declined or cancelled `request` also blocks the same name and layer for every session for 30 s, so a new session cannot re-prompt it at once.
 - `request` no longer overwrites a value that `set` stored while the prompt was open: it answers `internal` (retryable) `<NAME> changed while it was being asked; ask again` and stores nothing.

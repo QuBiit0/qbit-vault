@@ -147,7 +147,7 @@ func cleanTemps(target string) {
 }
 
 func writeSynced(path string, data []byte) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
 	if err != nil {
 		return fmt.Errorf("vault: create temp file: %w", bare(err))
 	}

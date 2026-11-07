@@ -137,7 +137,10 @@ func openWithAny(home string, key secret.Secret, data []byte) ([]byte, AAD, erro
 	}
 	retired, err := retiredKeys(home, key)
 	if err != nil {
-		retired = nil // an unreadable list only means no older key to try
+		if !errors.Is(err, ErrCorrupt) {
+			return nil, AAD{}, err // a read error is not "no older key"
+		}
+		retired = nil // an undecryptable list only means no older key to try
 	}
 	defer func() {
 		for _, k := range retired {

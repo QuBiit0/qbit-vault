@@ -4,6 +4,18 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.16] - 2026-11-07
+
+### Fixed
+
+- A device that joins by pairing starts with the version floor of the device that approved it (`last_version` inside the key envelope), so a server that serves it an older version on its first round is refused as `remote_rollback`. An envelope from an older approver still joins. A device running 0.1.0-beta.15 or older cannot join through an approver on this version (it stops with `the pairing could not be confirmed` and nothing is kept): install the latest version on the new device first.
+- `remote rekey` and `remote revoke-device` no longer fail when the server lists a device the roster does not know (left by an interrupted approve): it is revoked in the same call (`unknown device <id> was revoked`).
+- Conflicts dropped for age (30 days) or count (100) are no longer silent: the round audits `<n> old conflict(s) discarded` and `remote sync` says so on stderr.
+
+### Changed
+
+- Known limitation, documented: a revoked device cannot rejoin with its id. Export what only it holds (`qbit-vault export FILE`), then join from a fresh vault home as a new device (REMOTE_SYNC § 4.5).
+
 ## [0.1.0-beta.15] - 2026-11-07
 
 ### Fixed

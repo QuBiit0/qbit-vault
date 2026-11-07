@@ -29,6 +29,8 @@ type roundResult struct {
 	Result  string // synced, up_to_date or pending
 	Version int64
 	Reason  string
+	// Discarded is how many old conflicts this round's merge dropped.
+	Discarded int
 }
 
 // canon is the comparable form of a body: nil collections are empty, so two
@@ -122,11 +124,18 @@ func saveRemoteState(home string, st *vault.Remote) error {
 // failure to reach the server leaves the local change committed and the push
 // pending. A higher generation on the server first runs the key swap of
 // REMOTE_SYNC § 4.5 (adoptGeneration); a lower one is a rollback.
-func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, deviceID string) (roundResult, error) {
+func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, deviceID string) (res roundResult, rerr error) {
 	st, err := requireRemote(s)
 	if err != nil {
 		return roundResult{}, err
 	}
+	discarded := 0 // conflicts dropped by merges that were applied
+	defer func() {
+		if discarded > 0 {
+			res.Discarded = discarded
+			g.record(stderrOf(g), audit.Record{Event: audit.EventWarning, Detail: strconv.Itoa(discarded) + " old conflict(s) discarded"})
+		}
+	}()
 	for try := 0; try < maxRoundTries; try++ {
 		keys := remote.Subkeys(s.key) // changes when a key swap runs
 		base, haveBase, err := loadBase(s.v)
@@ -174,6 +183,7 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 			push    bool
 			applied bool
 			added   []merge.Device
+			dropped int
 		)
 		err = s.v.ApplyBody(func(local []byte) ([]byte, error) {
 			l, err := parseBody(local)
@@ -197,13 +207,14 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 			if bytes.Equal(merged, canon(l)) {
 				return nil, nil
 			}
-			applied = true
+			applied, dropped = true, m.Discarded
 			return merged, nil
 		})
 		if err != nil {
 			return roundResult{}, mapErr(err, "")
 		}
 
+		discarded += dropped
 		if haveBase {
 			g.warnNewDevices(added)
 		}
@@ -217,12 +228,12 @@ func (g *globals) syncRound(ctx context.Context, s *session, c *remote.Client, d
 			if err := saveRemoteState(s.home, st); err != nil {
 				return roundResult{}, err
 			}
-			res := "up_to_date"
+			result := "up_to_date"
 			if applied || newer {
-				res = "synced"
+				result = "synced"
 			}
 			g.uploadAnchor(ctx, s, st, c, deviceID)
-			return roundResult{Result: res, Version: rver}, nil
+			return roundResult{Result: result, Version: rver}, nil
 		}
 
 		blob, err := remote.SealObject(keys.Vault, remote.ObjectAAD{AccountID: st.AccountID, Generation: st.Generation,
@@ -299,6 +310,9 @@ func newRemoteSync(g *globals) *cobra.Command {
 			}
 			if g.JSON {
 				return writeJSON(cmd.OutOrStdout(), syncBody{OK: true, Result: res.Result, Version: res.Version, Reason: res.Reason})
+			}
+			if res.Discarded > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "%d old conflict(s) were discarded; the current values are unchanged\n", res.Discarded)
 			}
 			var line string
 			switch res.Result {

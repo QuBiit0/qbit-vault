@@ -115,14 +115,17 @@ func (g *globals) rotateOnce(ctx context.Context, cmd *cobra.Command, s *session
 	defer rk.Wipe()
 	rec := remote.RecoveryFromKey(rk)
 
-	envs, drop := map[string][]byte{}, []string{}
+	envs, drop, orphans := map[string][]byte{}, []string{}, []string{}
 	for _, di := range devs {
 		d, ok := mb.Devices[di.ID]
 		switch {
 		case di.ID == revoke:
 			drop = append(drop, di.ID)
 		case !ok:
-			return rotated{}, false, errNotInRoster
+			// On the server but in no roster (an approve whose roster write
+			// failed): nobody can see it, so the rotation cuts it off.
+			drop = append(drop, di.ID)
+			orphans = append(orphans, di.ID)
 		case d.RevokedAt != nil:
 			drop = append(drop, di.ID) // revoked in the roster, still on the server
 		default:
@@ -194,6 +197,10 @@ func (g *globals) rotateOnce(ctx context.Context, cmd *cobra.Command, s *session
 	}
 	if revoke != "" {
 		g.auditRemote(cmd, "device revoked "+revoke)
+	}
+	for _, id := range orphans {
+		g.auditRemote(cmd, "device revoked "+id)
+		fmt.Fprintf(cmd.ErrOrStderr(), "unknown device %s was revoked\n", id)
 	}
 	g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRekey, Detail: fmt.Sprintf("remote generation %d", gen)})
 

@@ -398,3 +398,32 @@ func TestRequestDoesNotOverwriteASetThatLandedWhileAsking(t *testing.T) {
 		t.Fatalf("a refused store left a grant: %s", g)
 	}
 }
+
+// R3-conflict-name: when several fields are asked and one of them was stored
+// meanwhile, the refusal names that field, not the first one asked, and
+// nothing of the request is stored.
+func TestRequestConflictNamesTheFieldThatExists(t *testing.T) {
+	w := newWorld(t)
+	f := answers(val("db.internal"), val("TESTSECRET_user"), val("TESTSECRET_db_password"), pick(0))
+	m := &midPrompt{Fake: f}
+	m.hook = func() { w.mustRun("TESTSECRET_from_set", "set", "DB_PASSWORD", "--global", "--stdin") }
+	old := newPrompt
+	newPrompt = func(*globals) (prompt.Backend, error) { return m, nil }
+	t.Cleanup(func() { newPrompt = old })
+
+	code, r, out := w.broker("request", envelope("request", w.outside, dbFields+`,"reason":"run the shop-api migrations"`))
+	if code != exitcode.Failure && code != exitcode.Refusal {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	ref := r["refusal"].(map[string]any)
+	if refusalType(r) != "internal" || ref["message"] != "DB_PASSWORD changed while it was being asked; ask again" || ref["retryable"] != true {
+		t.Fatalf("refusal = %s", out)
+	}
+	if w.value("DB_PASSWORD") != "TESTSECRET_from_set" {
+		t.Fatal("the request overwrote the value `set` stored")
+	}
+	if got := w.mustRun("", "--json", "list", "--layer", "all"); strings.Contains(got, "DB_HOST") || strings.Contains(got, "DB_USER") {
+		t.Fatalf("a refused request stored other fields: %s", got)
+	}
+	noFixtures(t, "the refusal", out)
+}

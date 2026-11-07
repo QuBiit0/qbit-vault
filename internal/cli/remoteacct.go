@@ -315,6 +315,11 @@ func newRemoteJoin(g *globals) *cobra.Command {
 			defer dk.Wipe()
 			j := &joining{g: g, cmd: cmd, s: s, c: c, ask: ask, server: server, caFile: caFile, host: host,
 				deviceID: deviceID, dk: dk, dev: remote.DeviceFromSecret(dk)}
+			// A device the account revoked cannot come back with its id: it joins
+			// as a new one (the vault changes only once the join is accepted).
+			if j.revokedID(ctx) {
+				j.oldDeviceID, j.deviceID = deviceID, vault.NewDeviceID()
+			}
 			if viaRecovery {
 				err = j.byRecovery(ctx)
 			} else {
@@ -347,8 +352,10 @@ type joining struct {
 	caFile   string
 	host     string
 	deviceID string
-	dk       secret.Secret
-	dev      remote.Device
+	// oldDeviceID is the revoked id this join replaces ("": the vault keeps its id).
+	oldDeviceID string
+	dk          secret.Secret
+	dev         remote.Device
 
 	mk          secret.Secret
 	accountID   string
@@ -356,6 +363,20 @@ type joining struct {
 	lastVersion int64 // version floor from the approver (0: an older approver)
 	how         string
 	entry       *merge.Device // roster entry this device adds itself (recovery)
+}
+
+// revokedID reports whether this vault's device id was revoked by the account:
+// its own roster says so, or the server does (a device that was revoked and
+// never synced again does not know yet). A server that cannot be asked, or
+// that does not know the id, counts as not revoked.
+func (j *joining) revokedID(ctx context.Context) bool {
+	if roster, err := j.s.v.Roster(); err == nil {
+		if d, ok := roster[j.deviceID]; ok && d.RevokedAt != nil {
+			return true
+		}
+	}
+	// The challenge answers device_revoked before it looks at any key.
+	return errors.Is(j.c.Login(ctx, j.deviceID, j.dev), remote.ErrRevoked)
 }
 
 // dropDevice removes this device from the server, best effort: it was
@@ -401,7 +422,7 @@ func (j *joining) byPairing(ctx context.Context) error {
 		return errPairingFailed
 	}
 	want := remote.ConfirmationCode(remote.Subkeys(mk).Pairing, p.Code, j.deviceID, eph)
-	typed, err := askText(j.ask, prompt.SecretRequest{Name: nameConfirm, Reason: "Type the confirmation code shown on the device that approved this one", Host: "cli"})
+	typed, err := askText(j.ask, prompt.SecretRequest{Name: nameConfirm, Heading: "Confirmation code", Reason: "Type the confirmation code shown on the device that approved this one", Host: "cli"})
 	if err != nil {
 		mk.Wipe()
 		j.dropDevice()
@@ -516,6 +537,14 @@ func (j *joining) finish(ctx context.Context) error {
 	id, err := vault.ReadID(home)
 	if err != nil {
 		return mapErr(err, "")
+	}
+	if j.oldDeviceID != "" {
+		// The first local change: the new id and the project roots move together.
+		if err := j.s.v.ChangeDeviceID(j.deviceID); err != nil {
+			j.mk.Wipe()
+			j.dropDevice()
+			return mapErr(err, "")
+		}
 	}
 	if !sameSecret(j.s.key, j.mk) { // a vault that already uses the account key (a join run again) skips the swap
 		opts := keychain.Options{Passphrase: j.g.askPassphrase}

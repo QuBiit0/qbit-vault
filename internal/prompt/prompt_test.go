@@ -189,7 +189,7 @@ func TestPassphrase(t *testing.T) {
 		}
 	})
 	t.Run("mismatch", func(t *testing.T) {
-		b, term := backendOf(fxPass, fxPass+"x")
+		b, term := backendOf(fxPass, fxPass+"x", fxPass, fxPass+"x", fxPass, fxPass+"x")
 		got, err := b.Passphrase(VaultPassphrase.Twice())
 		if !errors.Is(err, ErrMismatch) || got.Len() != 0 {
 			t.Fatalf("err = %v, len = %d", err, got.Len())

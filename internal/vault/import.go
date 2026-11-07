@@ -70,6 +70,12 @@ func (v *Vault) PutManyWithGrants(layer Layer, names []string, recs map[string]R
 	return res, replaced, err
 }
 
+// ExistsError is the ErrExists of PutMissing: Name is the one that was found.
+type ExistsError struct{ Name string }
+
+func (e ExistsError) Error() string        { return ErrExists.Error() + ": " + e.Name }
+func (e ExistsError) Is(target error) bool { return target == ErrExists }
+
 // PutMissing stores several new values in layer in one locked write, for
 // `request`. Unlike PutManyWithGrants it never replaces: when any name already
 // exists in layer (it was stored since the caller looked) nothing is written
@@ -93,7 +99,7 @@ func (v *Vault) PutMissing(layer Layer, names []string, recs map[string]Record) 
 		secrets := b.secrets(layer, true)
 		for _, n := range names {
 			if _, ok := secrets[n]; ok {
-				return withName(ErrExists, n)
+				return ExistsError{Name: n}
 			}
 		}
 		for _, n := range names {

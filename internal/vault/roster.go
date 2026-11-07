@@ -210,3 +210,43 @@ func (v *Vault) ResealRemoteFiles() error {
 	}
 	return nil
 }
+
+// ChangeDeviceID names this machine newID in place of its current device id:
+// state.json and the vault body change in one write, and every project root
+// this device holds is recorded under newID, so the project secrets still
+// resolve in their repositories. The roots recorded under the old id stay (they
+// belong to the account's history). A rejoining device needs it when the
+// account revoked its id (REMOTE_SYNC § 4.5); nothing else changes.
+func (v *Vault) ChangeDeviceID(newID string) error {
+	if !deviceIDRE.MatchString(newID) {
+		return errors.New("vault: malformed device id")
+	}
+	return v.locked(false, func() error {
+		pt, hdr, err := v.st.load()
+		if err != nil {
+			return err
+		}
+		defer clear(pt)
+		if hdr.Device == newID {
+			return nil
+		}
+		b, err := decodeBody(pt, hdr.Device)
+		if err != nil {
+			return err
+		}
+		before := b.index()
+		b.device = newID
+		b.clock = newClock(newID, b)
+		out, err := encodeBody(b, before) // records every linked root under newID
+		if err != nil {
+			return errors.New("vault: body encoding failed")
+		}
+		defer clear(out)
+		st, err := loadState(v.st.home)
+		if err != nil {
+			return err
+		}
+		st.DeviceID = newID
+		return v.st.sealNext(st, hdr.CreatedAt, 0, out)
+	})
+}

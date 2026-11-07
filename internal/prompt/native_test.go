@@ -705,7 +705,7 @@ func TestNativePassphrase(t *testing.T) {
 	}
 
 	a, b := []byte(fxPass+"\n"), []byte(fxPass+"x\n")
-	f = &fakeRun{res: []result{{Stdout: a}, {Stdout: b}}}
+	f = &fakeRun{res: []result{{Stdout: a}, {Stdout: b}, ok(fxPass + "\n"), ok(fxPass + "x\n"), ok(fxPass + "\n"), ok(fxPass + "x\n")}}
 	sec, err = nativeOf(zenityTool{}, f).Passphrase(VaultPassphrase.Twice())
 	if !errors.Is(err, ErrMismatch) || sec.Len() != 0 {
 		t.Fatalf("mismatch: %v", err)

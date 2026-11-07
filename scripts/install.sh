@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install qbit-vault from a GitHub release (docs/INSTALL.md § One-line install).
 #
-#   curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh
+#   curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
 #
 # Environment:
 #   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
@@ -136,5 +136,5 @@ if [ -f "$VAULT_HOME/state.json" ]; then
 		say "'qbit-vault sync' reported a problem (see above); run 'qbit-vault doctor', then restart your agents"
 	fi
 else
-	say "next: run 'qbit-vault' (guided setup) or 'qbit-vault init', then 'qbit-vault doctor'"
+	say "next: run 'qbit-vault init'"
 fi

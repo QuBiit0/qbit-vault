@@ -125,7 +125,8 @@ check "same version is a reinstall" grep -q "qbit-vault v0.0.0-test is already i
 # 9. No vault yet: no sync, the next step is init.
 run "$work/bin-x86" "$work/good" "$work/dest9"
 check "no vault: sync is not run" test ! -s "$QBV_TEST_SYNC_LOG"
-check "no vault: next step is init" grep -q "next: run 'qbit-vault' (guided setup) or 'qbit-vault init'" <<<"$out"
+check "no vault: next step is init" grep -q "next: run 'qbit-vault init'\$" <<<"$out"
+check "no vault: one next step only" test "$(grep -c 'next:' <<<"$out")" = 1
 
 # 10. A set-up vault: the new binary runs sync, unless QBIT_VAULT_NO_SYNC=1.
 mkdir -p "$QBIT_VAULT_HOME"

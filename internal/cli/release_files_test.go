@@ -85,3 +85,124 @@ func TestDocsServeTheInstallersFromTheLatestRelease(t *testing.T) {
 		}
 	}
 }
+
+// The release also publishes the server image (S9.1): multi-arch, tagged with
+// the release version and latest, built from deploy/Dockerfile with the
+// version baked in, by a job that holds only the permissions it needs.
+func TestReleaseWorkflowPublishesTheServerImage(t *testing.T) {
+	w := repoFile(t, ".github", "workflows", "release.yml")
+	i := strings.Index(w, "\n  server-image:")
+	if i < 0 {
+		t.Fatal("release.yml has no server-image job")
+	}
+	job := w[i:]
+	for _, want := range []string{
+		"needs: release",
+		"packages: write",
+		"contents: read",
+		"docker/setup-qemu-action@",
+		"docker/setup-buildx-action@",
+		"docker/login-action@",
+		"docker/build-push-action@",
+		"registry: ghcr.io",
+		"platforms: linux/amd64,linux/arm64",
+		"file: deploy/Dockerfile",
+		"push: true",
+		"ghcr.io/qubiit0/qbit-vault-server:${{ github.ref_name }}",
+		"ghcr.io/qubiit0/qbit-vault-server:latest",
+		"VERSION=${{ github.ref_name }}",
+	} {
+		if !strings.Contains(job, want) {
+			t.Errorf("server-image job lacks %q", want)
+		}
+	}
+	// Only the two permissions the job needs; nothing that can write code or
+	// sign attestations.
+	for _, bad := range []string{"contents: write", "id-token", "attestations", "pull-requests", "actions: write"} {
+		if strings.Contains(job, bad) {
+			t.Errorf("server-image job holds %q", bad)
+		}
+	}
+	// Workflow-level permissions stay read-only so no job inherits a write.
+	if !strings.Contains(w, "\npermissions:\n  contents: read\n") {
+		t.Error("release.yml lost its top-level read-only permissions")
+	}
+}
+
+// The server reports the version baked into the image (/v1/info, status page).
+func TestDockerfileBakesTheVersionIntoTheServer(t *testing.T) {
+	d := repoFile(t, "deploy", "Dockerfile")
+	for _, want := range []string{"ARG VERSION=dev", "QBV_SERVER_VERSION=${VERSION}"} {
+		if !strings.Contains(d, want) {
+			t.Errorf("deploy/Dockerfile lacks %q", want)
+		}
+	}
+}
+
+// compose.image.yaml runs the published image with the hardening of
+// compose.yaml (S9.1); compose.yaml still builds from the repository.
+func TestComposeImageRunsThePublishedImageWithTheSameHardening(t *testing.T) {
+	img := repoFile(t, "deploy", "compose.image.yaml")
+	if !strings.Contains(img, "image: ghcr.io/qubiit0/qbit-vault-server:latest") {
+		t.Error("compose.image.yaml does not run the published image")
+	}
+	if strings.Contains(img, "build:") {
+		t.Error("compose.image.yaml must not build")
+	}
+	for _, want := range []string{
+		"read_only: true",
+		`user: "65532:65532"`,
+		"cap_drop: [ALL]",
+		`security_opt: ["no-new-privileges:true"]`,
+		"- vault-data:/data",
+		"QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?",
+		"QBV_SERVER_TRUST_PROXY:",
+		`test: ["CMD", "/qbit-vault-server", "health"]`,
+		"restart: unless-stopped",
+	} {
+		if !strings.Contains(img, want) {
+			t.Errorf("compose.image.yaml lacks %q", want)
+		}
+		if !strings.Contains(repoFile(t, "deploy", "compose.yaml"), want) {
+			t.Errorf("compose.yaml lacks %q (the two files must stay equally hardened)", want)
+		}
+	}
+	if !strings.Contains(repoFile(t, "deploy", "compose.yaml"), "dockerfile: deploy/Dockerfile") {
+		t.Error("compose.yaml must keep building from the repository")
+	}
+}
+
+func TestDocsShowThePublishedServerImageFirst(t *testing.T) {
+	for _, f := range [][]string{{"deploy", "README.md"}, {"docs", "INSTALL.md"}} {
+		d := repoFile(t, f...)
+		if !strings.Contains(d, "compose.image.yaml") || !strings.Contains(d, "ghcr.io/qubiit0/qbit-vault-server") {
+			t.Errorf("%s does not show the published image path", filepath.Join(f...))
+		}
+		if strings.Contains(d, "No image is published yet") {
+			t.Errorf("%s still says no image is published", filepath.Join(f...))
+		}
+	}
+}
+
+func TestReadmeHasFirstFiveMinutesWithTheDialogScreenshot(t *testing.T) {
+	r := repoFile(t, "README.md")
+	i := strings.Index(r, "First 5 minutes")
+	if i < 0 {
+		t.Fatal("README lacks a First 5 minutes section")
+	}
+	sec := r[i:]
+	if j := strings.Index(sec[1:], "\n## "); j >= 0 {
+		sec = sec[:j+1]
+	}
+	for _, want := range []string{"qbit-vault init", "assets/screenshots/permission-dialog.png", "Once", "Always: in this project"} {
+		if !strings.Contains(sec, want) {
+			t.Errorf("First 5 minutes lacks %q", want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join("..", "..", "assets", "screenshots", "permission-dialog.png")); err != nil {
+		t.Errorf("screenshot missing: %v", err)
+	}
+	if strings.Index(r, "releases/latest/download/install.sh") > i {
+		t.Error("First 5 minutes must come after the install commands")
+	}
+}

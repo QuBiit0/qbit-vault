@@ -225,12 +225,15 @@ Every secret returns to its own layer with its metadata; project secrets return 
 
 `init` never contacts a server; sync is a separate, explicit step (`REMOTE_SYNC.md`).
 
-**1. Run the server** (once, on your VPS or Dokploy). No image is published yet (Phase 5): `deploy/compose.yaml` builds it from the repository (`deploy/Dockerfile`, build context the repository root). Deploy it with one volume `/data` and `QBV_SERVER_PUBLIC_URL=https://vault.example.com` behind the proxy's TLS, then create an invite:
+**1. Run the server** (once, on your VPS or Dokploy). Every release publishes the image `ghcr.io/qubiit0/qbit-vault-server` (linux/amd64 and linux/arm64, tagged with the release version and `latest`). Copy `deploy/compose.image.yaml` to the host, set `QBV_SERVER_PUBLIC_URL` to the `https://` origin your proxy serves (one volume `/data`, TLS at the proxy), start it and create an invite:
 
 ```bash
-docker compose -f deploy/compose.yaml up -d --build
-docker compose -f deploy/compose.yaml exec server /qbit-vault-server invite --ttl 24h
+export QBV_SERVER_PUBLIC_URL=https://vault.example.com
+docker compose -f compose.image.yaml up -d
+docker compose -f compose.image.yaml exec server /qbit-vault-server invite --ttl 24h
 ```
+
+Open the public URL in a browser to check it: the server answers a small status page ("This QBit Vault sync server is running") with its version. Prefer to build it yourself? `deploy/compose.yaml` builds the same server from the repository (`docker compose -f deploy/compose.yaml up -d --build`).
 
 No shell on the host (a hosted Dokploy)? Set `QBV_SERVER_BOOTSTRAP_INVITE` to a code of your own of at least 24 characters in the service's environment and redeploy: while no account exists the server accepts that code once, as the invite of step 2 (it is never logged). Remove the variable after registering.
 

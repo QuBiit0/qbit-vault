@@ -678,7 +678,7 @@ func newRemoteApprove(g *globals) *cobra.Command {
 				return err
 			}
 			conf := remote.ConfirmationCode(remote.Subkeys(s.key).Pairing, code, keys.DeviceID, eph)
-			showErr := show.Show("Pairing code", "Type this code on the new device.\n\n"+conf+"\n")
+			showErr := show.Show("Confirmation code", "Type this code on the new device.\n\n"+conf+"\n")
 			if err := s.v.EditRoster(func(r map[string]merge.Device) { r[keys.DeviceID] = entry }); err != nil {
 				fmt.Fprintln(cmd.ErrOrStderr(), warnApproveRoster)
 			} else if _, err := g.syncRound(ctx, s, c, me.id); err != nil {

@@ -12,7 +12,9 @@
 // capture mode (a bounded tail kept in Result) or streaming mode (redacted
 // chunks written to the caller's writers as they arrive). The child inherits
 // stdin. On timeout or cancellation the whole process tree is killed (a POSIX
-// process group, a Windows job object), and no descendant outlives Run.
+// process group, a Windows job object). That reaches every process still in
+// the group or the job; a descendant that left its group (setsid, a double
+// fork into a new session) is not reached on POSIX.
 package runner
 
 import (

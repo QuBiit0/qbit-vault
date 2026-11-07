@@ -44,6 +44,8 @@ const wantWarn = `{"systemMessage":"qbit-vault hook failed; the command ran with
 var passCommands = []string{
 	"npm test",
 	"",
+	"pwsh -WorkingDirectory /c -File build.ps1",
+	"pwsh -ExecutionPolicy:Bypass -File build.ps1",
 	"qbit-vault list",
 	"qbit-vault list --layer all --json",
 	"qbit-vault --json list",
@@ -160,6 +162,12 @@ var denyCommands = []string{
 	"POWERSHELL /enc cQBiAGkAdAA=",
 	"sudo pwsh -en cQBiAGkAdAA=",
 	"ls; pwsh -encodedcommand cQBiAGkAdAA=",
+	// A value that looks like -File, :-joined values and typographic dashes (S12.1).
+	"pwsh -WorkingDirectory /f -e cQBiAGkAdAA=",
+	"pwsh -wd /c -enc cQBiAGkAdAA=",
+	"pwsh -ExecutionPolicy:Bypass -e cQBiAGkAdAA=",
+	"pwsh -EncodedCommand:cQBiAGkAdAA=",
+	"pwsh –EncodedCommand cQBiAGkAdAA=",
 	`iex 'qbit-vault set A_KEY'`,
 	"qbit-vault exec -- qbit-vault set A_KEY",
 	`qbit-vault exec --secret A_KEY -- sh -c "qbit-vault rm A_KEY"`,

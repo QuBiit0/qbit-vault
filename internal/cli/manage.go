@@ -260,8 +260,6 @@ func replaceOption(sc grants.Scope) string {
 	switch sc {
 	case grants.ScopeOnce:
 		return "Replace, allow once"
-	case grants.ScopeSession:
-		return "Replace, allow for this session"
 	default:
 		return "Replace, always in this project"
 	}

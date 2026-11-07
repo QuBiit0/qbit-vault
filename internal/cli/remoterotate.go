@@ -175,6 +175,15 @@ func (g *globals) rotateOnce(ctx context.Context, cmd *cobra.Command, s *session
 	if err := crashAt("after-server"); err != nil {
 		return rotated{}, false, err
 	}
+	// The server already revoked these: say so before any local step that can
+	// fail.
+	if revoke != "" {
+		g.auditRemote(cmd, "device revoked "+revoke)
+	}
+	for _, id := range orphans {
+		g.auditRemote(cmd, "device revoked "+id)
+		fmt.Fprintf(cmd.ErrOrStderr(), "unknown device %s was revoked\n", id)
+	}
 	if err := g.swapKey(s, next); err != nil {
 		return rotated{}, false, errRotateHalf
 	}
@@ -194,13 +203,6 @@ func (g *globals) rotateOnce(ctx context.Context, cmd *cobra.Command, s *session
 	st.Generation, st.LastVersion, st.PendingPush, st.LastPullAt = gen, ver, false, nowUTC()
 	if err := saveRemoteState(s.home, st); err != nil {
 		return rotated{}, false, errRotateHalf
-	}
-	if revoke != "" {
-		g.auditRemote(cmd, "device revoked "+revoke)
-	}
-	for _, id := range orphans {
-		g.auditRemote(cmd, "device revoked "+id)
-		fmt.Fprintf(cmd.ErrOrStderr(), "unknown device %s was revoked\n", id)
 	}
 	g.record(cmd.ErrOrStderr(), audit.Record{Event: audit.EventRekey, Detail: fmt.Sprintf("remote generation %d", gen)})
 

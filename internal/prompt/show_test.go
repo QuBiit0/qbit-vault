@@ -164,7 +164,7 @@ func TestPowerShellShowLayout(t *testing.T) {
 		t.Error("the box does not show $code")
 	}
 	// A single paragraph goes all in the box: the label is dropped.
-	one := string(powershellTool{}.build("powershell.exe", showDialog("Pairing code", fxShown)).Stdin)
+	one := string(powershellTool{}.build("powershell.exe", showDialog("Confirmation code", fxShown)).Stdin)
 	if !strings.Contains(one, "$text = Dec "+psString("")) || !strings.Contains(one, "$code = Dec "+psString(fxShown)) {
 		t.Error("one paragraph is not all in the box")
 	}

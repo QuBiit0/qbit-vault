@@ -5,6 +5,8 @@ import (
 	"io"
 	"regexp"
 	"strings"
+
+	"github.com/QuBiit0/qbit-vault/internal/dumpguard"
 )
 
 // DenyReason is the fixed refusal the agent reads. It never includes the
@@ -185,7 +187,7 @@ func refusesProgram(w []string, depth int) bool {
 			return refusesRunner(args[1:], depth)
 		}
 	case shells[prog]:
-		if (prog == "pwsh" || prog == "powershell") && encodedCommand(args) {
+		if (prog == "pwsh" || prog == "powershell") && dumpguard.EncodedPowerShellArgs(args) {
 			return true
 		}
 		for i, a := range args {
@@ -244,26 +246,6 @@ func refusesRunner(args []string, depth int) bool {
 				name = name[:at]
 			}
 			return refusesCommand(append([]string{name}, args[i+1:]...), depth+1)
-		}
-	}
-	return false
-}
-
-// encodedCommand reports PowerShell's -EncodedCommand in any spelling (-e,
-// -ec, -en, -enc, ... any case, - or / prefix) among the options before the
-// command or file: its base64 script cannot be read, so it is refused. A
-// word that is not an option is an option's value (-ExecutionPolicy Bypass).
-func encodedCommand(args []string) bool {
-	for _, a := range args {
-		if len(a) < 2 || (a[0] != '-' && a[0] != '/') {
-			continue
-		}
-		f := strings.ToLower(a[1:])
-		switch {
-		case f == "ec" || strings.HasPrefix("encodedcommand", f):
-			return true
-		case f == "c" || f == "command" || f == "f" || f == "file":
-			return false
 		}
 	}
 	return false

@@ -140,6 +140,7 @@ func (s *Server) lock(account string) func() {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { reply(w, 200, map[string]any{"ok": true}) })
+	mux.HandleFunc("GET /{$}", s.status())
 	mux.HandleFunc("GET /v1/info", s.info)
 	mux.HandleFunc("POST /v1/accounts", s.createAccount)
 	mux.HandleFunc("POST /v1/auth/challenge", s.challenge)

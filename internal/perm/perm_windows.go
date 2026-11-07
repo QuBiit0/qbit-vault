@@ -25,7 +25,9 @@ func userSID() (*windows.SID, error) {
 
 // aclInfo is what check needs to know about a DACL.
 type aclInfo struct {
-	nullDACL  bool // no DACL, or an empty-permissive one: everyone has access
+	nullDACL  bool         // no DACL: everyone has access
+	emptyDACL bool         // a DACL with no entries: nobody has access
+	owner     *windows.SID // copy; nil when unreadable
 	protected bool
 	allowed   []*windows.SID // SIDs of access-allowed ACEs (copies)
 	otherACEs int            // ACEs of a type this package does not interpret
@@ -33,7 +35,7 @@ type aclInfo struct {
 
 func inspect(path string) (aclInfo, error) {
 	var info aclInfo
-	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.OWNER_SECURITY_INFORMATION)
 	if err != nil {
 		return info, fmt.Errorf("perm: read ACL: %w", bareErr(err))
 	}
@@ -43,11 +45,17 @@ func inspect(path string) (aclInfo, error) {
 		return info, fmt.Errorf("perm: read ACL: %w", bareErr(err))
 	}
 	info.protected = ctrl&windows.SE_DACL_PROTECTED != 0
+	if owner, _, err := sd.Owner(); err == nil && owner != nil {
+		if info.owner, err = owner.Copy(); err != nil {
+			info.owner = nil
+		}
+	}
 	dacl, _, err := sd.DACL()
 	if err != nil || dacl == nil {
 		info.nullDACL = true
 		return info, nil
 	}
+	info.emptyDACL = dacl.AceCount == 0
 	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(dacl, i, &ace); err != nil {
@@ -69,6 +77,17 @@ func inspect(path string) (aclInfo, error) {
 	return info, nil
 }
 
+// ownerAcceptable reports whether owner may own a private file: the current
+// user, or Administrators, which is what a process running elevated creates
+// files as. The owner can always rewrite the DACL, so any other owner makes
+// the file not private whatever its ACL says.
+func ownerAcceptable(owner, me *windows.SID) bool {
+	if owner == nil {
+		return false
+	}
+	return owner.Equals(me) || owner.IsWellKnown(windows.WinBuiltinAdministratorsSid)
+}
+
 func check(path string) (bool, string) {
 	me, err := userSID()
 	if err != nil {
@@ -80,8 +99,12 @@ func check(path string) (bool, string) {
 		return false, "cannot read the ACL"
 	case info.nullDACL:
 		return false, "no restrictive ACL: everyone has access"
+	case info.emptyDACL:
+		return false, "empty ACL: nobody can open the file"
 	case info.otherACEs > 0:
 		return false, "ACL has entries of an unsupported type"
+	case !ownerAcceptable(info.owner, me):
+		return false, "owned by another account"
 	}
 	for _, sid := range info.allowed {
 		if !sid.Equals(me) {

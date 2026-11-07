@@ -147,3 +147,47 @@ func TestMissingDirIsNotExist(t *testing.T) {
 		t.Fatalf("message leaks the path: %q", err)
 	}
 }
+
+// B-F10: between judging a lock stale and removing it, another process can
+// break it and take a fresh one; the breaker must not delete that live lock.
+func TestStaleBreakDoesNotRemoveALockTakenMeanwhile(t *testing.T) {
+	dir := t.TempDir()
+	p := plant(t, dir, "r.lock", time.Hour)
+	beforeBreak = func() {
+		if err := os.WriteFile(p, []byte("fresh holder\n"), 0o600); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { beforeBreak = func() {} })
+	if _, err := Acquire(dir, "r.lock", fast); !errors.Is(err, ErrBusy) {
+		t.Fatalf("Acquire = %v, want ErrBusy: the fresh lock is live", err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "fresh holder\n" {
+		t.Fatalf("the live lock was removed or replaced: %q", b)
+	}
+}
+
+func TestStaleBreakLeavesNoHelperFile(t *testing.T) {
+	dir := t.TempDir()
+	plant(t, dir, "r.lock", time.Hour)
+	release, err := Acquire(dir, "r.lock", fast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Fatalf("files left behind: %d", len(entries))
+	}
+}
+
+func TestAbandonedBreakHelperDoesNotBlockForever(t *testing.T) {
+	dir := t.TempDir()
+	plant(t, dir, "r.lock", time.Hour)
+	plant(t, dir, "r.lock.break", time.Hour) // a breaker that crashed
+	release, err := Acquire(dir, "r.lock", fast)
+	if err != nil {
+		t.Fatalf("Acquire = %v", err)
+	}
+	release()
+}

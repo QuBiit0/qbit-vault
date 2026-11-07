@@ -111,9 +111,11 @@ func Acquire(dir, name string, opts Options) (release func(), err error) {
 			// Stale also when stamped further ahead than the stale age:
 			// clock skew or a copied home, which would stay busy forever.
 			if info, serr := os.Stat(path); serr == nil && !broke && stale(time.Since(info.ModTime()), opts.StaleAfter) {
-				broke = true
-				_ = os.Remove(path)
-				continue
+				beforeBreak()
+				if breakStale(path, opts.StaleAfter) {
+					broke = true
+					continue
+				}
 			}
 		case errors.Is(err, os.ErrNotExist):
 			return nil, fmt.Errorf("lockfile: %w", os.ErrNotExist)
@@ -126,6 +128,35 @@ func Acquire(dir, name string, opts Options) (release func(), err error) {
 		}
 		time.Sleep(opts.Poll)
 	}
+}
+
+// beforeBreak is a test seam that runs after a lock was judged stale and
+// before it is broken, where another process can replace it.
+var beforeBreak = func() {}
+
+// breakStale removes the stale lock at path while holding path+".break",
+// so two breakers cannot interleave, and re-checks the age under it: a lock
+// another process broke and re-took since the caller looked is fresh and is
+// left alone. While the break lock is held nobody can create path unless the
+// stale file is gone, so the re-check and the removal cannot straddle a new
+// lock. It reports whether the caller did the break (even if the file had
+// already gone); false means someone else is breaking, so just wait. A break
+// lock older than staleAfter is a breaker that crashed and is discarded.
+func breakStale(path string, staleAfter time.Duration) bool {
+	guard := path + ".break"
+	f, err := os.OpenFile(guard, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if info, serr := os.Stat(guard); serr == nil && stale(time.Since(info.ModTime()), staleAfter) {
+			_ = os.Remove(guard)
+		}
+		return false
+	}
+	_ = f.Close()
+	defer func() { _ = os.Remove(guard) }()
+	if info, err := os.Stat(path); err == nil && stale(time.Since(info.ModTime()), staleAfter) {
+		_ = os.Remove(path)
+	}
+	return true
 }
 
 // stale reports whether a lock of this age (negative: stamped in the future)

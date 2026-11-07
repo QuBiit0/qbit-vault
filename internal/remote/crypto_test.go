@@ -254,3 +254,20 @@ func TestEnvelopeEphPub(t *testing.T) {
 		}
 	}
 }
+
+// A key whose 32-character body starts with QVR1 is told apart from the
+// prefix by its length, with and without the prefix typed.
+func TestRecoveryKeyWhoseBodyStartsWithThePrefix(t *testing.T) {
+	body := "QVR1" + strings.Repeat("2", 28)
+	want, err := ParseRecoveryKey("QVR1-" + groups(body, 4))
+	if err != nil {
+		t.Fatalf("with prefix: %v", err)
+	}
+	got, err := ParseRecoveryKey(groups(body, 4))
+	if err != nil || reveal(got) != reveal(want) {
+		t.Fatalf("without prefix: %v", err)
+	}
+	if _, err := ParseRecoveryKey("QVR1-QVR1-" + groups(body, 4)); !errors.Is(err, ErrBadRecoveryKey) {
+		t.Fatalf("a double prefix: %v", err)
+	}
+}

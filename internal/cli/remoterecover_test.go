@@ -69,7 +69,7 @@ func joinUntil(t *testing.T, w, a *world, ss *syncServer, afterApprove func(), e
 	fb := answers(yes())
 	asBackend(t, keepBackend{fb})
 	withPairing(t, func(code string) {
-		fa := answers(val(code), val("Laptop B"), yes(), no())
+		fa := answers(val(code), val("Laptop B"), no())
 		prev := newPrompt
 		asBackend(t, keepBackend{fa})
 		a.mustRun("", "remote", "approve")
@@ -208,7 +208,7 @@ func TestApproveShowsTheCodeWhenTheRosterWriteFails(t *testing.T) {
 	}
 	unblock := a.blocked("backups")
 	defer unblock()
-	f := answers(val(p.Code), val("Laptop X"), yes(), no())
+	f := answers(val(p.Code), val("Laptop X"), no())
 	asBackend(t, keepBackend{f})
 	code, out, errs := a.run("", "remote", "approve")
 	if code != exitcode.OK || errs != "warning: the new device was approved on the server but this vault could not record it in the roster; check 'qbit-vault remote devices'\n" ||
@@ -248,7 +248,7 @@ func TestApproveShowsTheCodeWhenTheFollowingSyncFails(t *testing.T) {
 		}
 		return false
 	})
-	f := answers(val(p.Code), val("Laptop Y"), yes(), no())
+	f := answers(val(p.Code), val("Laptop Y"), no())
 	asBackend(t, keepBackend{f})
 	code, out, errs := a.run("", "remote", "approve")
 	if code != exitcode.OK || out != "approved Laptop Y ("+newID+")\n" || !strings.HasPrefix(errs, "warning: ") || strings.Count(errs, "\n") != 1 {

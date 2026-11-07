@@ -94,9 +94,11 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Log == nil {
 		cfg.Log = io.Discard
 	}
-	if !strings.HasPrefix(cfg.PublicURL, "https://") && !strings.HasPrefix(cfg.PublicURL, "http://") {
+	origin, err := remote.NormalizeOrigin(cfg.PublicURL)
+	if err != nil {
 		return nil, errors.New("server: the public URL must be http(s)://host")
 	}
+	cfg.PublicURL = origin
 	if err := os.MkdirAll(cfg.Data, 0o700); err != nil {
 		return nil, fmt.Errorf("server: data directory: %w", err)
 	}
@@ -299,7 +301,7 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, caller)) http
 // ---- handlers ----
 
 func (s *Server) info(w http.ResponseWriter, _ *http.Request) {
-	reply(w, 200, map[string]any{"version": s.cfg.Version, "limits": map[string]any{
+	reply(w, 200, map[string]any{"version": s.cfg.Version, "origin": s.cfg.PublicURL, "limits": map[string]any{
 		"max_blob": MaxBlob, "max_devices": maxDevices, "versions_kept": keepVersions}})
 }
 
@@ -460,6 +462,10 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 		Sig      string `json:"sig"`
 	}
 	if !decode(w, r, &in) {
+		return
+	}
+	if !deviceRE.MatchString(in.DeviceID) {
+		fail(w, 401, "unauthorized", "unknown device")
 		return
 	}
 	s.mu.Lock()

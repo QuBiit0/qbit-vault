@@ -145,7 +145,11 @@ func NewRecoveryKey() (secret.Secret, string, error) {
 // optional.
 func ParseRecoveryKey(text string) (secret.Secret, error) {
 	s := strings.ToUpper(strings.NewReplacer("-", "", " ", "", "\t", "").Replace(strings.TrimSpace(text)))
-	s = strings.TrimPrefix(s, "QVR1")
+	// The body is 32 characters and may itself start with QVR1, so the prefix
+	// counts only when it makes the text longer than a body.
+	if len(s) == 36 {
+		s = strings.TrimPrefix(s, "QVR1")
+	}
 	s = strings.NewReplacer("I", "1", "L", "1", "O", "0").Replace(s)
 	if len(s) != 32 {
 		return secret.Secret{}, ErrBadRecoveryKey

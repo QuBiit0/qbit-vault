@@ -95,6 +95,8 @@ func remoteErr(err error, auth string) error {
 		return codedError{"remote_unreachable", "the server is limiting requests; try again later", exitcode.Failure}
 	case errors.Is(err, remote.ErrIncompatible):
 		return errIncompatible
+	case errors.As(err, new(*remote.OriginMismatch)):
+		return codedError{"remote_auth", err.Error(), exitcode.Failure}
 	case errors.Is(err, remote.ErrAuth):
 		if auth == "" {
 			return errRemoteAuth

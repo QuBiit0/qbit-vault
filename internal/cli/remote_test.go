@@ -191,7 +191,7 @@ func joinPairing(t *testing.T, w, a *world, ss *syncServer, extra ...string) (in
 	fb := answers(yes())
 	asBackend(t, keepBackend{fb})
 	withPairing(t, func(code string) {
-		fa := answers(val(code), val("Laptop B"), yes(), no())
+		fa := answers(val(code), val("Laptop B"), no())
 		prev := newPrompt
 		asBackend(t, keepBackend{fa})
 		a.mustRun("", "remote", "approve")
@@ -422,7 +422,11 @@ func TestRemoteRegisterCancelAtEachPrompt(t *testing.T) {
 			w := newWorld(t)
 			asBackend(t, keepBackend{answers(tc.script()...)})
 			code, out, errs := w.run("", "remote", "register", "--server", ss.ts.URL)
-			if code != exitcode.Failure || errs != msgCancelled || out != "" {
+			want := msgCancelled
+			if tc.registered {
+				want = msgKeyNotConfirmed
+			}
+			if code != exitcode.Failure || errs != want || out != "" {
 				t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 			}
 			st := readState(t, w)
@@ -559,7 +563,7 @@ func TestRemoteJoinPairingKeepsConfirmationCodeOffTheTape(t *testing.T) {
 	fb := answers(yes())
 	asBackend(t, keepBackend{fb})
 	withPairing(t, func(code string) {
-		fa = answers(val(code), val("Laptop B"), yes(), no())
+		fa = answers(val(code), val("Laptop B"), no())
 		prev := newPrompt
 		asBackend(t, keepBackend{fa})
 		_, ao, ae := a.run("", "--json", "remote", "approve")
@@ -673,7 +677,7 @@ func TestRemoteJoinCancelAndRefusals(t *testing.T) {
 		fb := answers(yes())
 		asBackend(t, keepBackend{fb})
 		withPairing(t, func(code string) {
-			fa := answers(val(code), val("Laptop C"), yes(), no())
+			fa := answers(val(code), val("Laptop C"), no())
 			prev := newPrompt
 			asBackend(t, keepBackend{fa})
 			a.mustRun("", "remote", "approve")
@@ -739,7 +743,7 @@ func TestRemoteJoinWrongConfirmationCodeWipesAndDeletesDevice(t *testing.T) {
 	fb := answers(yes())
 	asBackend(t, keepBackend{fb})
 	withPairing(t, func(code string) {
-		fa := answers(val(code), val("Laptop B"), yes(), no())
+		fa := answers(val(code), val("Laptop B"), no())
 		prev := newPrompt
 		asBackend(t, keepBackend{fa})
 		a.mustRun("", "remote", "approve")
@@ -845,16 +849,9 @@ func TestRemoteApprove(t *testing.T) {
 		c, _, errs := a.run("", "remote", "approve")
 		wantCoded(t, c, errs, "pairing_failed", exitcode.Failure)
 	})
-	t.Run("declined", func(t *testing.T) {
-		code := newPending(t)
-		asBackend(t, keepBackend{answers(val(code), val("Laptop X"), no())})
-		c, _, errs := a.run("", "remote", "approve")
-		if c != exitcode.Failure || errs != msgCancelled {
-			t.Fatalf("code=%d err=%q", c, errs)
-		}
-	})
-	for i, script := range [][]prompttest.Answer{{cancel()}, {val("placeholder"), cancel()}, {val("placeholder"), val("Laptop X"), cancel()}} {
-		t.Run([]string{"cancel at the code", "cancel at the label", "cancel at the confirmation"}[i], func(t *testing.T) {
+	// The name dialog is the consent (S10.2): Cancel there refuses.
+	for i, script := range [][]prompttest.Answer{{cancel()}, {val("placeholder"), cancel()}} {
+		t.Run([]string{"cancel at the code", "cancel at the name"}[i], func(t *testing.T) {
 			code := newPending(t)
 			if len(script) > 1 {
 				script[0] = val(code)
@@ -868,7 +865,7 @@ func TestRemoteApprove(t *testing.T) {
 	}
 	t.Run("cancel when the code is shown", func(t *testing.T) {
 		code := newPending(t)
-		asBackend(t, keepBackend{answers(val(code), val("Laptop X"), yes(), cancel())})
+		asBackend(t, keepBackend{answers(val(code), val("Laptop X"), cancel())})
 		c, _, errs := a.run("", "remote", "approve")
 		if c != exitcode.Failure || errs != msgCancelled || !a.auditHas(`"detail":"approved `) {
 			t.Fatalf("code=%d err=%q", c, errs)

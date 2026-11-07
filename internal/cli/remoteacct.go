@@ -29,8 +29,6 @@ const (
 	namePairing  = "pairing code"
 	nameLabel    = "device label"
 	nameConfirm  = "confirmation code"
-
-	maxKeyChecks = 5
 )
 
 // Failures after the account or the key already changed: each says the state
@@ -224,23 +222,35 @@ func clientErr(err error) error {
 }
 
 // confirmRecoveryKey shows the recovery key and asks for its last four
-// characters; a wrong answer shows it again (§ 4.1 step 5).
+// characters; a wrong answer shows it again until it is right or the user
+// cancels (§ 4.1 step 5). A cancel leaves the account without a confirmed
+// key, and says how to get a new one.
 func confirmRecoveryKey(ask prompt.Backend, show prompt.Shower, rkText string) error {
 	want := codeText(rkText)
 	want = want[len(want)-4:]
-	for range maxKeyChecks {
+	for {
 		if err := show.Show("Recovery key", "Write this recovery key down and keep it offline. It is the only way to open your vault on a new machine if you lose access to every device.\n\n"+rkText+"\n"); err != nil {
-			return userFail(err)
+			return unconfirmed(userFail(err))
 		}
 		got, err := askText(ask, prompt.SecretRequest{Name: nameLastFour, Reason: "Check that you saved the recovery key", Host: "cli"})
 		if err != nil {
-			return err
+			return unconfirmed(err)
 		}
 		if sameCode(got, want) {
 			return nil
 		}
 	}
-	return errCancelled
+}
+
+var errKeyNotConfirmed = codedError{"cancelled", "cancelled; the recovery key was not confirmed; run 'qbit-vault remote recovery-key --rotate' to get a new recovery key", exitcode.Failure}
+
+// unconfirmed turns a cancel at the recovery key check into the message that
+// says how to get a new key; any other failure stays as it is.
+func unconfirmed(err error) error {
+	if err == errCancelled {
+		return errKeyNotConfirmed
+	}
+	return err
 }
 
 // ---- join (§ 4.2-4.4) ----
@@ -598,14 +608,6 @@ func newRemoteApprove(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			label, err := askText(ask, prompt.SecretRequest{Name: nameLabel, Reason: "Name the new device", Host: "cli", Visible: true})
-			if err != nil {
-				return err
-			}
-			label = oneLine(label)
-			if label == "" {
-				return usageError{"the device label is empty"}
-			}
 			code := regroup(typed, 4)
 
 			me, err := s.device()
@@ -638,8 +640,15 @@ func newRemoteApprove(g *globals) *cobra.Command {
 			if _, taken := roster[keys.DeviceID]; taken || keys.DeviceID == me.id {
 				return errPairingFailed
 			}
-			if err := askYes(ask, fmt.Sprintf("Add device %s to your vault on %s? It will be able to read every secret.", label, host)); err != nil {
+			// The name dialog is the consent: Cancel refuses.
+			def := fmt.Sprintf("device %d", len(roster)+1)
+			label, err := askText(ask, prompt.SecretRequest{Name: nameLabel, Host: "cli", Visible: true,
+				Reason: fmt.Sprintf("Add this device to your vault on %s? It will be able to read every secret. Name it, or leave this empty for %q.", host, def)})
+			if err != nil {
 				return err
+			}
+			if label = oneLine(label); label == "" {
+				label = def
 			}
 			if _, err := g.syncRound(ctx, s, c, me.id); err != nil {
 				return err

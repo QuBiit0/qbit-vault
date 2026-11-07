@@ -17,6 +17,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -86,6 +87,7 @@ func transportFor(caFile string) (*http.Transport, error) {
 type Client struct {
 	base   string
 	origin string
+	used   string // the URL as the user wrote it
 	http   *http.Client
 	token  string
 }
@@ -93,25 +95,44 @@ type Client struct {
 // NewClient checks the URL (https, or http to a loopback host) and, when
 // caFile is given, trusts that CA for TLS.
 func NewClient(server, caFile string) (*Client, error) {
-	u, err := url.Parse(server)
-	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil {
-		return nil, ErrInsecureURL
+	origin, err := NormalizeOrigin(server)
+	if err != nil {
+		return nil, err
 	}
-	switch u.Scheme {
-	case "https":
-	case "http":
+	if u, _ := url.Parse(origin); u.Scheme == "http" {
 		if h := u.Hostname(); h != "localhost" && h != "127.0.0.1" && h != "::1" {
 			return nil, ErrInsecureURL
 		}
-	default:
-		return nil, ErrInsecureURL
 	}
 	tr, err := transportFor(caFile)
 	if err != nil {
 		return nil, err
 	}
-	origin := u.Scheme + "://" + u.Host
-	return &Client{base: origin, origin: origin, http: &http.Client{Transport: tr, Timeout: 30 * time.Second, CheckRedirect: noRedirect}}, nil
+	return &Client{base: origin, origin: origin, used: server, http: &http.Client{Transport: tr, Timeout: 30 * time.Second, CheckRedirect: noRedirect}}, nil
+}
+
+// NormalizeOrigin reduces a server URL to the origin both sides sign and
+// compare: scheme and host in lower case, the default port dropped, no path,
+// no trailing slash. Only http and https hosts without credentials qualify.
+func NormalizeOrigin(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil {
+		return "", ErrInsecureURL
+	}
+	scheme, host, port := strings.ToLower(u.Scheme), strings.ToLower(u.Hostname()), u.Port()
+	if scheme != "https" && scheme != "http" {
+		return "", ErrInsecureURL
+	}
+	if port == "443" && scheme == "https" || port == "80" && scheme == "http" {
+		port = ""
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host, nil
 }
 
 // noRedirect stops the client at the first 3xx answer: a sealed body is only
@@ -201,6 +222,33 @@ func (c *Client) Info(ctx context.Context) (string, error) {
 	return out.Version, err
 }
 
+// OriginMismatch is a refused login against a server configured for another
+// origin than the one the user wrote. It is an ErrAuth.
+type OriginMismatch struct{ Server, Used string }
+
+func (e *OriginMismatch) Error() string {
+	return "the server is configured as " + e.Server + "; you used " + e.Used +
+		". Use the same URL (qbit-vault remote logout, then register or join with it)."
+}
+
+func (e *OriginMismatch) Unwrap() error { return ErrAuth }
+
+// explainRefusal turns a refused login into an OriginMismatch when the
+// server says it is configured as another origin. The server is untrusted:
+// what it reports is used only when it is itself a plain, normalized origin.
+func (c *Client) explainRefusal(ctx context.Context, refused error) error {
+	var out struct {
+		Origin string `json:"origin"`
+	}
+	if _, err := c.call(ctx, "GET", "/v1/info", nil, &out); err != nil {
+		return refused
+	}
+	if n, err := NormalizeOrigin(out.Origin); err != nil || n != out.Origin || n == c.origin {
+		return refused
+	}
+	return &OriginMismatch{Server: out.Origin, Used: c.used}
+}
+
 // NewAccount is what registering the first device sends.
 type NewAccount struct {
 	Invite           string
@@ -243,6 +291,9 @@ func (c *Client) Login(ctx context.Context, deviceID string, d Device) error {
 		Token string `json:"token"`
 	}
 	if _, err := c.call(ctx, "POST", "/v1/auth/token", map[string]string{"device_id": deviceID, "nonce": ch.Nonce, "sig": enc(sig)}, &tok); err != nil {
+		if errors.Is(err, ErrAuth) {
+			return c.explainRefusal(ctx, err)
+		}
 		return err
 	}
 	c.token = tok.Token

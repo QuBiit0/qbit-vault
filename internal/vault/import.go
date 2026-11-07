@@ -69,3 +69,36 @@ func (v *Vault) PutManyWithGrants(layer Layer, names []string, recs map[string]R
 	})
 	return res, replaced, err
 }
+
+// PutMissing stores several new values in layer in one locked write, for
+// `request`. Unlike PutManyWithGrants it never replaces: when any name already
+// exists in layer (it was stored since the caller looked) nothing is written
+// and the error is ErrExists.
+func (v *Vault) PutMissing(layer Layer, names []string, recs map[string]Record) error {
+	if len(names) == 0 || len(names) != len(recs) {
+		return errors.New("vault: names and records do not match")
+	}
+	for _, n := range names {
+		if err := checkName(n); err != nil {
+			return err
+		}
+		if _, ok := recs[n]; !ok {
+			return errors.New("vault: names and records do not match")
+		}
+	}
+	if err := checkLayer(layer); err != nil {
+		return err
+	}
+	return v.mutate(func(b *body) error {
+		secrets := b.secrets(layer, true)
+		for _, n := range names {
+			if _, ok := secrets[n]; ok {
+				return withName(ErrExists, n)
+			}
+		}
+		for _, n := range names {
+			putIn(secrets, n, recs[n], false)
+		}
+		return nil
+	})
+}

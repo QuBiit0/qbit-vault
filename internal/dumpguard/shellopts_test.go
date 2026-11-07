@@ -2,6 +2,7 @@ package dumpguard
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -195,5 +196,64 @@ func TestCompiledCacheIsCapped(t *testing.T) {
 	}
 	if !g.Match("printenv", []string{"NAME_0"}) {
 		t.Error("an evicted set must still be matched")
+	}
+}
+
+// S3.5: PowerShell resolves any prefix of -Command from -c up, in any dash
+// style, so the script after it is inspected.
+func TestMatchInspectsPowerShellCommandPrefixes(t *testing.T) {
+	g := Default()
+	for _, opt := range []string{"-c", "-co", "-com", "-comm", "-comma", "-comman", "-command", "-COM", "-Comm", "/c", "/com", "\u2013co", "\u2014comma"} {
+		for _, shell := range []string{"pwsh", "powershell", "powershell.exe"} {
+			dump := shell + " " + opt + " 'printenv'"
+			if !g.Match(dump, []string{"NAME"}) {
+				t.Errorf("%q should be refused", dump)
+			}
+			if g.Match(dump, nil) {
+				t.Errorf("%q must be allowed when nothing is injected", dump)
+			}
+			ok := shell + " " + opt + " 'echo hi'"
+			if g.Match(ok, []string{"NAME"}) {
+				t.Errorf("%q should be allowed", ok)
+			}
+		}
+	}
+	// Options that only start like -Command are not -Command.
+	for _, c := range []string{
+		`pwsh -ConfigurationName printenv`,
+		`pwsh -config printenv`,
+		`pwsh -CustomPipeName printenv`,
+		`pwsh -cu printenv`,
+		`pwsh -con printenv`,
+		`pwsh -cx printenv`,
+		`pwsh -commands printenv`,
+	} {
+		if got, ok := scriptOf(strings.Fields(c)); ok {
+			t.Errorf("scriptOf(%q) = %q, want no script", c, got)
+		}
+	}
+}
+
+func TestScriptOfPowerShellCommandPrefixes(t *testing.T) {
+	tests := []struct {
+		words  []string
+		script string
+		ok     bool
+	}{
+		{[]string{"pwsh", "-c", "printenv"}, "printenv", true},
+		{[]string{"pwsh", "-co", "Get-ChildItem", "Env:"}, "Get-ChildItem Env:", true},
+		{[]string{"pwsh", "-NoProfile", "-comm", "printenv"}, "printenv", true},
+		{[]string{"powershell", "-Comman", "dir"}, "dir", true},
+		{[]string{"pwsh", "-command"}, "", false},
+		{[]string{"pwsh", "-co"}, "", false},
+		{[]string{"pwsh", "-ConfigurationName", "x", "printenv"}, "", false},
+		{[]string{"pwsh", "-CustomPipeName", "x"}, "", false},
+		{[]string{"pwsh", "-cu", "x"}, "", false},
+	}
+	for _, tt := range tests {
+		got, ok := scriptOf(tt.words)
+		if got != tt.script || ok != tt.ok {
+			t.Errorf("scriptOf(%q) = %q, %v; want %q, %v", tt.words, got, ok, tt.script, tt.ok)
+		}
 	}
 }

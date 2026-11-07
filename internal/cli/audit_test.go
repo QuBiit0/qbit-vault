@@ -430,3 +430,27 @@ func TestAuditUsageErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestInitWritesTheAuditHeadAndAMissingOneIsReported(t *testing.T) {
+	w := newWorld(t)
+	head := filepath.Join(w.home, "audit.head")
+	if _, err := os.Stat(head); err != nil {
+		t.Fatalf("init left no audit.head: %v", err)
+	}
+	for range 2 {
+		if err := audit.Append(w.home, audit.Record{Event: audit.EventWarning, Session: "cli", Detail: "x"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Remove(head); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := w.run("", "audit", "--verify"); code != exitcode.Failure || out != "audit log broken at line 3 (seq 4): head_mismatch\n" || errs != "" {
+		t.Fatalf("verify: code=%d out=%q err=%q", code, out, errs)
+	}
+	code, out, errs := w.run("", "doctor")
+	if code != exitcode.Failure || errs != "" || doctorStatus(out, "audit") != "fail" ||
+		!strings.Contains(out, "audit chain broken at line 3 (head_mismatch)") {
+		t.Fatalf("doctor: code=%d out=%q err=%q", code, out, errs)
+	}
+}

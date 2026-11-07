@@ -33,6 +33,7 @@ type asked struct {
 	layer     vault.Layer
 	recordID  string
 	sensitive bool
+	layers    []string // layer keys the value lives in or could be saved in
 	value     []byte
 }
 
@@ -43,7 +44,8 @@ type asked struct {
 // every field allows. It is all-or-nothing: nothing is stored or granted
 // unless the user completes every step. The response is the same whether a
 // value existed, so the model cannot enumerate the vault. A decline or
-// cancel starts the cooldown of every name in the request.
+// cancel starts the cooldown of every name in the request, for the session
+// and, briefly, for every session in the layers it could live in.
 func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.RequestRequest) (broker.RequestResponse, error) {
 	g := b.bound(e)
 	s, err := g.openSession()
@@ -67,23 +69,28 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	fields := make([]*asked, len(r.Fields))
 	var fresh []*asked
 	for i, f := range r.Fields {
-		on, err := g.coolingDown(s, f.Name)
-		if err != nil {
-			return broker.RequestResponse{}, asRefusal(err)
-		}
-		if on {
-			return broker.RequestResponse{}, refusal.New(refusal.RateLimited, f.Name)
-		}
 		a := &asked{f: f}
 		rec, l, rerr := s.v.Resolve(f.Name, e.Cwd)
 		switch {
 		case rerr == nil:
 			rec.Value.Wipe()
 			a.exists, a.layer, a.recordID, a.sensitive = true, l, rec.ID, rec.Sensitive
+			a.layers = []string{l.Key()}
 		case errors.Is(rerr, vault.ErrNotFound):
 			fresh = append(fresh, a)
+			a.layers = []string{vault.Global().Key()}
+			if inProject {
+				a.layers = append(a.layers, proj.Key())
+			}
 		default:
 			return broker.RequestResponse{}, asRefusal(mapErr(rerr, f.Name))
+		}
+		on, err := g.coolingDownIn(s, f.Name, a.layers)
+		if err != nil {
+			return broker.RequestResponse{}, asRefusal(err)
+		}
+		if on {
+			return broker.RequestResponse{}, refusal.New(refusal.RateLimited, f.Name)
 		}
 		fields[i] = a
 	}
@@ -98,7 +105,7 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	}
 	declined := func(outcome string) error {
 		for _, a := range fields {
-			g.coolDown(s, a.f.Name)
+			g.coolDownIn(s, a.f.Name, a.layers)
 		}
 		g.record(io.Discard, audit.Record{Event: audit.EventPrompt, Names: namesOf(fields), Outcome: outcome})
 		return refusal.New(refusal.UserDeclined, firstName(fields))
@@ -222,9 +229,14 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		for _, a := range fresh {
 			recs[a.f.Name] = vault.Record{Value: secret.New(a.f.Name, a.value), Kind: a.f.Kind, Description: a.f.Description}
 		}
-		_, _, err := s.v.PutManyWithGrants(layer, names, recs, newGrantsEditor())
+		err := s.v.PutMissing(layer, names, recs)
 		for _, rec := range recs {
 			rec.Value.Wipe()
+		}
+		if errors.Is(err, vault.ErrExists) {
+			// A `set` stored it while the user was answering: it wins.
+			return broker.RequestResponse{}, refusal.New(refusal.Internal, "").
+				WithMessage(firstName(fresh) + " changed while it was being asked; ask again").WithRetryable(true)
 		}
 		if err != nil {
 			return broker.RequestResponse{}, asRefusal(mapErr(err, ""))

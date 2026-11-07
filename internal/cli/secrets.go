@@ -394,6 +394,7 @@ func newSet(g *globals) *cobra.Command {
 
 			var rec vault.Record
 			replaced := false
+			existingID := ""
 			all, err := s.v.ListAll()
 			if err != nil {
 				return mapErr(err, name)
@@ -401,6 +402,7 @@ func newSet(g *globals) *cobra.Command {
 			for _, e := range all {
 				if e.Name == name && sameLayer(e.Layer, layer) {
 					replaced = true
+					existingID = e.Record.ID
 					// Metadata the user did not pass again survives a replace.
 					rec.Kind, rec.Description, rec.Sensitive = e.Record.Kind, e.Record.Description, e.Record.Sensitive
 					rec.Binaries, rec.Hosts = e.Record.Binaries, e.Record.Hosts
@@ -433,8 +435,9 @@ func newSet(g *globals) *cobra.Command {
 				tokenHash string
 			)
 			if scope != "" {
-				// The record id does not exist until the value is stored.
-				req = g.grantRequest(name, layer, "", scope, ttl, rec.Sensitive)
+				// A new record has no id until the value is stored; a replaced
+				// one is identified by the id the token was issued for.
+				req = g.grantRequest(name, layer, existingID, scope, ttl, rec.Sensitive)
 				if err := grants.Validate(req); err != nil {
 					return grantErr(err, name)
 				}

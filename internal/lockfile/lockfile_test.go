@@ -82,6 +82,29 @@ func TestStaleLockIsBroken(t *testing.T) {
 	}
 }
 
+// B-F3: a lock stamped far in the future (clock skew, a copied home) is stale
+// too; one only slightly ahead is a live lock whose clock runs fast.
+func TestFutureLockIsStaleBeyondTheStaleAge(t *testing.T) {
+	dir := t.TempDir()
+	p := plant(t, dir, "f.lock", -time.Minute)
+	release, err := Acquire(dir, "f.lock", fast)
+	if err != nil {
+		t.Fatalf("future lock not broken: %v", err)
+	}
+	release()
+	if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("lock left: %v", err)
+	}
+
+	p = plant(t, dir, "g.lock", -5*time.Second)
+	if _, err := Acquire(dir, "g.lock", fast); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a lock a few seconds ahead is live: %v", err)
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("live lock removed: %v", err)
+	}
+}
+
 func TestReleasedOnPanic(t *testing.T) {
 	dir := t.TempDir()
 	func() {

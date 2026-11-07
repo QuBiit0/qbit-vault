@@ -28,6 +28,8 @@ const (
 
 func TestMain(m *testing.M) {
 	keyring.MockInit()
+	// Test directories are ordinary disk; the real check has its own test.
+	memoryBacked = func(string) bool { return true }
 	os.Exit(m.Run())
 }
 

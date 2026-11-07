@@ -11,7 +11,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"math"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -79,9 +82,24 @@ func invalid(field string) refusal.Refusal {
 
 var errMismatch = refusal.New(refusal.ContractMismatch, "")
 
+// PanicLine is the one line a recovered panic leaves on stderr: never the
+// panic value or the stack, which could carry request text.
+const PanicLine = "qbit-vault: internal error while handling a request"
+
+// panicLog is where PanicLine goes. It is a seam for tests.
+var panicLog io.Writer = os.Stderr
+
 // Handle answers one request. It never panics on input and never returns
-// anything but one JSON object followed by a newline.
-func Handle(ctx context.Context, raw []byte, b Backend, t Transport) []byte {
+// anything but one JSON object followed by a newline. A panic in an op is
+// recovered and answered as the typed `internal` refusal.
+func Handle(ctx context.Context, raw []byte, b Backend, t Transport) (out []byte) {
+	defer func() {
+		if recover() != nil {
+			fmt.Fprintln(panicLog, PanicLine)
+			out, _ = json.Marshal(refusal.New(refusal.Internal, "").Envelope())
+			out = append(out, '\n')
+		}
+	}()
 	v, err := handle(ctx, raw, b, t)
 	if err != nil {
 		v = asRefusal(err).Envelope()

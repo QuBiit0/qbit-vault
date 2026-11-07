@@ -30,6 +30,8 @@ var (
 	// renameBudget bounds the total backoff spent retrying a transient
 	// rename failure.
 	renameBudget = 2 * time.Second
+	// syncFile flushes a file to stable storage; tests count its calls.
+	syncFile = func(f *os.File) error { return f.Sync() }
 	// snapshotClock names snapshot directories; tests pin it.
 	snapshotClock = time.Now
 )
@@ -153,7 +155,7 @@ func writeSynced(path string, data []byte) error {
 		_ = f.Close()
 		return fmt.Errorf("vault: write temp file: %w", bare(err))
 	}
-	if err := f.Sync(); err != nil {
+	if err := syncFile(f); err != nil {
 		_ = f.Close()
 		return fmt.Errorf("vault: sync temp file: %w", bare(err))
 	}
@@ -184,9 +186,10 @@ func snapshot(home string, names ...string) (string, error) {
 				return "", err
 			}
 		}
-		if err := os.WriteFile(filepath.Join(dir, name), old, fileMode); err != nil {
+		// Flushed like the live files: a torn backup is no restore point.
+		if err := writeSynced(filepath.Join(dir, name), old); err != nil {
 			removeSnapshot(dir)
-			return "", fmt.Errorf("vault: write backup of %s: %w", name, bare(err))
+			return "", fmt.Errorf("vault: write backup of %s: %w", name, err)
 		}
 		if err := secureFile(filepath.Join(dir, name), "backup"); err != nil {
 			removeSnapshot(dir)

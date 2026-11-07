@@ -236,8 +236,11 @@ func newPromptCmd(g *globals) *cobra.Command {
 					return err
 				}
 				defer clear(raw)
-				// The token is for a value that is not stored yet.
-				recordID = ""
+				// A new record has no id yet; a replaced one keeps the id it
+				// had when the user was asked.
+				if !exists {
+					recordID = ""
+				}
 			}
 
 			opts, def := scopeLabels(allowed, "", false)

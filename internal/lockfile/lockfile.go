@@ -108,7 +108,9 @@ func Acquire(dir, name string, opts Options) (release func(), err error) {
 		}
 		switch {
 		case errors.Is(err, os.ErrExist):
-			if info, serr := os.Stat(path); serr == nil && !broke && time.Since(info.ModTime()) > opts.StaleAfter {
+			// Stale also when stamped further ahead than the stale age:
+			// clock skew or a copied home, which would stay busy forever.
+			if info, serr := os.Stat(path); serr == nil && !broke && stale(time.Since(info.ModTime()), opts.StaleAfter) {
 				broke = true
 				_ = os.Remove(path)
 				continue
@@ -124,6 +126,12 @@ func Acquire(dir, name string, opts Options) (release func(), err error) {
 		}
 		time.Sleep(opts.Poll)
 	}
+}
+
+// stale reports whether a lock of this age (negative: stamped in the future)
+// is abandoned.
+func stale(age, after time.Duration) bool {
+	return age > after || age < -after
 }
 
 // releaseLock removes the lock file only if it is still ours, so a lock

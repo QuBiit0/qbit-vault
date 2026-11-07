@@ -15,7 +15,8 @@
 // quotes stripped; base64 (standard and URL-safe, padded and unpadded);
 // percent-encoding (query, path and strict flavors, upper and lower hex);
 // JSON string bodies (with and without HTML escaping, with and without
-// ASCII-only escaping, upper and lower hex); and, for values of at least 8
+// ASCII-only escaping, upper and lower hex); UTF-16LE and UTF-16BE (PowerShell
+// 5.1 redirection, no BOM needed); and, for values of at least 8
 // bytes, the stable inner base64 substring at each of the three byte
 // alignments, so a value embedded in a larger base64 blob (HTTP Basic
 // credentials) is still found.
@@ -28,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/QuBiit0/qbit-vault/internal/secret"
@@ -170,6 +172,11 @@ func (s *state) addSecret(name string, v []byte) {
 }
 
 func (s *state) addEncodings(b []byte, tok int) {
+	// Windows PowerShell 5.1 writes redirected text as UTF-16LE; BE is its twin.
+	// A BOM before the value is not needed to match.
+	for _, be := range []bool{false, true} {
+		s.add(utf16Form(b, be), tok, false)
+	}
 	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.URLEncoding} {
 		s.add(b64(enc, b), tok, false)
 		s.add(b64(enc.WithPadding(base64.NoPadding), b), tok, false)
@@ -414,4 +421,19 @@ func (w *StreamWriter) release() {
 // never print them.
 func (w StreamWriter) Format(f fmt.State, _ rune) {
 	_, _ = io.WriteString(f, "redact.StreamWriter{}")
+}
+
+// utf16Form is b read as UTF-8 and written as UTF-16 code units (invalid
+// bytes become U+FFFD, as every encoder does).
+func utf16Form(b []byte, bigEndian bool) []byte {
+	units := utf16.Encode([]rune(string(b)))
+	out := make([]byte, 0, 2*len(units))
+	for _, u := range units {
+		if bigEndian {
+			out = append(out, byte(u>>8), byte(u))
+		} else {
+			out = append(out, byte(u), byte(u>>8))
+		}
+	}
+	return out
 }

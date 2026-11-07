@@ -67,6 +67,9 @@ var passCommands = []string{
 	`echo "run qbit-vault set later"`,
 	"qbit-vault-server --help",
 	"echo 'oops",
+	"pwsh -NoProfile -Command Get-Date",
+	"pwsh -File build.ps1",
+	"echo -e hi",
 }
 
 var denyCommands = []string{
@@ -145,6 +148,18 @@ var denyCommands = []string{
 	`pwsh -Command "qbit-vault set A_KEY"`,
 	`cmd /c qbit-vault set A_KEY`,
 	`eval "qbit-vault set A_KEY"`,
+	`bash -o pipefail -c "qbit-vault set A_KEY"`,
+	// An encoded PowerShell command hides what it runs: denied (A-F2).
+	"pwsh -e cQBiAGkAdAA=",
+	"pwsh -ec cQBiAGkAdAA=",
+	"pwsh -NoProfile -EncodedCommand cQBiAGkAdAA=",
+	"pwsh -ExecutionPolicy Bypass -EncodedCommand cQBiAGkAdAA=",
+	"powershell -NoProfile -ExecutionPolicy Bypass -enc cQBiAGkAdAA=",
+	"powershell -WindowStyle Hidden -e cQBiAGkAdAA=",
+	"powershell.exe -ENC cQBiAGkAdAA=",
+	"POWERSHELL /enc cQBiAGkAdAA=",
+	"sudo pwsh -en cQBiAGkAdAA=",
+	"ls; pwsh -encodedcommand cQBiAGkAdAA=",
 	`iex 'qbit-vault set A_KEY'`,
 	"qbit-vault exec -- qbit-vault set A_KEY",
 	`qbit-vault exec --secret A_KEY -- sh -c "qbit-vault rm A_KEY"`,

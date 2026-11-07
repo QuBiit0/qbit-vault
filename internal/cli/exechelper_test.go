@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 )
 
 // The test binary doubles as the child process of `exec` tests: when
@@ -42,6 +43,13 @@ func childMain(mode string) {
 		time.Sleep(120 * time.Millisecond)
 		os.Stdout.WriteString(v[h:] + "\n")
 		fmt.Println("done")
+	case "utf16": // the value of env var arg as UTF-16LE (PowerShell 5.1 redirection), BOM first
+		out := []byte{0xFF, 0xFE}
+		for _, u := range utf16.Encode([]rune(os.Getenv(arg) + "\n")) {
+			out = append(out, byte(u), byte(u>>8))
+		}
+		os.Stdout.Write(out)
+		os.Stderr.Write(out)
 	case "env": // NAME=<value tail or <unset>> for each name in arg
 		for _, n := range strings.Split(arg, ",") {
 			v, ok := os.LookupEnv(n)

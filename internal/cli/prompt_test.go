@@ -591,6 +591,42 @@ func TestPromptWithValueWritesFD3AndFeedsSet(t *testing.T) {
 	}
 }
 
+// A-F7: for a name that already exists, `prompt --value` binds the token to
+// that record, so it cannot be redeemed against a record that replaced it.
+func TestPromptValueTokenIsBoundToTheExistingRecord(t *testing.T) {
+	pinClock(t)
+	w := newWorld(t)
+	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
+	fd := fakeFD(t)
+	withBackend(t, answers(val(fxVal+"_new"), pick(0)))
+	code, out, errs := w.run("", "--session", sessA, "prompt", "--name", "A_KEY", "--reason", "new key", "--value", "--scopes", "once")
+	if code != exitcode.OK || errs != "" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	p := decodePrompt(t, out)
+	// The token still feeds the set that replaces the record it was issued for.
+	code, out, errs = w.run(fd.String(), "--session", sessA, "set", "A_KEY", "--global", "--stdin", "--grant", "once", "--from-prompt-token", p.Token)
+	if code != 0 || errs != "" || !strings.Contains(out, "granted A_KEY (global): once") {
+		t.Fatalf("set: code=%d out=%q err=%q", code, out, errs)
+	}
+	noFixtures(t, "stdout/stderr", out+errs)
+
+	// A second token, then the record is replaced by someone else: it is dead.
+	fd.Reset()
+	withBackend(t, answers(val(fxVal+"_new2"), pick(0)))
+	code, out, errs = w.run("", "--session", sessA, "prompt", "--name", "A_KEY", "--reason", "new key", "--value", "--scopes", "once")
+	if code != exitcode.OK || errs != "" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+	p = decodePrompt(t, out)
+	w.mustRun(fxVal+"_other", "set", "A_KEY", "--global", "--stdin")
+	code, out, errs = w.run("", "--session", sessA, "grant", "A_KEY", "--scope", "once", "--from-prompt-token", p.Token)
+	if code != exitcode.Refusal || strings.Contains(out, "granted") {
+		t.Fatalf("a token for a replaced record must be refused: code=%d out=%q err=%q", code, out, errs)
+	}
+	noFixtures(t, "stdout/stderr", out+errs)
+}
+
 func TestPromptValueNeedsFD3(t *testing.T) {
 	// Never wrap fd 3 in an *os.File here: on macOS it is often the runtime's
 	// kqueue, and the file's finalizer would close it.

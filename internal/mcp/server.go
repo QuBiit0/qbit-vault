@@ -12,10 +12,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
+	"os"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/QuBiit0/qbit-vault/internal/broker"
+	"github.com/QuBiit0/qbit-vault/internal/refusal"
 )
 
 // ToolDescriptions are CONTRACT.md § Model-facing tool definitions, verbatim.
@@ -25,6 +29,9 @@ var ToolDescriptions = map[string]string{
 	"secret_manage":  "Propose a change to a secret: remove it, edit its metadata, move it between global and this project, or replace its value. The user confirms or declines outside the chat; nothing changes without that. You never see values and you cannot grant access. Give a concrete reason.",
 	"secret_exec":    "Run a shell command with named secrets injected as environment variables for that process only. Output is returned with secret values redacted. Commands that print the environment or a secret are refused; to use only a length, write ${#NAME}. Prefer this over asking the user to paste credentials.",
 }
+
+// panicLog is where broker.PanicLine goes. It is a seam for tests.
+var panicLog io.Writer = os.Stderr
 
 // Options configures the server.
 type Options struct {
@@ -98,7 +105,16 @@ func add(srv *sdk.Server, b broker.Backend, o Options, tool, op string) {
 // handler turns the tool input into an envelope for op and answers with the
 // broker's JSON as text, an error result when it is a refusal.
 func handler[In any](b broker.Backend, o Options, op string) sdk.ToolHandlerFor[In, any] {
-	return func(ctx context.Context, _ *sdk.CallToolRequest, in In) (*sdk.CallToolResult, any, error) {
+	return func(ctx context.Context, _ *sdk.CallToolRequest, in In) (res *sdk.CallToolResult, _ any, _ error) {
+		// A panic must not kill the server or print a trace: answer the
+		// typed internal refusal, with one fixed line on stderr.
+		defer func() {
+			if recover() != nil {
+				fmt.Fprintln(panicLog, broker.PanicLine)
+				out, _ := json.Marshal(refusal.New(refusal.Internal, "").Envelope())
+				res = &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: string(out)}}, IsError: true}
+			}
+		}()
 		out := broker.Handle(ctx, envelope(o, op, in), b, broker.TransportModel)
 		var ok struct {
 			OK bool `json:"ok"`

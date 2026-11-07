@@ -179,7 +179,7 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | LP1 | S4 | worker | | done, awaiting review |
 | LP2 | S5 | worker + parent correction | ab worker commit + 00799f7 (kdialog) | done, beta.11 |
 | LP3 | S6 | worker + parent correction | 076a8da, 80ed221, d3ba4df | done, beta.12 |
-| LP4 | S7 | worker | (this branch) | done, review pending |
+| LP4 | S7 | worker | 9b222e6, 5631041 | done (ships in beta.13) |
 | LP5-LP7 | S1-S3 | plan steps 5-7 | | pending |
 
 ## Log
@@ -194,3 +194,4 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L7. Step 3 review: two CRITICAL findings (encoded PowerShell after an option with a value, `-ExecutionPolicy Bypass -EncodedCommand`, passed the guard and the hook) corrected in d3ba4df and validated. Advisory follow-ups for step 7: R1-psenc-valued-option-bypass and R4-encoded-ps-option-value (binaries.go:119), R3-scriptof-valued-long-options (bash long options with a value before -c), R3-set-replace-grant-id (secrets.go:438). Released as 0.1.0-beta.12.
 - L8. beta.12 released, this machine upgraded, doctor healthy. Step 4 started on branch feat/dialogs-one-voice.
 - L9. LP4 (S7.1-S7.14) done by worker, not committed. RED first for who in the question (S7.2), passphrase labels (S7.3), form header (S7.5), Ctrl-C at cooked reads (S7.11, `console.interrupts` seam) and the kdialog show fallback (S7.12, `native.open` seam). `Backend.Passphrase` takes a `PassphraseRequest` (heading, label, again, confirm; keychain's `PassphraseFunc` unchanged). Dialogs carry a heading, request rows (Windows grid), button labels and one title `QBit Vault`; `prompt.Escape` keeps an agent's reason on one line because `Choose`/`Confirm` now keep layout line breaks. Windows dialogs rendered with the real builders to PNG and checked. Left for the owner: `e2e/docker-test.sh:252` waits for `SHOW Confirmation code` (now `SHOW Pairing code`); `docs/TESTING.md:67` and `contracts/secrets-broker/v1/CONTRACT.md:162` still quote `prompt timed out` and the old replace options.
+- L10. Step 4 reviewed as two candidates (the whole change exceeded the review context budget): prompt commit approved (advisory R3-001..005 on dialogs.go/prompt.go/scripted.go), cli commit approved (advisory: pairing heading reuse, dead session branch in replaceOption, stale log line). Screenshots of six Windows dialogs re-rendered and checked by the parent. Leftovers fixed by the parent: e2e/docker-test.sh pairing transcript, TESTING.md timeout text, CONTRACT.md replace options.

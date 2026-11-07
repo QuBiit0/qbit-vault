@@ -156,6 +156,25 @@ func TestConflictsAndTombstonesArePruned(t *testing.T) {
 	if len(m.Tombstones) != 0 {
 		t.Fatalf("tombstones=%v", m.Tombstones)
 	}
+	if m.Discarded != 1 {
+		t.Fatalf("discarded=%d, want 1 (c-old; the duplicate c-new is not a loss)", m.Discarded)
+	}
+}
+
+// S11.3 (C-S05): conflicts beyond the newest 100 are counted as discarded.
+func TestConflictsOverTheLimitAreCounted(t *testing.T) {
+	local := body()
+	for i := 0; i < maxConflicts+2; i++ {
+		at := now.Add(-time.Duration(i+1) * time.Minute).Format(time.RFC3339)
+		local.Conflicts = append(local.Conflicts, Conflict{ID: fmt.Sprintf("c-%03d", i), Key: "global/X", LostAt: at})
+	}
+	m := Merge(body(), local, body(), "a", now)
+	if len(m.Conflicts) != maxConflicts || m.Discarded != 2 {
+		t.Fatalf("kept=%d discarded=%d", len(m.Conflicts), m.Discarded)
+	}
+	if m := Merge(body(), body(), body(), "a", now); m.Discarded != 0 {
+		t.Fatalf("nothing to drop, discarded=%d", m.Discarded)
+	}
 }
 
 func TestMergeIsDeterministic(t *testing.T) {

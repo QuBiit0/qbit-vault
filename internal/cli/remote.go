@@ -38,6 +38,10 @@ var (
 	pairPollFor   = 10 * time.Minute
 )
 
+// envelopeVersion is the version floor `remote approve` seals for the device
+// it approves (§ 4.2); a test returns 0 to play an approver that predates it.
+var envelopeVersion = func(st *vault.Remote) int64 { return st.LastVersion }
+
 // Typed failures of REMOTE_SYNC.md § 11.
 var (
 	errNotConfigured = codedError{"remote_not_configured", "this vault does not sync; run 'qbit-vault remote register' or 'remote join'", exitcode.Failure}

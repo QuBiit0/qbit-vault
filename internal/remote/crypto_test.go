@@ -93,6 +93,27 @@ func TestPairingAndConfirmationCodes(t *testing.T) {
 	}
 }
 
+// The issuer's last version rides inside the sealed plaintext; an envelope
+// without it reads as 0 and the key is the same either way.
+func TestKeyEnvelopeCarriesTheIssuersLastVersion(t *testing.T) {
+	issuer, recipient := DeviceFromSecret(key(1)), DeviceFromSecret(key(2))
+	mk := key(42)
+	meta := EnvelopeAAD{AccountID: "acc1", DeviceID: "dev2", Generation: 3, Issuer: "dev1"}
+	for _, want := range []int64{0, 7} {
+		env, err := SealKeyEnvelopeAt(issuer, recipient.BoxPub, meta, mk, want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _, last, err := OpenKeyEnvelopeAt(recipient, issuer.SignPub, env)
+		if err != nil || reveal(got) != reveal(mk) || last != want {
+			t.Fatalf("version %d: key ok=%v last=%d err=%v", want, reveal(got) == reveal(mk), last, err)
+		}
+		if k, _, err := OpenKeyEnvelope(recipient, issuer.SignPub, env); err != nil || reveal(k) != reveal(mk) {
+			t.Fatalf("version %d through OpenKeyEnvelope: %v", want, err)
+		}
+	}
+}
+
 func TestKeyEnvelope(t *testing.T) {
 	issuer, recipient, stranger := DeviceFromSecret(key(1)), DeviceFromSecret(key(2)), DeviceFromSecret(key(3))
 	mk := key(42)

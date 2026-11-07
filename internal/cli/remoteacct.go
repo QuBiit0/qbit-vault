@@ -350,11 +350,12 @@ type joining struct {
 	dk       secret.Secret
 	dev      remote.Device
 
-	mk         secret.Secret
-	accountID  string
-	generation int
-	how        string
-	entry      *merge.Device // roster entry this device adds itself (recovery)
+	mk          secret.Secret
+	accountID   string
+	generation  int
+	lastVersion int64 // version floor from the approver (0: an older approver)
+	how         string
+	entry       *merge.Device // roster entry this device adds itself (recovery)
 }
 
 // dropDevice removes this device from the server, best effort: it was
@@ -388,7 +389,7 @@ func (j *joining) byPairing(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	mk, aad, err := remote.OpenKeyEnvelope(j.dev, res.IssuerSignPub, res.Envelope)
+	mk, aad, floor, err := remote.OpenKeyEnvelopeAt(j.dev, res.IssuerSignPub, res.Envelope)
 	if err != nil || aad.AccountID != res.AccountID || aad.DeviceID != j.deviceID || aad.Issuer != res.Issuer {
 		j.dropDevice()
 		return errPairingFailed
@@ -419,7 +420,7 @@ func (j *joining) byPairing(ctx context.Context) error {
 		mk.Wipe()
 		return remoteErr(err, "this device was refused by the server")
 	}
-	j.mk, j.accountID, j.generation, j.how = mk, res.AccountID, aad.Generation, "pairing"
+	j.mk, j.accountID, j.generation, j.lastVersion, j.how = mk, res.AccountID, aad.Generation, floor, "pairing"
 	return nil
 }
 
@@ -565,7 +566,7 @@ func (j *joining) saveJoined(home string) (*vault.Vault, error) {
 			return nil, err
 		}
 	}
-	return nv, vault.WriteRemote(home, &vault.Remote{Server: j.server, CAFile: j.caFile, AccountID: j.accountID, Generation: j.generation})
+	return nv, vault.WriteRemote(home, &vault.Remote{Server: j.server, CAFile: j.caFile, AccountID: j.accountID, Generation: j.generation, LastVersion: j.lastVersion})
 }
 
 // ---- approve (§ 4.2 steps 3-6) ----
@@ -657,7 +658,7 @@ func newRemoteApprove(g *globals) *cobra.Command {
 			if st, err = requireRemote(s); err != nil {
 				return err
 			}
-			env, err := remote.SealKeyEnvelope(me.key, keys.BoxPub, remote.EnvelopeAAD{AccountID: st.AccountID, DeviceID: keys.DeviceID, Generation: st.Generation, Issuer: me.id}, s.key)
+			env, err := remote.SealKeyEnvelopeAt(me.key, keys.BoxPub, remote.EnvelopeAAD{AccountID: st.AccountID, DeviceID: keys.DeviceID, Generation: st.Generation, Issuer: me.id}, s.key, envelopeVersion(st))
 			if err != nil {
 				return err
 			}

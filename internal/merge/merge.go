@@ -82,6 +82,10 @@ type Body struct {
 	Tombstones []Tombstone         `json:"tombstones"`
 	Conflicts  []Conflict          `json:"conflicts"`
 	Devices    map[string]Device   `json:"devices"`
+
+	// Discarded is how many conflicts the merge dropped for age or for the
+	// count limit. It is never stored.
+	Discarded int `json:"-"`
 }
 
 // entry is what a body holds under one record key.
@@ -160,7 +164,7 @@ func Merge(base, local, remote *Body, device string, now time.Time) *Body {
 	}
 
 	conflicts = append(conflicts, existing(base, local, remote)...)
-	out.Conflicts = prune(conflicts, now)
+	out.Conflicts, out.Discarded = prune(conflicts, now)
 	out.Tombstones = liveTombstones(out, now)
 	out.Devices = mergeRoster(local, remote)
 	return out
@@ -283,16 +287,20 @@ func existing(base, local, remote *Body) []Conflict {
 }
 
 // prune dedupes conflicts by id, drops those older than 30 days and keeps
-// the newest 100.
-func prune(cs []Conflict, now time.Time) []Conflict {
+// the newest 100. It also returns how many distinct conflicts it dropped.
+func prune(cs []Conflict, now time.Time) ([]Conflict, int) {
 	seen := map[string]bool{}
 	var out []Conflict
+	dropped := 0
 	for _, c := range cs {
-		at, err := time.Parse(time.RFC3339, c.LostAt)
-		if seen[c.ID] || (err == nil && at.Before(now.Add(-conflictTTL))) {
+		if seen[c.ID] {
 			continue
 		}
 		seen[c.ID] = true
+		if at, err := time.Parse(time.RFC3339, c.LostAt); err == nil && at.Before(now.Add(-conflictTTL)) {
+			dropped++
+			continue
+		}
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -302,12 +310,13 @@ func prune(cs []Conflict, now time.Time) []Conflict {
 		return out[i].ID < out[j].ID
 	})
 	if len(out) > maxConflicts {
+		dropped += len(out) - maxConflicts
 		out = out[:maxConflicts]
 	}
 	if out == nil {
 		out = []Conflict{}
 	}
-	return out
+	return out, dropped
 }
 
 // liveTombstones keeps the winning tombstones that are younger than the TTL

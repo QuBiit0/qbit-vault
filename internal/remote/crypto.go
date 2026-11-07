@@ -14,8 +14,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -296,6 +298,13 @@ func envelopeKey(shared, ephPub, boxPub []byte) []byte {
 // X25519 key, and signs AAD, ephemeral key and ciphertext with the issuer's
 // signing key.
 func SealKeyEnvelope(issuer Device, recipientBoxPub []byte, a EnvelopeAAD, mk secret.Secret) ([]byte, error) {
+	return SealKeyEnvelopeAt(issuer, recipientBoxPub, a, mk, 0)
+}
+
+// SealKeyEnvelopeAt is SealKeyEnvelope with the issuer's last synced version
+// after the key (8 bytes, big endian), so a device that joins starts with the
+// same version floor as the one that approved it. Zero writes no field.
+func SealKeyEnvelopeAt(issuer Device, recipientBoxPub []byte, a EnvelopeAAD, mk secret.Secret, lastVersion int64) ([]byte, error) {
 	pub, err := ecdh.X25519().NewPublicKey(recipientBoxPub)
 	if err != nil {
 		return nil, ErrEnvelope
@@ -311,7 +320,12 @@ func SealKeyEnvelope(issuer Device, recipientBoxPub []byte, a EnvelopeAAD, mk se
 	defer clear(shared)
 	k := envelopeKey(shared, eph.PublicKey().Bytes(), recipientBoxPub)
 	defer clear(k)
-	m := mk.Reveal()
+	key := mk.Reveal()
+	m := append(make([]byte, 0, 40), key...)
+	clear(key)
+	if lastVersion > 0 {
+		m = binary.BigEndian.AppendUint64(m, uint64(lastVersion))
+	}
 	defer clear(m)
 	s, ad, err := seal(k, formatKeyEnv, a, m)
 	if err != nil {
@@ -350,39 +364,54 @@ func EnvelopeEphPub(raw []byte) ([]byte, error) {
 // the caller's own roster, never from the server), then opens the envelope
 // with the recipient's box key.
 func OpenKeyEnvelope(recipient Device, issuerSignPub []byte, raw []byte) (secret.Secret, EnvelopeAAD, error) {
+	mk, a, _, err := OpenKeyEnvelopeAt(recipient, issuerSignPub, raw)
+	return mk, a, err
+}
+
+// OpenKeyEnvelopeAt is OpenKeyEnvelope that also returns the issuer's last
+// synced version; an envelope without the field (an older issuer) gives 0.
+func OpenKeyEnvelopeAt(recipient Device, issuerSignPub []byte, raw []byte) (secret.Secret, EnvelopeAAD, int64, error) {
 	var s sealed[EnvelopeAAD]
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&s); err != nil || s.Format != formatKeyEnv || len(issuerSignPub) != ed25519.PublicKeySize {
-		return secret.Secret{}, EnvelopeAAD{}, ErrEnvelope
+		return secret.Secret{}, EnvelopeAAD{}, 0, ErrEnvelope
 	}
 	eph, err1 := unb64(s.EphPub)
 	ct, err2 := unb64(s.CT)
 	sig, err3 := unb64(s.Sig)
 	if err1 != nil || err2 != nil || err3 != nil {
-		return secret.Secret{}, EnvelopeAAD{}, ErrEnvelope
+		return secret.Secret{}, EnvelopeAAD{}, 0, ErrEnvelope
 	}
 	if !ed25519.Verify(issuerSignPub, signedBytes(aadBytes(formatKeyEnv, s.AAD), eph, ct), sig) {
-		return secret.Secret{}, EnvelopeAAD{}, ErrEnvelope
+		return secret.Secret{}, EnvelopeAAD{}, 0, ErrEnvelope
 	}
 	pub, err := ecdh.X25519().NewPublicKey(eph)
 	if err != nil {
-		return secret.Secret{}, EnvelopeAAD{}, ErrEnvelope
+		return secret.Secret{}, EnvelopeAAD{}, 0, ErrEnvelope
 	}
 	shared, err := recipient.BoxPriv.ECDH(pub)
 	if err != nil {
-		return secret.Secret{}, EnvelopeAAD{}, ErrEnvelope
+		return secret.Secret{}, EnvelopeAAD{}, 0, ErrEnvelope
 	}
 	defer clear(shared)
 	k := envelopeKey(shared, eph, recipient.BoxPub)
 	defer clear(k)
 	a, pt, _, err := open[EnvelopeAAD](k, formatKeyEnv, raw)
-	if err != nil || len(pt) != 32 {
+	if err != nil || (len(pt) != 32 && len(pt) != 40) {
 		clear(pt)
-		return secret.Secret{}, EnvelopeAAD{}, ErrEnvelope
+		return secret.Secret{}, EnvelopeAAD{}, 0, ErrEnvelope
 	}
 	defer clear(pt)
-	return secret.New("master", pt), a, nil
+	var last int64
+	if len(pt) == 40 {
+		v := binary.BigEndian.Uint64(pt[32:])
+		if v > math.MaxInt64 {
+			return secret.Secret{}, EnvelopeAAD{}, 0, ErrEnvelope
+		}
+		last = int64(v)
+	}
+	return secret.New("master", pt[:32]), a, last, nil
 }
 
 // ---- recovery envelope ----

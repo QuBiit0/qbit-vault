@@ -21,7 +21,7 @@ import (
 )
 
 // One sync round (docs/REMOTE_SYNC.md § 7.2) and the commands that only read
-// the sync state. The rounds are wired into other commands in slice S.8.
+// the sync state. The ordinary commands run a round too (§ 7.1).
 
 const maxRoundTries = 3
 

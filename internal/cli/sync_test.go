@@ -140,7 +140,7 @@ func TestSyncFailingHostIsTypedAndLeavesTheFileAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := w.run("", "sync")
-	if code != exitcode.Failure || errs != "error: host registration failed: fake (mcp)\n" || !strings.HasPrefix(out, "host fake: failed at mcp\n") {
+	if code != exitcode.Failure || errs != "error: host registration failed: fake (mcp); run 'qbit-vault doctor' for details\n" || !strings.HasPrefix(out, "host fake: failed at mcp\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if readFile(t, cfg) != "{not json" {
@@ -195,5 +195,23 @@ func TestSyncRepairsARealAdapterAfterTheUserWipedItsConfig(t *testing.T) {
 	}
 	if tree(t, w.home, uh) != before {
 		t.Fatal("the second run wrote something")
+	}
+}
+
+const wantDeviceSyncHint = "(to sync secrets between devices: qbit-vault remote sync)\n"
+
+func TestSyncPointsToRemoteSyncOnlyWhenTheVaultSyncs(t *testing.T) {
+	w, _ := registered(t)
+	if _, out, _ := w.run("", "sync"); strings.Contains(out, "remote sync") {
+		t.Fatalf("a local-only vault got the hint: %q", out)
+	}
+	if err := vault.WriteRemote(w.home, &vault.Remote{Server: "https://vault.example", AccountID: strings.Repeat("a", 32), Generation: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, _ := w.run("", "sync"); !strings.HasSuffix(out, "\n"+wantDeviceSyncHint) {
+		t.Fatalf("out=%q", out)
+	}
+	if _, out, _ := w.run("", "--json", "sync"); strings.Contains(out, "remote sync") {
+		t.Fatalf("json carries the hint: %q", out)
 	}
 }

@@ -187,7 +187,7 @@ func mapErr(err error, name string) error {
 	case errors.Is(err, vault.ErrNoProject):
 		return refusal.New(refusal.NoProject, "")
 	case errors.Is(err, vault.ErrLocked):
-		// Until the contract has a dedicated type (slice 2.1 follow-up).
+		// Until the contract has a dedicated type.
 		return refusal.New(refusal.Internal, "").WithMessage("vault is busy").WithRetryable(true)
 	case errors.Is(err, prompt.ErrCancelled):
 		return errCancelled

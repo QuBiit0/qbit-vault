@@ -14,7 +14,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 )
 
-// Slice S.9b: audit anchors (REMOTE_SYNC § 8). A round uploads at most one
+// Audit anchors (REMOTE_SYNC § 8). A round uploads at most one
 // sealed anchor every 10 minutes; `audit --verify` checks the log against
 // the server's copies.
 

@@ -10,14 +10,16 @@ QBit Vault is a public beta. Published releases run from `v0.1.0-beta.2` to the 
 
 ## One-line install
 
+The two scripts are assets of every release, so `…/releases/latest/download/install.sh` and `…/install.ps1` always serve the newest reviewed version (they are listed in the release's `checksums.txt`). The same files live in `scripts/` in the repository.
+
 ```bash
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh
+curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell 5.1 or 7)
-irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
 ```
 
 What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them before piping them to a shell):
@@ -27,7 +29,7 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 3. Download the archive and `checksums.txt` over HTTPS and compare the SHA-256. On a mismatch, or an archive not listed, they stop with `checksum mismatch for <archive>: nothing was installed` (or `<archive> is not listed in checksums.txt`) and install nothing.
 4. Choose the directory: `QBIT_VAULT_INSTALL_DIR` if set; else the directory of the `qbit-vault` already first on your `PATH`, when you can write to it (an upgrade in place, see below); else `~/.local/bin` (Linux, macOS) or `%LOCALAPPDATA%\Programs\qbit-vault` (Windows).
 5. Replace the binary atomically: the new file is written beside the old one and renamed over it, so a failed download or a full disk never leaves a half-written `qbit-vault`. On Windows a running `qbit-vault.exe` (an agent's MCP server) is renamed aside to `qbit-vault.exe.old-<id>` first, which Windows allows, so the upgrade works with your agents open; if the copy fails the old binary is put back. The aside file stays while that process runs and the next install removes it. On Windows the directory is added to your **user** `PATH` (open a new terminal); on Linux and macOS the script tells you if the directory is not on `PATH`.
-6. Finish: on a machine where the vault is already set up (`$QBIT_VAULT_HOME/state.json` exists, default `~/.qbit-vault`), run `qbit-vault sync` with the new binary so every registered agent points at it, and tell you to restart your agents; otherwise print the next step (`qbit-vault` or `qbit-vault init`). They never ask for, read or store a secret, never read your environment for values, and never run `init`; `sync` only re-applies the registrations you already made and reads no secret.
+6. Finish: on a machine where the vault is already set up (`$QBIT_VAULT_HOME/state.json` exists, default `~/.qbit-vault`), run `qbit-vault sync` with the new binary so every registered agent points at it, and tell you to restart your agents; otherwise print the one next step, `next: run 'qbit-vault init'` (it checks the setup and ends by telling you to restart your agents). They never ask for, read or store a secret, never read your environment for values, and never run `init`; `sync` only re-applies the registrations you already made and reads no secret.
 
 | Variable | Effect |
 | --- | --- |
@@ -92,6 +94,7 @@ qbit-vault doctor    # read-only health report; exit 1 on any problem
 - The TUI wizard runs `init` with the key storage and hosts you pick. `QBIT_VAULT_NO_TUI=1` makes bare `qbit-vault` print the help instead.
 - `init` registers the hosts it detects: Claude Code (`~/.claude/` or a `claude` binary), Codex (`~/.codex/` or `codex`) and Pi / Gentle Shell (`~/.pi/` or a `pi` / `gentle-shell` binary). Choose them yourself with `init --agents claude-code,codex,pi` or skip them with `--agents none`.
 - The registered MCP entry holds the **absolute path** of the binary that ran `init`. Moving or reinstalling to another directory means running `qbit-vault sync` (below).
+- When `init` registered or changed any agent it ends with `Restart your coding agents so they load QBit Vault.`
 - Store your first secret yourself: `qbit-vault set GITHUB_TOKEN --global` (hidden prompt). `init` never asks for a value and never reads your environment.
 
 ## Update
@@ -116,7 +119,20 @@ qbit-vault uninstall           # revert each host's config from its snapshot; ke
 qbit-vault uninstall --purge   # also delete the vault and its keychain entry (you type `purge`)
 ```
 
-`uninstall` does not delete the binary: remove `qbit-vault` (or `qbit-vault.exe`) from the directory above. Details of what it restores, and the `--purge` refusal while the vault syncs, are in § `uninstall` below.
+`uninstall` does not delete the binary. Remove it from where the installer put it:
+
+| System | Binary | Also remove |
+| --- | --- | --- |
+| Linux, macOS | `~/.local/bin/qbit-vault` (or the directory of the copy that was already first on your `PATH`, or `QBIT_VAULT_INSTALL_DIR`) | nothing: the script never edits your shell profile |
+| Windows | `%LOCALAPPDATA%\Programs\qbit-vault\qbit-vault.exe` (or the existing location / `QBIT_VAULT_INSTALL_DIR`) | the entry the installer added to your **user** `PATH` |
+
+Remove the Windows `PATH` entry in PowerShell (open a new terminal afterwards):
+
+```powershell
+[Environment]::SetEnvironmentVariable('Path', ((([Environment]::GetEnvironmentVariable('Path','User') -split ';') | Where-Object { $_.TrimEnd('\') -ne "$env:LOCALAPPDATA\Programs\qbit-vault" }) -join ';'), 'User')
+```
+
+Details of what `uninstall` restores, and the `--purge` refusal while the vault syncs, are in § `uninstall` below.
 
 ### Planned for Phase 5 (not built)
 
@@ -186,7 +202,7 @@ Restart your agent afterwards so it picks up the MCP server.
 
 ## `sync`
 
-Re-applies the host registration steps from the receipts in `state.json` (run it after upgrading qbit-vault, after `gentle-ai sync` or any host rewrote its config, or after moving the binary). `doctor` tells you when it is needed. It is not the multi-machine sync: that is `remote` (below).
+Re-applies the host registration steps from the receipts in `state.json` (run it after upgrading qbit-vault, after `gentle-ai sync` or any host rewrote its config, or after moving the binary). `doctor` tells you when it is needed. It is not the multi-machine sync: that is `qbit-vault remote sync` (below). When your vault syncs with a server, `sync` ends with `(to sync secrets between devices: qbit-vault remote sync)`.
 
 ## Backup without a server
 
@@ -229,12 +245,14 @@ A dialog asks for the invite, then shows your **recovery key** once. Write it do
 **3. Every other machine:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh && qbit-vault init
+curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh && qbit-vault init
 qbit-vault remote join --server https://vault.example.com   # prints a pairing code
 # on the first machine:
 qbit-vault remote approve                                   # type the pairing code, read the confirmation code
 # back on the new machine: type the confirmation code
 ```
+
+**If the server is lost or wiped.** Your local vaults keep working; only the sync stops. Recovery keys of the old server no longer apply (they belong to its accounts). Keep an `export` (§ Backup without a server) so nothing depends on the server. To start again on a new or empty server: run `qbit-vault remote logout` on each device, then `qbit-vault remote register --server URL` on **one** device (it shows a new recovery key), then `qbit-vault remote join --server URL` on the others, approving each with `remote approve`.
 
 From then on every change syncs by itself, and machines that were offline catch up on their next command. In a repository whose project secrets came from another machine, run `qbit-vault link <label>` once (`list` tells you when).
 
@@ -243,7 +261,7 @@ From then on every change syncs by itself, and machines that were offline catch 
 `uninstall` is a user command: it asks in the prompt backend and the agent's shell cannot run it.
 
 1. For each host recorded in `state.json`, in reverse step order: if the file is still exactly what qbit-vault wrote, restore the snapshot taken at registration byte for byte (or delete a file qbit-vault created); if the user changed it since, remove only the entries qbit-vault added and keep everything else. The host is forgotten in `state.json` only when this succeeded; otherwise it stays, the command exits 1 and you can run it again.
-2. The Pi extension is not published yet (Phase 4); once it is, you install and remove it yourself. `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from your `go/bin` directory.
+2. The Pi extension is not published yet (Phase 4); once it is, you install and remove it yourself. `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from where it was installed (see Uninstall above; for a `go install` copy, your `go/bin` directory).
 3. Leave `~/.qbit-vault/` intact. With `--purge` you type the literal word `purge` instead of confirming; after every host reverted it deletes the keychain item and the directory, and nothing else. `uninstall` never touches the sync server, so `--purge` refuses while this vault syncs: run `qbit-vault remote logout` (or revoke the device from another machine) first.
 
 ## Self-update (planned)

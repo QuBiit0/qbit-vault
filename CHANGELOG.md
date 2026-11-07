@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.16] - 2026-11-07
+
 ### Fixed
 
 - A device that joins by pairing starts with the version floor of the device that approved it (`last_version` inside the key envelope), so a server that serves it an older version on its first round is refused as `remote_rollback`. An envelope from an older approver still joins. A device running 0.1.0-beta.15 or older cannot join through an approver on this version (it stops with `the pairing could not be confirmed` and nothing is kept): install the latest version on the new device first.

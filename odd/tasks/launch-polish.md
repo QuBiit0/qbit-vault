@@ -213,7 +213,7 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | LP5 | S8 | worker | | done, awaiting review |
 | LP5b | S9 | worker + parent (OCI labels) | feat/server-image-status | done, beta.14 |
 | LP6a | S10 | worker | | done, awaiting review |
-| LP6b | S11 | worker | feat/sync-protocol-fixes | in progress |
+| LP6b | S11 | parent + worker | feat/sync-protocol-fixes | done, beta.16 |
 | LP7 | S1-S3 | plan step 7 + Dependabot PRs #27-#30 | | pending |
 
 ## Log
@@ -242,3 +242,4 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L20. LP6b inline (worker launch refused by the runtime until the context backstop): S11.2 done (`remoterotate.go`, orphans added to `drop`, stderr notice + audit; `TestRekeyRevokesADeviceMissingFromTheRoster` RED: `a device on the server is missing from the roster`, then GREEN). S11.3 merge part done (`Body.Discarded`, `prune` counts age and over-limit drops; `TestConflictsAndTombstonesArePruned`, `TestConflictsOverTheLimitAreCounted` RED: build failure, then GREEN). Remaining: S11.3 CLI wiring, S11.1, S11.4, docs.
 - L21. LP6b finished inline, not committed. S11.3 CLI: `syncRound` sums `Discarded` of applied merges, audits `<n> old conflict(s) discarded`, `remote sync` prints the stderr notice (`TestSyncSaysWhenOldConflictsWereDiscarded` RED: no notice, then GREEN; `TestSyncSaysNothingWhenNoConflictWasDiscarded`). S11.1: `SealKeyEnvelopeAt`/`OpenKeyEnvelopeAt` carry the approver's `last_version` as 8 bytes after the key in the sealed plaintext (older envelopes read 0), `remote approve` seals it (seam `envelopeVersion`), the joiner's `LastVersion` starts from it (`TestJoinedDeviceRefusesAVersionOlderThanTheApproverHad` RED: the join succeeded on version 1; `TestJoinWithAnEnvelopeWithoutLastVersionStillJoins`, `TestKeyEnvelopeCarriesTheIssuersLastVersion`). S11.4 docs: REMOTE_SYNC §§ 3, 4.2, 4.5, 7.4, CLI, CHANGELOG [Unreleased].
 - L22. Parent: accepted the one-way compatibility of S11.1 (an older joiner cannot open an envelope with `last_version`; fail closed as `pairing_failed`), documented in CHANGELOG and REMOTE_SYNC § 4.2. beta.15 released (release + server-image green, /v1/info reports origin, machine upgraded). For step 7: the Dokploy build from deploy/compose.yaml reports server version `dev` (no VERSION build arg).
+- L23. LP6b review (risk, reliability) approved; advisory R1-001/R3-001 (remoterotate.go:201-204): the orphan notice and audit come after the local swap and state save, so a local failure after the server call skips them (the orphan is still revoked). Follow-up for step 7. Released as 0.1.0-beta.16.

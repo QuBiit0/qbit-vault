@@ -32,6 +32,17 @@ irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 |
 
 The scripts are assets of every release (`releases/latest/download/…`); the copies in `scripts/` are the same files. The script downloads the latest release for your system, checks its SHA-256 and installs `qbit-vault` (Linux and macOS: `~/.local/bin`; Windows: added to your `PATH`, open a new terminal). Running it again upgrades in place. With Go 1.26+ you can use `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` instead. Options and details: [docs/INSTALL.md](docs/INSTALL.md).
 
+### First 5 minutes
+
+1. **Install** with the command above.
+2. **Run `qbit-vault init`** (or just `qbit-vault`). It creates an empty vault and connects your agents.
+3. **Restart your agent** so it loads QBit Vault.
+4. **Ask for something that needs a credential** (*"create a GitHub release for v1.2"*). A window like this opens, outside the chat; approve it:
+
+![The QBit Vault permission dialog on Windows: Claude Code wants to use GITHUB_TOKEN, with the options Once, Always in this project and Don't allow](assets/screenshots/permission-dialog.png)
+
+Pick **Once** (the default) and it asks again next time; pick **Always: in this project** and it stops asking in that repository until you revoke it (`qbit-vault revoke`). The agent never sees the value either way.
+
 ### 2. Set it up
 
 ```bash

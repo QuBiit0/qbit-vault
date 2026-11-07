@@ -1,0 +1,41 @@
+# qbit-vault-server from the published image, behind a reverse proxy that
+# terminates TLS (Dokploy / Traefik, Caddy, nginx). Copy this one file, then:
+#   export QBV_SERVER_PUBLIC_URL=https://vault.example.com
+#   docker compose -f compose.image.yaml up -d
+# Invite the first account:
+#   docker compose -f compose.image.yaml exec server /qbit-vault-server invite
+# Pin a release instead of latest by changing the tag (for example :v0.1.0-beta.14).
+# deploy/compose.yaml is the same service built from this repository.
+services:
+  server:
+    image: ghcr.io/qubiit0/qbit-vault-server:latest
+    environment:
+      QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
+      # How many proxies are in front of the server (the client IP for rate
+      # limits is the Nth X-Forwarded-For entry from the right). 1: one proxy,
+      # or Cloudflare + Traefik where Traefik does not trust Cloudflare. 2:
+      # Cloudflare + Traefik with Cloudflare's ranges in Traefik's
+      # forwardedHeaders.trustedIPs. 0: reached directly.
+      QBV_SERVER_TRUST_PROXY: ${QBV_SERVER_TRUST_PROXY:-1}
+      # Optional first invite for a server with no account yet (at least 24
+      # characters, 12 of them different; ignored once an account exists; never
+      # logged). Remove it after registering.
+      QBV_SERVER_BOOTSTRAP_INVITE: ${QBV_SERVER_BOOTSTRAP_INVITE:-}
+    volumes:
+      - vault-data:/data
+    read_only: true
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "/qbit-vault-server", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  vault-data:

@@ -4,6 +4,12 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- The release publishes the sync server image `ghcr.io/qubiit0/qbit-vault-server` (linux/amd64 and linux/arm64, tagged with the release version and `latest`, version baked in). `deploy/compose.image.yaml` runs it with the same hardening as `deploy/compose.yaml`: copy one file, set `QBV_SERVER_PUBLIC_URL`, `docker compose up -d`. `deploy/README.md` and `docs/INSTALL.md` show that path first.
+- The server answers `GET /` with a small status page with the QBit Vault branding, its version and API version (no account or device information, no script, no external request, strict security headers). Secrets are still never managed on the web.
+- README "First 5 minutes" with a screenshot of the real permission dialog (`assets/screenshots/permission-dialog.png`) and one line on `Once` versus `Always: in this project`.
+
 ## [0.1.0-beta.13] - 2026-11-07
 
 ### Changed

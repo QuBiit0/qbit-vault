@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.15] - 2026-11-07
+
 ### Fixed
 
 - Sync URLs are compared as origins: case, a default port (`:443`/`:80`), a path or a trailing slash no longer make a login fail. When a login is still refused because the server is configured for another URL, the message names both (`the server is configured as <origin>; you used <url>. Use the same URL ...`). `/v1/info` gains an optional `origin` field.

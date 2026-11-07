@@ -178,6 +178,14 @@ run "$work/bin-x86" "$work/good" "$work/dest12" QBIT_VAULT_VERSION= QBIT_VAULT_R
 check "newest published release is chosen" grep -q "installing qbit-vault v0.0.0-test (linux/amd64)" <<<"$out"
 check "newest published release installs" test "$("$work/dest12/qbit-vault" 2>/dev/null)" = fake-qbit-vault-amd64
 
+# 13. The same list as one line (minified JSON, as the API may send it), with
+# the newest release in the middle, a draft and a null date.
+printf '%s' '[{"tag_name":"v0.0.9-old","draft":false,"published_at":"2026-11-06T16:41:42Z","assets":[{"name":"checksums.txt"}]},{"tag_name":"v0.0.0-test","draft":false,"published_at":"2026-11-06T17:00:26Z","body":"notes, with {braces}"},{"tag_name":"v0.0.0-draft","draft":true,"published_at":null},{"tag_name":"v0.0.1-older","draft":false,"published_at":"2026-11-05T09:00:00Z"}]' >"$work/releases-min.json"
+check "the one-line fixture is one line" test "$(wc -l <"$work/releases-min.json" | tr -d ' ')" = 0
+run "$work/bin-x86" "$work/good" "$work/dest13" QBIT_VAULT_VERSION= QBIT_VAULT_RELEASES_API="$(fileurl "$work/releases-min.json")"
+check "newest release is chosen from one-line JSON" grep -q "installing qbit-vault v0.0.0-test (linux/amd64)" <<<"$out"
+check "newest release from one-line JSON installs" test "$("$work/dest13/qbit-vault" 2>/dev/null)" = fake-qbit-vault-amd64
+
 if [ "$fails" -ne 0 ]; then
 	echo "$fails check(s) failed"
 	exit 1

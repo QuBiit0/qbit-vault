@@ -20,6 +20,7 @@ func attach(cmd *exec.Cmd) (*tree, error) { return &tree{pgid: cmd.Process.Pid},
 // kill ends every process of the group.
 func (t *tree) kill() { _ = syscall.Kill(-t.pgid, syscall.SIGKILL) }
 
-// release sweeps descendants that outlived the child: none may keep running
-// with the injected environment once the run is over.
+// release sweeps the descendants that outlived the child and are still in its
+// process group, so they do not keep the injected environment once the run is
+// over. A process that moved to another session is out of reach.
 func (t *tree) release() { t.kill() }

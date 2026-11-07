@@ -66,10 +66,11 @@ if [ -z "$VERSION" ]; then
 	# newest publish date; a draft has none.
 	fetch "${QBIT_VAULT_RELEASES_API:-https://api.github.com/repos/$REPO/releases?per_page=100}" "$tmp/releases.json" ||
 		die "could not query the releases of $REPO"
-	VERSION="$(awk '
+	# One field per line first, so minified JSON reads like the indented kind.
+	VERSION="$(tr ',{}[]' '\n\n\n\n\n' <"$tmp/releases.json" | awk '
 		/"tag_name"[[:space:]]*:/ { t = $0; sub(/.*"tag_name"[[:space:]]*:[[:space:]]*"/, "", t); sub(/".*/, "", t) }
 		/"published_at"[[:space:]]*:[[:space:]]*"/ { p = $0; sub(/.*"published_at"[[:space:]]*:[[:space:]]*"/, "", p); sub(/".*/, "", p); if (p > best) { best = p; tag = t } }
-		END { print tag }' "$tmp/releases.json")"
+		END { print tag }')"
 	[ -n "$VERSION" ] || die "no release of $REPO found"
 fi
 

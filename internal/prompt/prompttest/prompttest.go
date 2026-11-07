@@ -23,14 +23,15 @@ type Answer struct {
 
 // Call records one prompt the Fake was asked, never an answer.
 type Call struct {
-	Kind     string // secret, choose, confirm, passphrase or form
-	Request  prompt.SecretRequest
-	Requests []prompt.SecretRequest // form
-	Q        string
-	Options  []string
-	Default  int
-	Confirm  bool   // Passphrase: asked twice
-	Text     string // Show: the text shown
+	Kind       string // secret, choose, confirm, passphrase or form
+	Request    prompt.SecretRequest
+	Requests   []prompt.SecretRequest // form
+	Q          string
+	Options    []string
+	Default    int
+	Confirm    bool                     // Passphrase: asked twice
+	Passphrase prompt.PassphraseRequest // Passphrase: what was asked
+	Text       string                   // Show: the text shown
 }
 
 // ErrScriptExhausted is returned when the Fake is asked more than scripted.
@@ -91,8 +92,8 @@ func (f *Fake) Show(title, text string) error {
 }
 
 // Passphrase implements prompt.Backend.
-func (f *Fake) Passphrase(confirm bool) (secret.Secret, error) {
-	a, err := f.pop(Call{Kind: "passphrase", Confirm: confirm})
+func (f *Fake) Passphrase(req prompt.PassphraseRequest) (secret.Secret, error) {
+	a, err := f.pop(Call{Kind: "passphrase", Confirm: req.Confirm, Passphrase: req})
 	if err != nil {
 		return secret.Secret{}, err
 	}

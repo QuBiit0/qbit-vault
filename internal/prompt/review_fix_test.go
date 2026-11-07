@@ -104,12 +104,12 @@ func TestNormalizationMatchesAcrossBackends(t *testing.T) {
 	const value = "  TESTSECRET_value  "
 
 	f := &fakeRun{res: []result{ok(pass + "\r\n")}}
-	nsec, err := nativeOf(zenityTool{}, f).Passphrase(false)
+	nsec, err := nativeOf(zenityTool{}, f).Passphrase(VaultPassphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, _ := backendOf(pass)
-	tsec, err := b.Passphrase(false)
+	tsec, err := b.Passphrase(VaultPassphrase)
 	if err != nil {
 		t.Fatal(err)
 	}

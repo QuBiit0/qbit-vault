@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 const fxShown = "QVR1-TESTSECRET-SHOWN-KEY"
@@ -32,10 +33,10 @@ func TestShowNeverPutsTheTextInArgv(t *testing.T) {
 			t.Errorf("%s: env set", tl.name())
 		}
 	}
-	// zenity reads the text from stdin with --text-info, as is.
+	// zenity reads the text from stdin with --text-info, under its heading.
 	f := &fakeRun{res: []result{ok("")}}
 	_ = nativeOf(zenityTool{}, f).(Shower).Show("T", fxShown)
-	if c := f.cmds[0]; c.Args[0] != "--text-info" || string(c.Stdin) != fxShown {
+	if c := f.cmds[0]; c.Args[0] != "--text-info" || string(c.Stdin) != "T\n\n"+fxShown {
 		t.Errorf("zenity: args=%q stdin=%q", c.Args, c.Stdin)
 	}
 }
@@ -49,9 +50,12 @@ func TestShowOutcomes(t *testing.T) {
 	if err := sh.Show("T", "x"); !errors.Is(err, ErrCancelled) {
 		t.Errorf("powershell cancel: %v", err)
 	}
-	// kdialog takes text only as arguments: it cannot show a secret.
+	// kdialog takes text only as arguments: it cannot show a secret, and
+	// with no terminal either nothing is shown.
 	f := &fakeRun{res: []result{ok("")}}
-	if err := nativeOf(kdialogTool{}, f).(Shower).Show("T", fxShown); !errors.Is(err, ErrUnavailable) || len(f.cmds) != 0 {
+	kd := newNative(kdialogTool{}, "/usr/bin/kdialog", f.run, time.Minute).(*native)
+	kd.open = func() (Terminal, error) { return nil, ErrNoTerminal }
+	if err := kd.Show("T", fxShown); !errors.Is(err, ErrUnavailable) || len(f.cmds) != 0 {
 		t.Errorf("kdialog: %v, %d commands", err, len(f.cmds))
 	}
 	// Control characters cannot paint over the dialog.

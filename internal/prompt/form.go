@@ -47,16 +47,27 @@ func formDialog(reqs []SecretRequest) dialog {
 		if r.Description != "" {
 			label += " (" + r.Description + ")"
 		}
-		fields[i] = formField{label: escape(label), visible: r.Visible}
+		says := " (hidden)"
+		if r.Visible {
+			says = " (shown while you type)"
+		}
+		fields[i] = formField{label: escape(label) + says, visible: r.Visible}
 	}
 	head := reqs[0]
 	head.Name, head.Label, head.Visible, head.Field, head.Fields, head.Description = strings.Join(names, ", "), "", false, 0, 0, ""
-	_, body, _ := strings.Cut(Header(head), "\n")
+	// No Value line: it would speak for every box, and each box says itself.
+	rows := headerRows(head, false)
+	input := "Fill in each field. The agent never sees what you enter:"
 	return dialog{
-		kind:   dialogForm,
-		title:  "QBit Vault: secret request",
-		text:   strings.TrimRight(body, "\n") + "\n\nFill in each field. Secret fields stay hidden and the agent never sees them:",
-		fields: fields,
+		kind:        dialogForm,
+		title:       dialogTitle,
+		heading:     "Secret request",
+		rows:        rows,
+		tail:        input,
+		text:        rowsText(rows) + "\n" + input,
+		fields:      fields,
+		okLabel:     "Save",
+		cancelLabel: "Cancel",
 	}
 }
 
@@ -98,7 +109,8 @@ func (n *native) Form(reqs []SecretRequest) ([]secret.Secret, error) {
 // ---- zenity: --forms ----
 
 func (zenityTool) buildForm(path string, d dialog) command {
-	args := []string{"--forms", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--separator=" + formSep}
+	ok, cancel := d.buttons()
+	args := []string{"--forms", "--no-markup", "--width=480", "--title=" + d.title, "--text=" + d.plain(), "--ok-label=" + ok, "--cancel-label=" + cancel, "--separator=" + formSep}
 	for _, f := range d.fields {
 		if f.visible {
 			args = append(args, "--add-entry="+f.label)
@@ -125,14 +137,13 @@ func (zenityTool) parseForm(out []byte, n int) ([][]byte, bool) {
 // ---- PowerShell: one WinForms form ----
 
 func (powershellTool) buildForm(path string, d dialog) command {
-	c := powershellTool{}.build(path, dialog{kind: dialogSecret, title: d.title, text: d.text})
-	c.Stdin = []byte(psFormScript(d))
+	c := psCommand(path, psFormScript(d))
 	return c
 }
 
 func psFormScript(d dialog) string {
 	var b strings.Builder
-	b.WriteString(psPrelude(dialog{kind: dialogSecret, title: d.title, text: d.text}))
+	b.WriteString(psPrelude(d))
 	labels := make([]string, len(d.fields))
 	hides := make([]string, len(d.fields))
 	for i, f := range d.fields {

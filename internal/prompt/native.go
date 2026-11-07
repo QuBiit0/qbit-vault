@@ -40,12 +40,19 @@ const (
 // builders still encode it for their own language.
 type dialog struct {
 	kind    dialogKind
-	title   string
+	title   string // the window title, always dialogTitle
+	heading string // what the dialog is, inside the window
 	text    string // lines separated by \n
-	options []string
-	def     int
-	visible bool        // a secret dialog for a text field: no masking
-	fields  []formField // a form dialog's boxes
+	// rows and tail are text split for a grid: the request lines, then the
+	// question. text holds both as plain lines.
+	rows        []headerRow
+	tail        string
+	options     []string
+	def         int
+	visible     bool        // a secret dialog for a text field: no masking
+	fields      []formField // a form dialog's boxes
+	okLabel     string      // the accept button, where the helper can set it
+	cancelLabel string
 }
 
 // command is a helper invocation. Stdin holds the script, when the helper
@@ -230,7 +237,7 @@ func locate(e Env, t tool) (string, error) {
 // newNative builds the backend over the helper at path. run is called for
 // every dialog; each dialog is bounded by timeout.
 func newNative(t tool, path string, run runner, timeout time.Duration) Backend {
-	return &native{t: t, path: path, run: run, timeout: timeout}
+	return &native{t: t, path: path, run: run, timeout: timeout, open: openConsole}
 }
 
 type native struct {
@@ -238,6 +245,7 @@ type native struct {
 	path    string
 	run     runner
 	timeout time.Duration
+	open    func() (Terminal, error) // the terminal, for what a helper cannot show
 }
 
 func (n *native) Name() string { return n.t.name() }
@@ -299,12 +307,12 @@ func (n *native) Secret(req SecretRequest) (secret.Secret, error) {
 	return n.read(req.Name, secretDialog(req), valueInput)
 }
 
-func (n *native) Passphrase(confirm bool) (secret.Secret, error) {
-	first, err := n.read("passphrase", passphraseDialog(false), passphraseInput)
-	if err != nil || !confirm {
+func (n *native) Passphrase(req PassphraseRequest) (secret.Secret, error) {
+	first, err := n.read("passphrase", passphraseDialog(req, false), passphraseInput)
+	if err != nil || !req.Confirm {
 		return first, err
 	}
-	second, err := n.read("passphrase", passphraseDialog(true), passphraseInput)
+	second, err := n.read("passphrase", passphraseDialog(req, true), passphraseInput)
 	defer second.Wipe()
 	if err != nil {
 		first.Wipe()

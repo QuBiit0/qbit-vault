@@ -13,7 +13,7 @@ var textReq = SecretRequest{Name: "DB_HOST", Reason: "run the shop-api migration
 
 func TestHeaderShowsFieldAndInput(t *testing.T) {
 	h := Header(textReq)
-	if !strings.Contains(h, "  Field:    1 of 3 (Host)\n") || !strings.Contains(h, "  Value:    new (shown as you type)\n") {
+	if !strings.Contains(h, "  Field:    1 of 3 (Host)\n") || !strings.Contains(h, "  Value:    new\n") {
 		t.Fatalf("header=%q", h)
 	}
 	if one := Header(SecretRequest{Name: "A", Reason: "x y z"}); strings.Contains(one, "Field:") {
@@ -23,20 +23,20 @@ func TestHeaderShowsFieldAndInput(t *testing.T) {
 
 func TestSecretDialogVisibleText(t *testing.T) {
 	d := secretDialog(textReq)
-	if !d.visible || !strings.HasSuffix(d.text, "Type the value. It is shown as you type:") {
+	if !d.visible || !strings.HasSuffix(d.text, "Type the value (shown while you type):") {
 		t.Fatalf("dialog=%+v", d)
 	}
-	if h := secretDialog(req); h.visible || !strings.HasSuffix(h.text, "Type or paste the value. It stays hidden and the agent never sees it:") || h.title != "QBit Vault: secret request" {
+	if h := secretDialog(req); h.visible || !strings.HasSuffix(h.text, "Paste or type the value. The agent never sees it:") || h.title != "QBit Vault" || h.heading != "Secret request" {
 		t.Fatalf("hidden dialog=%+v", h)
 	}
 }
 
 func TestVisibleBuilders(t *testing.T) {
 	d := secretDialog(textReq)
-	if got := (zenityTool{}).build("/usr/bin/zenity", d).Args; !reflect.DeepEqual(got, []string{"--entry", "--no-markup", "--title=" + d.title, "--text=" + d.text}) {
+	if got := (zenityTool{}).build("/usr/bin/zenity", d).Args; !reflect.DeepEqual(got, []string{"--entry", "--no-markup", "--width=480", "--title=QBit Vault", "--text=" + d.plain(), "--ok-label=Save", "--cancel-label=Cancel"}) {
 		t.Errorf("zenity: %q", got)
 	}
-	if got := (kdialogTool{}).build("kdialog", d).Args; !reflect.DeepEqual(got, []string{"--title", d.title, "--inputbox", strings.ReplaceAll(d.text, "\n", "<br>")}) {
+	if got := (kdialogTool{}).build("kdialog", d).Args; !reflect.DeepEqual(got, []string{"--title", "QBit Vault", "--inputbox", strings.ReplaceAll(d.plain(), "\n", "<br>")}) {
 		t.Errorf("kdialog: %q", got)
 	}
 	if got := string((osascriptTool{}).build("/usr/bin/osascript", d).Stdin); strings.Contains(got, "hidden answer") || !strings.Contains(got, `default answer ""`) {
@@ -77,7 +77,7 @@ func TestTTYVisibleFieldEchoes(t *testing.T) {
 	if err != nil || string(s.Reveal()) != "db.internal" {
 		t.Fatalf("err=%v", err)
 	}
-	if ft.echoed != 1 || ft.hidden != 0 || !strings.Contains(ft.out.String(), "Value (shown as you type): ") {
+	if ft.echoed != 1 || ft.hidden != 0 || !strings.Contains(ft.out.String(), "Value (shown while you type): ") {
 		t.Fatalf("echoed=%d hidden=%d out=%q", ft.echoed, ft.hidden, ft.out.String())
 	}
 	ft2 := &fakeTerm{nextValue: "x"}

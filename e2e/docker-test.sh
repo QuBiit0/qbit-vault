@@ -246,7 +246,7 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 expect_eq "B printed a pairing code" "$([[ -n $PAIRING ]] && echo yes || echo no)" yes
-set_answers a "$PAIRING" "$LABEL_B" y
+set_answers a "$PAIRING" "$LABEL_B"
 qbv a remote approve --json
 expect_ok_json "A approve" '"approved":true'
 wait_transcript a 'SHOW Pairing code' 10 || true

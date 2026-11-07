@@ -37,7 +37,7 @@ All derivations use HKDF-SHA256 with salt `qbit-vault/v1` and the info string sh
 
 The **generation** `g` counts master keys: 1 at registration, +1 at every rekey. It is in the AAD of every remote object, so an object sealed under an old key is recognizably old.
 
-**Recovery key format.** 20 random bytes in Crockford base32 (32 characters, case-insensitive, `I L O` read as `1 1 0`), shown as `QVR1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. It is high-entropy by construction, so the server cannot brute-force it the way it could a password.
+**Recovery key format.** 20 random bytes in Crockford base32 (32 characters, case-insensitive, `I L O` read as `1 1 0`; the `QVR1-` prefix is optional when typing and is told apart from a body that starts with `QVR1` by length), shown as `QVR1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`. It is high-entropy by construction, so the server cannot brute-force it the way it could a password.
 
 **Device identity.** `device_id` is 16 random bytes (hex), created with the vault (or at the schema-2 migration) and stored in `state.json`; it names the device in the roster and in project roots even when sync is off. The **pairing code** is the first 80 bits of `SHA-256("qbit-vault/pairing/v1" || sign_pub || box_pub)` in Crockford base32, shown as `XXXX-XXXX-XXXX-XXXX`; it fingerprints the new device's public keys.
 
@@ -59,11 +59,11 @@ Every command in this section except `remote status`, `remote devices` and `remo
 
 ### 4.1 Register the first device: `qbit-vault remote register --server URL`
 
-1. Refuse a URL that is not `https://`, except `http://` to `localhost`, `127.0.0.1` or `[::1]`. `GET /v1/info` must answer API major 1.
+1. Refuse a URL that is not `https://`, except `http://` to `localhost`, `127.0.0.1` or `[::1]`. `GET /v1/info` must answer API major 1. The URL is reduced to its **origin** before it is used or signed: scheme and host in lower case, the default port dropped (`:443` for https, `:80` for http), no path, no trailing slash. The server normalizes its `QBV_SERVER_PUBLIC_URL` the same way, so `https://Vault.example.com:443/` and `https://vault.example.com` are one server.
 2. Prompt (out of band): the **invite code** (masked) and the confirmation *"Sync this vault to `<host>`? Secrets are encrypted on this device before upload; the server can never read them."*
 3. Generate `account_id` (16 random bytes), `DK`, `RK`. The existing `MK` becomes the account key; `generation` = 1.
 4. Seal the remote vault (version 1), the device's key envelope (issuer = itself) and the recovery envelope. `POST /v1/accounts`.
-5. Save the device state (step 6) with the flag `recovery_unconfirmed`, then show `RK` out of band with *"Write this recovery key down and keep it offline. It is the only way to open your vault on a new machine if you lose access to every device."* and ask the user to type its last four characters to confirm they saved it. A wrong answer shows it again (up to 5 times); cancel at this step leaves the account registered and `remote status` keeps warning `recovery key not confirmed` until `remote recovery-key --rotate`.
+5. Save the device state (step 6) with the flag `recovery_unconfirmed`, then show `RK` out of band with *"Write this recovery key down and keep it offline. It is the only way to open your vault on a new machine if you lose access to every device."* and ask the user to type its last four characters to confirm they saved it. A wrong answer shows it again, as many times as it takes, until it is right or the user cancels; a cancel leaves the account registered, `remote status` keeps warning `recovery key not confirmed`, and the message says `run 'qbit-vault remote recovery-key --rotate' to get a new recovery key`.
 6. Write `remote/device.enc`, `remote/base.enc` and `state.json.remote`; append the audit record `remote` (`detail: "registered"`).
 
 ### 4.2 Add a device by pairing: `remote join --server URL` + `remote approve`
@@ -75,8 +75,8 @@ On the **new** device:
 
 On an **existing** device, `qbit-vault remote approve`:
 
-3. Prompt (out of band) for the pairing code and a label for the new device. `GET /v1/pairings/{code}`; recompute the fingerprint of the returned keys and refuse (`pairing_failed`) unless it equals the code typed, so the server cannot substitute its own device key.
-4. Confirm out of band: *"Add device `<label>` to your vault on `<host>`? It will be able to read every secret."*
+3. Prompt (out of band) for the pairing code. `GET /v1/pairings/{code}`; recompute the fingerprint of the returned keys and refuse (`pairing_failed`) unless it equals the code typed, so the server cannot substitute its own device key.
+4. Prompt (out of band) for the device name, which is also the consent: *"Add this device to your vault on `<host>`? It will be able to read every secret. Name it, or leave this empty for `device <n>`."* Enter (an empty answer) takes the default `device <n>`, n = roster size + 1; Cancel refuses and nothing is sent. Approving asks two things: the code and the name.
 5. Pull and merge (§ 7), seal a key envelope for it (issuer = this device), `POST /v1/pairings/{code}/approve`. Once the server accepted, nothing below is an error: the code (step 6) is shown first, then the device is added to the roster and pushed (a refused approval leaves no entry); a failure of the roster write or of that sync round is a warning on stderr and the exit code stays 0.
 6. Show the **confirmation code** out of band: the first 40 bits of `HMAC-SHA256(PCK, code ‖ device_id ‖ eph_pub)` in base32, `XXXX-XXXX`, with *"Type this code on the new device."*
 
@@ -136,7 +136,7 @@ A device that joins with secrets of its own merges them into the account (§ 4.4
 
 ## 5. Server authentication
 
-- **Device token.** `POST /v1/auth/challenge {device_id}` returns a 32-byte nonce valid 60 s; `POST /v1/auth/token {device_id, nonce, sig}` where `sig = Ed25519(sign_key, "qbit-vault/auth/v1" ‖ server_origin ‖ nonce)` returns a random bearer token valid 15 minutes. Binding `server_origin` (the configured public URL) stops a signature from being relayed to another server.
+- **Device token.** `POST /v1/auth/challenge {device_id}` returns a 32-byte nonce valid 60 s; `POST /v1/auth/token {device_id, nonce, sig}` where `sig = Ed25519(sign_key, "qbit-vault/auth/v1" ‖ server_origin ‖ nonce)` returns a random bearer token valid 15 minutes. Binding `server_origin` (the configured public URL, normalized as in § 4.1) stops a signature from being relayed to another server. `challenge` and `token` both refuse a device id that is not 1-64 lower-case letters or digits before any lookup. When a login is refused and `GET /v1/info` reports a different `origin`, the client says `the server is configured as <origin>; you used <url>. Use the same URL (qbit-vault remote logout, then register or join with it).` The reported origin is used only when it is itself a plain normalized origin; anything else keeps the generic refusal.
 - **Recovery token.** From the recovery auth secret; valid 10 minutes; can only read the recovery envelope and register one device.
 - **Invite.** Account creation needs a single-use invite issued by the server operator (`qbit-vault-server invite --ttl 24h`, default 24 h); the server stores only its SHA-256.
 - Tokens are never logged; the client keeps them in memory only.
@@ -147,17 +147,17 @@ JSON over HTTPS; blobs are base64url inside the JSON. Every response carries `{"
 
 | Method and path | Auth | Purpose |
 | --- | --- | --- |
-| `GET /healthz`, `GET /v1/info` | none | liveness; `{api, version, limits}` |
+| `GET /healthz`, `GET /v1/info` | none | liveness; `{api, version, origin, limits}` (`origin`, the server's normalized public URL, is optional for a client: it is used only to explain a refused login) |
 | `POST /v1/accounts` | invite | create account with first device, recovery envelope and vault version 1 |
 | `POST /v1/auth/challenge`, `POST /v1/auth/token` | none / signature | device token |
 | `GET /v1/vault` (`If-None-Match: <version>` → 304) | device | current version |
 | `GET /v1/vault/versions`, `GET /v1/vault?version=N` | device | the last 10 versions |
 | `PUT /v1/vault {base_version, blob}` | device | compare-and-swap: 200 `{version}` or 409 `{version}` |
-| `POST /v1/rekey` | device | atomic rekey and revocation (§ 4.5) |
+| `POST /v1/rekey` | device | atomic rekey and revocation (§ 4.5); everything is validated before the new version is written, so a refused call leaves no version |
 | `PUT /v1/recovery` | device | replace the recovery key at the current generation (§ 4.6) |
 | `GET /v1/keys/self` | device | this device's latest key envelope |
 | `GET /v1/devices`, `DELETE /v1/devices/{id}` | device | list, revoke (only through `rekey`), self-delete (`logout`) |
-| `POST /v1/pairings` | none | new device announces its public keys |
+| `POST /v1/pairings` | none | new device announces its public keys; 409 when a pending, unexpired pairing already has that code (nothing is overwritten) |
 | `GET /v1/pairings/{code}`, `POST /v1/pairings/{code}/approve` | device | approver reads and approves |
 | `GET /v1/pairings/{id}?poll=<secret>` | poll secret | new device waits for approval |
 | `POST /v1/recovery/token`, `GET /v1/recovery/envelope`, `POST /v1/devices` | recovery auth / recovery token | recovery |

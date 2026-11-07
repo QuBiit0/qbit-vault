@@ -243,7 +243,9 @@ No shell on the host (a hosted Dokploy)? Set `QBV_SERVER_BOOTSTRAP_INVITE` to a 
 qbit-vault remote register --server https://vault.example.com
 ```
 
-A dialog asks for the invite, then shows your **recovery key** once. Write it down offline; with no device left it is the only way back in.
+A dialog asks for the invite, then shows your **recovery key** once. Write it down offline; with no device left it is the only way back in. The check of its last four characters repeats until you get it right; if you cancel, the account stays registered and `qbit-vault remote recovery-key --rotate` gives you a new key.
+
+Use the **same URL** on every machine. Case, a default port (`:443`) and a trailing slash do not matter, but a different host name does; if a login is refused for that reason, the message names both URLs (`qbit-vault remote logout`, then register or join again with the right one).
 
 **3. Every other machine:**
 
@@ -251,7 +253,7 @@ A dialog asks for the invite, then shows your **recovery key** once. Write it do
 curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh && qbit-vault init
 qbit-vault remote join --server https://vault.example.com   # prints a pairing code
 # on the first machine:
-qbit-vault remote approve                                   # type the pairing code, read the confirmation code
+qbit-vault remote approve                                   # type the pairing code, name the device (Enter = "device 2"), read the confirmation code
 # back on the new machine: type the confirmation code
 ```
 

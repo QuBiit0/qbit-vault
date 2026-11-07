@@ -4,6 +4,19 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.15] - 2026-11-07
+
+### Fixed
+
+- Sync URLs are compared as origins: case, a default port (`:443`/`:80`), a path or a trailing slash no longer make a login fail. When a login is still refused because the server is configured for another URL, the message names both (`the server is configured as <origin>; you used <url>. Use the same URL ...`). `/v1/info` gains an optional `origin` field.
+- `remote register`: the check of the recovery key's last four characters no longer ends after 5 wrong answers; it repeats until it is right or you cancel, and a cancel says `run 'qbit-vault remote recovery-key --rotate' to get a new recovery key`.
+- Server: creating a pairing for a code that is already pending is refused (409) instead of overwriting it; a refused `POST /v1/rekey` leaves no stored version; `POST /v1/auth/token` validates the device id like `challenge`.
+- A recovery key whose body starts with `QVR1` is recognized with and without the `QVR1-` prefix.
+
+### Changed
+
+- `remote approve` asks two things, the pairing code and the device name. The name dialog is the consent (it says the device will be able to read every secret; Cancel refuses) and Enter takes `device <n>`.
+
 ## [0.1.0-beta.14] - 2026-11-07
 
 ### Added

@@ -364,7 +364,7 @@ func TestRevokeDeviceCancelLeavesEverythingUnchanged(t *testing.T) {
 func TestRevokeDeviceCancelAtTheRecoveryKeyScreen(t *testing.T) {
 	ss, a, _, c, _ := threeDevices(t)
 	code, _, errs := revokeWith(t, a, answers(yes(), cancel()), c.devID())
-	if code != exitcode.Failure || errs != "error: cancelled\n" {
+	if code != exitcode.Failure || errs != msgKeyNotConfirmed {
 		t.Fatalf("code=%d err=%q", code, errs)
 	}
 	st := readState(t, a)

@@ -109,6 +109,10 @@ func (s *Server) createPairing(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "conflict", "device exists")
 		return
 	}
+	if _, pending := s.loadPairing(in.Code); pending {
+		fail(w, 409, "conflict", "a pairing with this code is pending")
+		return
+	}
 	if s.sweepPairings(s.cfg.Now()) >= maxPairings {
 		fail(w, 429, "rate_limited", "too many pairings")
 		return
@@ -367,6 +371,10 @@ func (s *Server) rekey(w http.ResponseWriter, r *http.Request, c caller) {
 		fail(w, 400, "invalid", "malformed rekey")
 		return
 	}
+	if s.lookupTaken(in.Recovery.LookupID, a.ID) {
+		fail(w, 409, "conflict", "recovery key not usable")
+		return
+	}
 	if err := s.st.putVersion(a.ID, ver, in.Blob); err != nil {
 		fail(w, 500, "internal", "store failed")
 		return
@@ -378,10 +386,6 @@ func (s *Server) rekey(w http.ResponseWriter, r *http.Request, c caller) {
 		d := a.Devices[id]
 		d.KeyEnvelope, d.Generation = env, in.Generation
 		a.Devices[id] = d
-	}
-	if s.lookupTaken(in.Recovery.LookupID, a.ID) {
-		fail(w, 409, "conflict", "recovery key not usable")
-		return
 	}
 	oldLookup := a.Recovery.LookupID
 	a.Recovery = recoveryRec{LookupID: in.Recovery.LookupID, AuthHash: hash(in.Recovery.Auth), Envelope: in.Recovery.Envelope}

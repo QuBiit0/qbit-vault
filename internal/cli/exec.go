@@ -136,6 +136,9 @@ func (g *globals) planExec(cmd *cobra.Command, args []string, f execFlags) (exec
 		if seenEnv[s.env] {
 			return p, usageError{"duplicate environment variable in --secret"}
 		}
+		if err := checkStartupEnv(s.env); err != nil {
+			return p, err
+		}
 		seenEnv[s.env] = true
 		p.secrets = append(p.secrets, s)
 		if !seenName[s.name] {
@@ -577,4 +580,23 @@ func joinCommand(words []string, shell runner.Shell) string {
 		}
 	}
 	return strings.Join(out, " ")
+}
+
+// startupEnv are the environment names that change how a child starts: the
+// loader, the shell and interpreter startup files and options, and the
+// lookup path of programs. A secret there would steer the child, not feed it.
+var startupEnv = map[string]bool{
+	"LD_PRELOAD": true, "LD_LIBRARY_PATH": true, "LD_AUDIT": true, "BASH_ENV": true, "ENV": true,
+	"PATH": true, "PATHEXT": true, "PYTHONSTARTUP": true, "NODE_OPTIONS": true, "PERL5OPT": true,
+	"RUBYOPT": true, "COMSPEC": true, "PROMPT_COMMAND": true,
+}
+
+// checkStartupEnv refuses an environment name that changes how a child starts
+// (A-F10). The name is a validated variable name, never a value.
+func checkStartupEnv(name string) error {
+	up := strings.ToUpper(name)
+	if startupEnv[up] || strings.HasPrefix(up, "DYLD_") {
+		return usageError{name + " cannot be used as a secret or variable name: it changes how a command starts"}
+	}
+	return nil
 }

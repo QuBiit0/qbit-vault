@@ -4,6 +4,15 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Fixed
+
+- Dump guard and pre-bash hook: `pwsh -EncodedCommand` is refused after any valued option (`-WorkingDirectory /f`, `-ep:Bypass`, quoted values), as `-e:VALUE`, and with typographic dashes; `bash --rcfile FILE -c …` no longer hides its script. The hook's command scanner keeps non-ASCII bytes intact.
+- The dump guard's compiled-pattern cache is capped (64 name sets).
+
+### Security
+
+- `exec` refuses to inject a secret under an environment name that changes how the child starts (`LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`, `DYLD_*`, `BASH_ENV`, `ENV`, `PATH`, `PATHEXT`, `PYTHONSTARTUP`, `NODE_OPTIONS`, `PERL5OPT`, `RUBYOPT`, `COMSPEC`, `PROMPT_COMMAND`); `set` refuses such a name. Usage error naming the variable, never a value.
+
 ## [0.1.0-beta.16] - 2026-11-07
 
 ### Fixed

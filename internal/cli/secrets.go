@@ -317,6 +317,9 @@ func newSet(g *globals) *cobra.Command {
 			if err := checkName(name); err != nil {
 				return err
 			}
+			if err := checkStartupEnv(name); err != nil {
+				return err
+			}
 			// With --stdin the value is on stdin, so a grant cannot be
 			// confirmed by asking: it needs a prompt token. Interactively the
 			// scope question after the value is the confirmation.

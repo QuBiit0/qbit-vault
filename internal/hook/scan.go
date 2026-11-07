@@ -116,7 +116,7 @@ func (p *scanner) list(term byte) bool {
 				if !strings.ContainsRune(" \t\"'$`\\;&|()<>#*?[]{}!~", rune(next)) {
 					put("\\")
 				}
-				put(string(next))
+				put(string([]byte{next}))
 				p.i += 2
 			}
 		case c == '\'':
@@ -140,7 +140,7 @@ func (p *scanner) list(term byte) bool {
 		case c == '<' && p.peek(1) == '<' && p.peek(2) != '<':
 			return false // here-document: the body would be misread as commands
 		default:
-			put(string(c))
+			put(string([]byte{c})) // a byte, not a rune: UTF-8 stays intact
 			p.i++
 		}
 	}

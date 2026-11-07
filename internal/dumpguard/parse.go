@@ -52,6 +52,9 @@ type pat struct {
 	line int
 }
 
+// maxCompiledSets bounds the cache of compiled name sets (A-F11).
+const maxCompiledSets = 64
+
 // Guard is a compiled set of patterns. Safe for concurrent use.
 type Guard struct {
 	pats []pat
@@ -283,7 +286,7 @@ func (g *Guard) compiled(names []string) []*regexp.Regexp {
 			res = append(res, re)
 		}
 	}
-	if g.cache == nil {
+	if g.cache == nil || len(g.cache) >= maxCompiledSets {
 		g.cache = map[string][]*regexp.Regexp{}
 	}
 	g.cache[key] = res

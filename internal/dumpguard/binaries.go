@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 )
 
 var assignRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
@@ -74,12 +75,15 @@ func scriptOf(w []string) (string, bool) {
 		return strings.Join(args, " "), true
 	case shellNames[name]:
 		// Options may precede -c: `-o NAME` and `+o NAME` (and bash's -O/+O)
-		// take a value, `--long` options stand alone, and the first short
+		// and `--rcfile FILE`/`--init-file FILE` take a value, other `--long`
+		// options (and `--opt=value`) stand alone, and the first short
 		// cluster that contains c takes the next word as the script.
 		for i := 0; i < len(args); i++ {
 			a := args[i]
 			switch {
 			case a == "-o" || a == "+o" || a == "-O" || a == "+O":
+				i++
+			case a == "--rcfile" || a == "--init-file":
 				i++
 			case strings.HasPrefix(a, "--"):
 			case len(a) >= 2 && (a[0] == '-' || a[0] == '+'):
@@ -106,26 +110,81 @@ func scriptOf(w []string) (string, bool) {
 	return "", false
 }
 
+// psValued are the PowerShell options that take a value; psSwitches are the
+// ones that do not. PowerShell accepts any unique prefix of an option name.
+var (
+	psValued = []string{"executionpolicy", "windowstyle", "inputformat", "outputformat", "version",
+		"configurationname", "configurationfile", "custompipename", "workingdirectory", "settingsfile", "encodedarguments"}
+	psSwitches = []string{"noprofile", "nologo", "noexit", "noninteractive", "interactive", "mta", "sta"}
+)
+
+// psOption splits a PowerShell option word into its lowercase name and
+// whether it carries its value after a colon (-Opt:Value). PowerShell accepts
+// -, / and the typographic dashes as the prefix.
+func psOption(a string) (name string, joined, ok bool) {
+	r, n := utf8.DecodeRuneInString(a)
+	switch r {
+	case '-', '/', '–', '—', '―':
+	default:
+		return "", false, false
+	}
+	name = strings.ToLower(a[n:])
+	if i := strings.IndexByte(name, ':'); i >= 0 {
+		name, joined = name[:i], true
+	}
+	return name, joined, name != ""
+}
+
+// psTakesValue reports whether option name consumes the next word. A prefix
+// that could also start a switch (-i, -s) is treated as a switch: not
+// skipping a value only makes the guard look at one more word.
+func psTakesValue(name string) bool {
+	if name == "ep" || name == "wd" {
+		return true
+	}
+	for _, sw := range psSwitches {
+		if strings.HasPrefix(sw, name) {
+			return false
+		}
+	}
+	for _, v := range psValued {
+		if strings.HasPrefix(v, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // encodedPowerShell reports whether w runs pwsh/powershell with an encoded
-// command (-e, -ec, -en, -enc, ... -encodedcommand, any case, - or / prefix):
-// the script is base64 and cannot be inspected. Only the options before the
-// command or file are read; a word that is not an option is an option's
-// value (-ExecutionPolicy Bypass) and is skipped.
+// command (-e, -ec, -en, -enc, ... -encodedcommand, any case, -, / or a
+// typographic dash prefix, -e:VALUE too): the script is base64 and cannot be
+// inspected. Only the options before the command or file are read. A known
+// valued option is skipped with its value, so a value that looks like -File
+// or -Command (-WorkingDirectory /f) does not end the scan; any other word
+// that is not an option is skipped too.
 func encodedPowerShell(w []string) bool {
 	idx, bare := resolve(w)
 	if idx < 0 || bare || !psNames[strings.ToLower(baseName(w[idx]))] {
 		return false
 	}
-	for _, a := range w[idx+1:] {
-		if len(a) < 2 || (a[0] != '-' && a[0] != '/') {
+	return EncodedPowerShellArgs(w[idx+1:])
+}
+
+// EncodedPowerShellArgs is encodedPowerShell on the arguments after the
+// program name.
+func EncodedPowerShellArgs(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		f, joined, ok := psOption(args[i])
+		if !ok {
 			continue
 		}
-		f := strings.ToLower(a[1:])
 		switch {
 		case f == "ec" || strings.HasPrefix("encodedcommand", f):
 			return true
-		case psCmdFlags["-"+f] || f == "f" || f == "file":
+		case strings.HasPrefix("command", f) || strings.HasPrefix("file", f):
 			return false
+		case !joined && psTakesValue(f):
+			i++
 		}
 	}
 	return false

@@ -19,15 +19,19 @@ func (zenityTool) program() string { return "zenity" }
 
 func (zenityTool) build(path string, d dialog) command {
 	var args []string
+	ok, cancel := d.buttons()
+	labels := []string{"--ok-label=" + ok, "--cancel-label=" + cancel}
 	switch d.kind {
 	case dialogSecret:
-		args = []string{"--entry", "--hide-text", "--no-markup", "--title=" + d.title, "--text=" + d.text}
+		args = []string{"--entry", "--hide-text", "--no-markup", "--width=480", "--title=" + d.title, "--text=" + d.plain()}
 		if d.visible {
 			args = append(args[:1], args[2:]...)
 		}
+		args = append(args, labels...)
 	case dialogChoose:
-		args = []string{"--list", "--radiolist", "--no-markup", "--title=" + d.title, "--text=" + d.text,
-			"--column=Pick", "--column=Index", "--column=Option", "--hide-column=2", "--print-column=2"}
+		args = []string{"--list", "--radiolist", "--no-markup", "--width=480", "--title=" + d.title, "--text=" + d.plain(),
+			"--column=Pick", "--column=Index", "--column=Option", "--hide-header", "--hide-column=2", "--print-column=2"}
+		args = append(args, labels...)
 		for i, o := range d.options {
 			picked := "FALSE"
 			if i == d.def {
@@ -36,7 +40,7 @@ func (zenityTool) build(path string, d dialog) command {
 			args = append(args, picked, fmt.Sprint(i+1), noDash(o))
 		}
 	case dialogConfirm:
-		args = []string{"--question", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--ok-label=Confirm", "--cancel-label=Decline", "--default-cancel"}
+		args = []string{"--question", "--no-markup", "--width=480", "--title=" + d.title, "--text=" + d.plain(), "--ok-label=" + ok, "--cancel-label=" + cancel, "--default-cancel"}
 	}
 	return command{Path: path, Args: args}
 }
@@ -78,12 +82,12 @@ func (kdialogTool) build(path string, d dialog) command {
 	switch d.kind {
 	case dialogSecret:
 		if d.visible {
-			args = append(args, "--inputbox", rich(d.text))
+			args = append(args, "--inputbox", rich(d.plain()))
 		} else {
-			args = append(args, "--password", rich(d.text))
+			args = append(args, "--password", rich(d.plain()))
 		}
 	case dialogChoose:
-		args = append(args, "--radiolist", rich(d.text))
+		args = append(args, "--radiolist", rich(d.plain()))
 		for i, o := range d.options {
 			state := "off"
 			if i == d.def {
@@ -94,7 +98,7 @@ func (kdialogTool) build(path string, d dialog) command {
 	case dialogConfirm:
 		// A --yesno cannot default to no, and Escape answers like its no
 		// button, so a confirmation is a list with Decline preselected.
-		args = append(args, "--radiolist", rich(d.text), "1", "Decline", "on", "2", "Confirm", "off")
+		args = append(args, "--radiolist", rich(d.plain()), "1", "Decline", "on", "2", "Confirm", "off")
 	}
 	return command{Path: path, Args: args}
 }
@@ -132,28 +136,33 @@ func (osascriptTool) program() string { return "osascript" }
 // AppleScript string literal made by asString.
 func (osascriptTool) build(path string, d dialog) command {
 	var s strings.Builder
+	ok, cancel := d.buttons()
 	switch d.kind {
 	case dialogSecret:
 		hidden := " with hidden answer"
 		if d.visible {
 			hidden = ""
 		}
-		fmt.Fprintf(&s, `display dialog %s with title %s default answer ""%s buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel" with icon caution`+"\n", asString(d.text), asString(d.title), hidden)
+		fmt.Fprintf(&s, `display dialog %s with title %s default answer ""%s buttons {%s, %s} default button %s cancel button %s with icon note`+"\n", asString(d.plain()), asString(d.title), hidden, asString(cancel), asString(ok), asString(ok), asString(cancel))
 		s.WriteString("return text returned of result\n")
 	case dialogChoose:
 		items := make([]string, len(d.options))
 		for i, o := range d.options {
 			items[i] = asString(numbered(i, o))
 		}
-		fmt.Fprintf(&s, `set r to choose from list {%s} with prompt %s with title %s default items {%s} OK button name "OK" cancel button name "Cancel" without multiple selections allowed and without empty selection allowed`+"\n",
-			strings.Join(items, ", "), asString(d.text), asString(d.title), items[d.def])
+		fmt.Fprintf(&s, `set r to choose from list {%s} with prompt %s with title %s default items {%s} OK button name %s cancel button name %s without multiple selections allowed and without empty selection allowed`+"\n",
+			strings.Join(items, ", "), asString(d.plain()), asString(d.title), items[d.def], asString(ok), asString(cancel))
 		s.WriteString("if r is false then error number -128\n")
 		s.WriteString("return item 1 of r\n")
 	case dialogShow:
-		fmt.Fprintf(&s, `display dialog %s with title %s buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel"`+"\n", asString(d.text), asString(d.title))
+		fmt.Fprintf(&s, `display dialog %s with title %s buttons {%s, %s} default button %s cancel button %s with icon note`+"\n", asString(d.plain()), asString(d.title), asString(cancel), asString(ok), asString(ok), asString(cancel))
 		s.WriteString("return button returned of result\n")
 	case dialogConfirm:
-		fmt.Fprintf(&s, `display dialog %s with title %s buttons {"Decline", "Confirm"} default button "Decline" cancel button "Decline" with icon caution`+"\n", asString(d.text), asString(d.title))
+		icon := "note"
+		if d.removal() {
+			icon = "caution"
+		}
+		fmt.Fprintf(&s, `display dialog %s with title %s buttons {"Decline", "Confirm"} default button "Decline" cancel button "Decline" with icon %s`+"\n", asString(d.plain()), asString(d.title), icon)
 		s.WriteString("return button returned of result\n")
 	}
 	return command{Path: path, Args: []string{"-"}, Stdin: []byte(s.String())}

@@ -159,7 +159,7 @@ Request:
 - `remove`: deletes the record and its grants.
 - `edit`: metadata only, never the value. Clearing `sensitive` or emptying `binaries` widens access, so the prompt marks it as **widening**.
 - `move`: keeps value and metadata, drops the record's grants (R-LAYER-05).
-- `replace`: one decision, then the masked capture for the new value. The decision offers `Replace, then <scope>` for every scope the record allows (the same labels as `request`: `once`, preselected, and `project` shown as `Always: in this project, until you revoke it`; never `session`), `Replace only: ask me again before it is used`, and `Don't replace` (a decline). The old grants are dropped; the picked scope, if any, becomes a new prompt-token grant on the new value for this envelope's session, so the agent's next `exec` needs no second permission dialog.
+- `replace`: one decision, then the masked capture for the new value. The decision offers `Replace, allow once` (preselected) and, where the record allows it, `Replace, always in this project` (never a session answer), then `Replace, but ask me before each use` and `Don't replace` (a decline). The old grants are dropped; the picked scope, if any, becomes a new prompt-token grant on the new value for this envelope's session, so the agent's next `exec` needs no second permission dialog.
 
 Except for the grant the user picks in a `replace` decision, `manage` never creates a grant. Declines start the same per-name cooldown as `request`.
 

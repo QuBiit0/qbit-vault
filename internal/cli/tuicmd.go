@@ -35,7 +35,7 @@ list, detail) to manage secrets, grants, hosts, the audit log and sync.
 
 It needs a terminal on both stdin and stdout. The UI never shows a secret value:
 it lists names, layers and status, and a value is only ever typed in the same
-masked prompt the 'set' command uses.
+hidden prompt the 'set' command uses.
 
 Running 'qbit-vault' with no arguments opens it too, but only in a terminal and
 not with --json or ` + envNoTUI + `=1; otherwise that prints the help.

@@ -249,7 +249,7 @@ expect_eq "B printed a pairing code" "$([[ -n $PAIRING ]] && echo yes || echo no
 set_answers a "$PAIRING" "$LABEL_B" y
 qbv a remote approve --json
 expect_ok_json "A approve" '"approved":true'
-wait_transcript a 'SHOW Confirmation code' 10 || true
+wait_transcript a 'SHOW Pairing code' 10 || true
 CONFIRM=$(transcript a | sed -n 's/^| \([A-Z0-9]\{4\}-[A-Z0-9]\{4\}\)$/\1/p' | tail -n1 || true)
 expect_eq "A showed a confirmation code" "$([[ -n $CONFIRM ]] && echo yes || echo no)" yes
 add_answer b "$CONFIRM"

@@ -214,7 +214,7 @@ func (m Model) setupStep() (string, []string, [][2]string) {
 			"     " + t.Mist("Use it where there is no keychain (servers, containers)."),
 		}
 		if wz.passphrase {
-			body = append(body, "     "+t.Warn("It is asked in the terminal prompt when you apply:"), "     "+t.Warn("never typed in this screen."))
+			body = append(body, "     "+t.Warn("It is asked in a secure prompt when you apply:"), "     "+t.Warn("never typed in this screen."))
 		} else {
 			body = append(body, "", "")
 		}
@@ -241,7 +241,7 @@ func (m Model) setupStep() (string, []string, [][2]string) {
 	case stepReview:
 		store := "OS keychain"
 		if wz.passphrase {
-			store = "passphrase (asked in the terminal prompt)"
+			store = "passphrase (asked in a secure prompt)"
 		}
 		hosts := "none"
 		if names := wz.hostNames(); len(names) > 0 {
@@ -274,7 +274,7 @@ func (m Model) setupStep() (string, []string, [][2]string) {
 	if wz.err != "" {
 		body = append(body, "", " "+t.Warn(wz.err), " "+t.Mist("Run 'qbit-vault doctor' to see what is left to fix."))
 	}
-	body = append(body, "", " "+t.Frost("Next: add a secret."), " "+t.Mist("The value is typed in a masked prompt, never here."))
+	body = append(body, "", " "+t.Frost("Next: add a secret."), " "+t.Mist("The value is typed in a hidden prompt, never here."))
 	return "Done", body, [][2]string{kv("a", "add a secret"), kv("enter", "go to the vault"), kv("ctrl+c", "quit")}
 }
 

@@ -17,7 +17,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
-const msgNoPrompt = "no prompt is available to ask the user"
+const msgNoPrompt = "Nobody can answer here (no terminal or desktop session). Run it from a terminal."
 
 // gaveUp reports a prompt the user cancelled, let time out or answered no.
 func gaveUp(err error) bool {
@@ -207,7 +207,7 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 			who = append(who, fmt.Sprintf("%s (%s)", a.f.Name, whereText(a.layer)))
 		}
 	}
-	i, err := ask.Choose(allowQuestion(who, r.Reason), append(opts, denyOption), def)
+	i, err := ask.Choose(allowQuestion(prompt.Requester(hostOf(e.Session), ""), who, r.Reason), append(opts, denyOption), def)
 	if err != nil {
 		return broker.RequestResponse{}, fail(err)
 	}

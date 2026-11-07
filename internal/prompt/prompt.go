@@ -47,7 +47,7 @@ var (
 	// ErrUnknownBackend means QBIT_VAULT_PROMPT names no backend.
 	ErrUnknownBackend = errors.New("unknown prompt backend")
 	// ErrTimeout means the user did not answer in time.
-	ErrTimeout = errors.New("prompt timed out")
+	ErrTimeout = errors.New("No answer in time; nothing was saved.")
 	// ErrBadTimeout means QBIT_VAULT_PROMPT_TIMEOUT is not a duration in bounds.
 	ErrBadTimeout = errors.New("invalid prompt timeout")
 	// ErrTrailingInput means more input followed Enter in a hidden read, as
@@ -93,6 +93,51 @@ type SecretRequest struct {
 	Stored []string
 }
 
+// PassphraseRequest says what a passphrase prompt protects, so the user does
+// not type the wrong secret.
+type PassphraseRequest struct {
+	// Heading names the dialog (default Label).
+	Heading string
+	// Label is the question of the first entry.
+	Label string
+	// Again is the question of the second entry, when Confirm is set.
+	Again string
+	// Confirm asks twice and refuses two different entries.
+	Confirm bool
+}
+
+// The passphrases qbit-vault asks for.
+var (
+	// VaultPassphrase unlocks or creates the vault key (passphrase mode).
+	VaultPassphrase = PassphraseRequest{Heading: "Vault passphrase", Label: "Vault passphrase", Again: "Type the passphrase again"}
+	// ExportPassphrase protects an export file; ask it Twice.
+	ExportPassphrase = PassphraseRequest{Heading: "Export passphrase", Label: "Export passphrase (protects this backup file)", Again: "Type the export passphrase again"}
+	// ImportPassphrase opens an export file.
+	ImportPassphrase = PassphraseRequest{Heading: "Export passphrase", Label: "Passphrase of the export file"}
+)
+
+// Twice is r asked twice.
+func (r PassphraseRequest) Twice() PassphraseRequest {
+	r.Confirm = true
+	return r
+}
+
+// again is the question of the second entry.
+func (r PassphraseRequest) again() string {
+	if r.Again != "" {
+		return r.Again
+	}
+	return "Type the passphrase again"
+}
+
+// heading is the title line of a passphrase dialog.
+func (r PassphraseRequest) heading() string {
+	if r.Heading != "" {
+		return r.Heading
+	}
+	return r.Label
+}
+
 // Backend asks the user. Every method blocks until the user answers.
 type Backend interface {
 	Name() string
@@ -103,8 +148,8 @@ type Backend interface {
 	Choose(q string, options []string, def int) (int, error)
 	// Confirm asks a yes/no question; only y or yes answers true.
 	Confirm(q string) (bool, error)
-	// Passphrase reads a masked passphrase, twice when confirm is true.
-	Passphrase(confirm bool) (secret.Secret, error)
+	// Passphrase reads a masked passphrase, twice when req.Confirm is set.
+	Passphrase(req PassphraseRequest) (secret.Secret, error)
 }
 
 // Terminal is the seam under the tty backend: a console with an echoed line
@@ -159,7 +204,7 @@ func SelectWith(e Env) (Backend, error) {
 		if b, ok := testBackend(name, e); ok {
 			return b, nil
 		}
-		return nil, fmt.Errorf("%w: %s=%q", ErrUnknownBackend, EnvBackend, name)
+		return nil, fmt.Errorf("%w: %s=%q; use tty, osascript, powershell, zenity or kdialog", ErrUnknownBackend, EnvBackend, name)
 	}
 }
 
@@ -221,10 +266,10 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 		_, _ = io.WriteString(t, Header(req))
 		read := t.ReadHidden
 		if req.Visible {
-			_, _ = io.WriteString(t, "Value (shown as you type): ")
+			_, _ = io.WriteString(t, "Value (shown while you type): ")
 			read = t.ReadLine
 		} else {
-			_, _ = io.WriteString(t, "Value (hidden; the agent never sees it): ")
+			_, _ = io.WriteString(t, "Value (hidden): ")
 		}
 		raw, err := read(ctx)
 		if err != nil {
@@ -237,17 +282,17 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 	return out, err
 }
 
-func (b *tty) Passphrase(confirm bool) (secret.Secret, error) {
+func (b *tty) Passphrase(req PassphraseRequest) (secret.Secret, error) {
 	var out secret.Secret
 	err := b.with(func(ctx context.Context, t Terminal) error {
-		_, _ = io.WriteString(t, "Vault passphrase (hidden): ")
+		_, _ = io.WriteString(t, req.Label+": ")
 		first, err := t.ReadHidden(ctx)
 		if err != nil {
 			return readErr(err)
 		}
 		defer clear(first)
-		if confirm {
-			_, _ = io.WriteString(t, "Type it again to confirm: ")
+		if req.Confirm {
+			_, _ = io.WriteString(t, req.again()+": ")
 			second, err := t.ReadHidden(ctx)
 			if err != nil {
 				return readErr(err)
@@ -274,7 +319,7 @@ func (b *tty) Choose(q string, options []string, def int) (int, error) {
 	chosen := 0
 	err := b.with(func(ctx context.Context, t Terminal) error {
 		var m strings.Builder
-		m.WriteString(escape(q) + "\n")
+		m.WriteString(escapeLines(q) + "\n")
 		for i, o := range options {
 			fmt.Fprintf(&m, "  %d) %s\n", i+1, escape(o))
 		}
@@ -294,7 +339,7 @@ func (b *tty) Choose(q string, options []string, def int) (int, error) {
 				chosen = n - 1
 				return nil
 			}
-			_, _ = io.WriteString(t, "invalid choice\n")
+			fmt.Fprintf(t, "Type a number from 1 to %d, or press Enter for the default.\n", len(options))
 		}
 		return ErrCancelled
 	})
@@ -304,7 +349,7 @@ func (b *tty) Choose(q string, options []string, def int) (int, error) {
 func (b *tty) Confirm(q string) (bool, error) {
 	yes := false
 	err := b.with(func(ctx context.Context, t Terminal) error {
-		_, _ = io.WriteString(t, escape(q)+" [y/N] ")
+		_, _ = io.WriteString(t, escapeLines(q)+" [y/N] ")
 		line, err := t.ReadLine(ctx)
 		if err != nil {
 			return readErr(err)
@@ -318,48 +363,71 @@ func (b *tty) Confirm(q string) (bool, error) {
 	return yes, err
 }
 
-// Header renders what the capture prompt shows before the input, in plain
-// words: who asks, the secret, why, where it is saved and whether the value
-// is new. Every piece of text is escaped, so a reason cannot paint over the
-// terminal or add a line of its own (R4).
-func Header(req SecretRequest) string {
-	saved, value := "all projects (global)", "new"
+// headerRow is one line of the request: a label and its text.
+type headerRow struct{ label, value string }
+
+// headerRows are the lines of a capture request, every text escaped. The
+// terminal prints them as text and the Windows dialog lays them out as a
+// grid. withValue adds whether the value is new or replaces the saved one.
+func headerRows(req SecretRequest, withValue bool) []headerRow {
+	saved := "all projects"
 	if req.Project != "" {
 		saved = "project " + escape(req.Project)
 	}
-	if req.Existing {
-		value = "replaces the saved value"
+	rows := []headerRow{
+		{"Who", Requester(req.Host, req.Session)},
+		{"Secret", escape(req.Name)},
+		{"Why", escape(req.Reason)},
+		{"Saved in", saved},
 	}
-	if req.Visible {
-		value += " (shown as you type)"
-	} else {
-		value += " (hidden as you type)"
-	}
-	var b strings.Builder
-	b.WriteString("QBit Vault: secret request\n")
-	fmt.Fprintf(&b, "  Who:      %s\n", Requester(req.Host, req.Session))
-	fmt.Fprintf(&b, "  Secret:   %s\n", escape(req.Name))
-	fmt.Fprintf(&b, "  Why:      %s\n", escape(req.Reason))
-	fmt.Fprintf(&b, "  Saved in: %s\n", saved)
 	if req.Description != "" {
-		fmt.Fprintf(&b, "  About:    %s\n", escape(req.Description))
+		rows = append(rows, headerRow{"About", escape(req.Description)})
 	}
 	if len(req.Stored) > 0 {
 		names := make([]string, len(req.Stored))
 		for i, n := range req.Stored {
 			names[i] = escape(n)
 		}
-		fmt.Fprintf(&b, "  Already saved, not asked again: %s\n", strings.Join(names, ", "))
+		rows = append(rows, headerRow{"Already saved", strings.Join(names, ", ") + " (not asked again)"})
 	}
 	if req.Fields > 1 {
 		label := req.Label
 		if label == "" {
 			label = req.Name
 		}
-		fmt.Fprintf(&b, "  Field:    %d of %d (%s)\n", req.Field, req.Fields, escape(label))
+		rows = append(rows, headerRow{"Field", fmt.Sprintf("%d of %d (%s)", req.Field, req.Fields, escape(label))})
 	}
-	fmt.Fprintf(&b, "  Value:    %s\n", value)
+	if withValue {
+		value := "new"
+		if req.Existing {
+			value = "replaces the saved value"
+		}
+		rows = append(rows, headerRow{"Value", value})
+	}
+	return rows
+}
+
+// rowsText prints rows one per line, the values in a column.
+func rowsText(rows []headerRow) string {
+	var b strings.Builder
+	for _, r := range rows {
+		l := r.label + ":"
+		if len(l) < 10 {
+			l += strings.Repeat(" ", 10-len(l))
+		} else {
+			l += " "
+		}
+		b.WriteString("  " + l + r.value + "\n")
+	}
 	return b.String()
+}
+
+// Header renders what the capture prompt shows before the input, in plain
+// words: who asks, the secret, why, where it is saved and whether the value
+// is new. Every piece of text is escaped, so a reason cannot paint over the
+// terminal or add a line of its own (R4).
+func Header(req SecretRequest) string {
+	return "QBit Vault: secret request\n" + rowsText(headerRows(req, true))
 }
 
 // Requester names who is asking, for a person: the agent by its product name
@@ -378,7 +446,7 @@ func Requester(host, session string) string {
 	case "mcp":
 		who = "your agent"
 	case "cli":
-		who = "you (qbit-vault set)"
+		return "you (qbit-vault)"
 	default:
 		who = escape(host)
 	}
@@ -393,6 +461,23 @@ func Requester(host, session string) string {
 		id = string(r[:8])
 	}
 	return who + " (session " + escape(id) + ")"
+}
+
+// Escape makes s safe to put in a question or dialog text: control
+// characters, bidi overrides and invalid UTF-8 become visible escapes, and no
+// line break is left, so text taken from an agent (its reason) stays on its
+// own line.
+func Escape(s string) string { return escape(s) }
+
+// escapeLines escapes each line of s and keeps the line breaks: a question is
+// laid out by its caller (who wants what, then the reason), and what the
+// caller took from an agent was already made one line with Escape.
+func escapeLines(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = escape(l)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // escape makes s safe to print on one terminal line: control characters,

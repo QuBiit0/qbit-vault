@@ -111,7 +111,7 @@ func (m Model) secretsBody(w int) []string {
 	case len(p.list.Items) == 0:
 		lines := []string{"", t.Frost("No secrets yet."), "", t.Frost("Press ") + t.Key("a") + t.Frost(" to add your first one.")}
 		lines = append(lines, "")
-		for _, l := range wrap("The value is typed in a masked prompt, never in this screen.", w) {
+		for _, l := range wrap("The value is typed in a hidden prompt, never in this screen.", w) {
 			lines = append(lines, t.Mist(l))
 		}
 		return lines
@@ -221,7 +221,7 @@ func (m Model) lockedBody(w int) []string {
 	rows := []string{"", t.Warn("The vault is locked.")}
 	rows = append(rows, wrapAll(t.Mist, "The master key is not cached (passphrase mode).", w)...)
 	rows = append(rows, "")
-	rows = append(rows, wrapAll(t.Frost, "Press u to unlock. Your passphrase is asked in the terminal prompt, never in this screen.", w)...)
+	rows = append(rows, wrapAll(t.Frost, "Press u to unlock. Your passphrase is asked in a secure prompt, never in this screen.", w)...)
 	return rows
 }
 
@@ -425,7 +425,7 @@ func (m Model) formView() string {
 		rows = append(rows, " "+t.Mist("Changes metadata only. The value is not touched."))
 	} else {
 		rows = append(rows, " "+t.Warn("The value is not typed here; do not paste a secret into the description."),
-			" "+t.Mist("The value is asked next, in a masked prompt."), " "+t.Mist("Saving does not grant anything: agents still have to ask."))
+			" "+t.Mist("The value is asked next, in a hidden prompt."), " "+t.Mist("Saving does not grant anything: agents still have to ask."))
 	}
 	keys := [][2]string{kv("enter", "save"), kv("tab", "next field"), kv("esc", "cancel")}
 	w := m.width - len(indent) - 2

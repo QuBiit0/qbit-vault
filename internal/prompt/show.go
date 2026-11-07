@@ -12,7 +12,7 @@ import (
 // Show waits until the user acknowledges it; closing the dialog or Ctrl-C is
 // ErrCancelled. The text never reaches a helper's argv (any local user can
 // read a command line), stdout or stderr: a helper that takes its text only
-// as arguments reports ErrUnavailable instead.
+// as arguments (kdialog) leaves it to the terminal.
 type Shower interface {
 	Show(title, text string) error
 }
@@ -25,7 +25,7 @@ func showDialog(title, text string) dialog {
 	for i, l := range lines {
 		lines[i] = escape(l)
 	}
-	return dialog{kind: dialogShow, title: "qbit-vault: " + escape(title), text: strings.Join(lines, "\n")}
+	return dialog{kind: dialogShow, title: dialogTitle, heading: escape(title), text: strings.Join(lines, "\n"), okLabel: "Done", cancelLabel: "Cancel"}
 }
 
 // Show implements Shower.
@@ -34,11 +34,14 @@ func (n *native) Show(title, text string) error {
 	var c command
 	switch n.t.(type) {
 	case zenityTool:
-		c = command{Path: n.path, Args: []string{"--text-info", "--title=" + d.title, "--width=560", "--height=280"}, Stdin: []byte(d.text)}
+		ok, cancel := d.buttons()
+		c = command{Path: n.path, Args: []string{"--text-info", "--title=" + d.title, "--width=480", "--height=280", "--ok-label=" + ok, "--cancel-label=" + cancel}, Stdin: []byte(d.plain())}
 	case osascriptTool, powershellTool:
 		c = n.t.build(n.path, d)
 	default:
-		return unavailableError{"the " + n.t.name() + " dialog cannot show this text safely; set " + EnvBackend + "=tty"}
+		// The helper takes its text only as arguments, which any local user
+		// can read: the terminal shows it.
+		return New(n.open, Timeout(n.timeout)).(Shower).Show(title, text)
 	}
 	_, st, err := n.askWith(c, d)
 	if err != nil {
@@ -54,7 +57,7 @@ func (n *native) Show(title, text string) error {
 func (b *tty) Show(title, text string) error {
 	d := showDialog(title, text)
 	return b.with(func(ctx context.Context, t Terminal) error {
-		_, _ = fmt.Fprintf(t, "\n%s\n\n%s\n\nPress Enter when done. ", d.title, d.text)
+		_, _ = fmt.Fprintf(t, "\n%s: %s\n\n%s\n\nPress Enter when done. ", dialogTitle, d.heading, d.text)
 		if _, err := t.ReadLine(ctx); err != nil {
 			return readErr(err)
 		}

@@ -15,13 +15,13 @@ func TestValueIssues(t *testing.T) {
 	tests := []struct {
 		in, fixed, problem string
 	}{
-		{`"TESTSECRET_q"`, "TESTSECRET_q", "starts and ends with quotes"},
-		{`'TESTSECRET_q'`, "TESTSECRET_q", "starts and ends with quotes"},
-		{"`TESTSECRET_q`", "TESTSECRET_q", "starts and ends with quotes"},
-		{"TESTSECRET_\u200bzw", "TESTSECRET_zw", "has invisible characters"},
-		{"\ufeffTESTSECRET_bom", "TESTSECRET_bom", "has invisible characters"},
-		{"TESTSECRET_\u00a0nb", "TESTSECRET_nb", "has invisible characters"},
-		{"\"TESTSECRET_\u200bboth\"", "TESTSECRET_both", "starts and ends with quotes and has invisible characters"},
+		{`"TESTSECRET_q"`, "TESTSECRET_q", "has quotes around it"},
+		{`'TESTSECRET_q'`, "TESTSECRET_q", "has quotes around it"},
+		{"`TESTSECRET_q`", "TESTSECRET_q", "has quotes around it"},
+		{"TESTSECRET_\u200bzw", "TESTSECRET_zw", "has invisible characters in it"},
+		{"\ufeffTESTSECRET_bom", "TESTSECRET_bom", "has invisible characters in it"},
+		{"TESTSECRET_\u00a0nb", "TESTSECRET_nb", "has invisible characters in it"},
+		{"\"TESTSECRET_\u200bboth\"", "TESTSECRET_both", "has quotes around it and invisible characters in it"},
 		{"TESTSECRET_clean-token_0123", "", ""},
 		{`TESTSECRET_"inside"`, "", ""},   // quotes only inside: left alone
 		{`"TESTSECRET_mismatch'`, "", ""}, // different quotes: not a pair
@@ -47,8 +47,8 @@ func TestRequestOffersToDropPastedQuotes(t *testing.T) {
 		t.Fatalf("calls=%+v", f.Calls)
 	}
 	q := f.Calls[1]
-	if q.Q != "The value of A starts and ends with quotes. Keys and tokens usually don't, and a pasted extra breaks the login. Save it:" ||
-		len(q.Options) != 3 || q.Options[0] != "Without them (recommended)" || q.Options[1] != "Exactly as typed" || q.Options[2] != "Cancel" || q.Default != 0 {
+	if q.Q != "The value of A has quotes around it. Most keys and tokens don't, and extra characters break logins. Which one should be saved?" ||
+		len(q.Options) != 3 || q.Options[0] != "Without them (recommended)" || q.Options[1] != "Keep it as typed" || q.Options[2] != "Cancel" || q.Default != 0 {
 		t.Fatalf("question=%+v", q)
 	}
 	if w.value("A") != "TESTSECRET_quoted" {
@@ -97,7 +97,7 @@ func TestSetInteractiveOffersToDropInvisibleCharacters(t *testing.T) {
 	if code, out, errs := w.run("", "set", "A", "--global"); code != exitcode.OK {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if len(f.Calls) != 2 || f.Calls[1].Q != "The value of A has invisible characters. Keys and tokens usually don't, and a pasted extra breaks the login. Save it:" {
+	if len(f.Calls) != 2 || f.Calls[1].Q != "The value of A has invisible characters in it. Most keys and tokens don't, and extra characters break logins. Which one should be saved?" {
 		t.Fatalf("calls=%+v", f.Calls)
 	}
 	if w.value("A") != "TESTSECRET_set" {
@@ -125,7 +125,7 @@ func TestAllInvisibleValueOffersNoEmptyFix(t *testing.T) {
 	if code, m, _ := w.broker("request", reqFor(w.outside, "")); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
-	if o := f.Calls[1].Options; len(o) != 2 || o[0] != "Exactly as typed" || o[1] != "Cancel" {
+	if o := f.Calls[1].Options; len(o) != 2 || o[0] != "Keep it as typed" || o[1] != "Cancel" {
 		t.Fatalf("options=%q", o)
 	}
 	if w.value("A") != "\u200b\u200b" {

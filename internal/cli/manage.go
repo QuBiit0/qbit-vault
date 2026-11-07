@@ -91,19 +91,19 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		audited("declined")
 		return refusal.New(refusal.UserDeclined, r.Name)
 	}
-	q := manageQuestion(r, en.Layer, to, targetExists, diff)
+	q := manageQuestion(prompt.Requester(hostOf(e.Session), ""), r, en.Layer, to, targetExists, diff)
 	var (
 		ok         bool
 		grantScope grants.Scope // replace: the permission picked with it, if any
 	)
 	if r.Action == "replace" {
 		scopes := agentScopes(g.allowedScopes(r.Name, en.Layer, en.Record.Sensitive, scopeOrder))
-		labels, def := scopeLabels(scopes, "", false)
-		opts := make([]string, 0, len(labels)+2)
-		for _, l := range labels {
-			opts = append(opts, "Replace, then "+l)
+		_, def := scopeLabels(scopes, "", false)
+		opts := make([]string, 0, len(scopes)+2)
+		for _, sc := range scopes {
+			opts = append(opts, replaceOption(sc))
 		}
-		opts = append(opts, "Replace only: ask me again before it is used", "Don't replace")
+		opts = append(opts, "Replace, but ask me before each use", "Don't replace")
 		var i int
 		i, err = ask.Choose(q, opts, def)
 		ok = err == nil && i < len(opts)-1
@@ -236,20 +236,33 @@ func applyChanges(rec *vault.Record, c *broker.ManageChanges) string {
 	return strings.Join(parts, "; ")
 }
 
-func manageQuestion(r broker.ManageRequest, from, to vault.Layer, targetExists bool, diff string) string {
+func manageQuestion(who string, r broker.ManageRequest, from, to vault.Layer, targetExists bool, diff string) string {
 	var what string
 	switch r.Action {
 	case "move":
-		what = fmt.Sprintf("move %s from %s to %s", r.Name, layerText(from), layerText(to))
+		what = fmt.Sprintf("move %s from %s to %s", r.Name, whereText(from), whereText(to))
 		if targetExists {
 			what += " (overwriting the " + r.Name + " already there)"
 		}
 	case "edit":
-		what = fmt.Sprintf("edit %s (%s): %s", r.Name, layerText(from), diff)
+		what = fmt.Sprintf("edit %s (%s): %s", r.Name, whereText(from), prompt.Escape(diff))
 	case "replace":
-		return fmt.Sprintf("The agent proposes to replace the value of %s (%s). Why: %s", r.Name, whereText(from), r.Reason)
+		what = fmt.Sprintf("replace the value of %s (%s)", r.Name, whereText(from))
 	default:
-		what = fmt.Sprintf("remove %s (%s)", r.Name, layerText(from))
+		what = fmt.Sprintf("remove %s (%s)", r.Name, whereText(from))
 	}
-	return fmt.Sprintf("The agent proposes to %s. Reason: %s. Apply?", what, r.Reason)
+	return fmt.Sprintf("%s wants to %s.\nWhy: %s", who, what, prompt.Escape(r.Reason))
+}
+
+// replaceOption is the answer that replaces a value and also gives the agent
+// the permission to use it.
+func replaceOption(sc grants.Scope) string {
+	switch sc {
+	case grants.ScopeOnce:
+		return "Replace, allow once"
+	case grants.ScopeSession:
+		return "Replace, allow for this session"
+	default:
+		return "Replace, always in this project"
+	}
 }

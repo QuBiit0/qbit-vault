@@ -80,7 +80,7 @@ func TestSetInteractiveAsksLayerInsideRepo(t *testing.T) {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	c := f.Calls[0]
-	if c.Kind != "choose" || c.Default != 0 || len(c.Options) != 2 || c.Options[0] != "global" || c.Options[1] != "this project (shop-api)" || !strings.Contains(c.Q, "A_KEY") {
+	if c.Kind != "choose" || c.Default != 0 || len(c.Options) != 2 || c.Options[0] != "All projects" || c.Options[1] != "Only this project (shop-api)" || !strings.Contains(c.Q, "A_KEY") {
 		t.Fatalf("layer question = %+v", c)
 	}
 	if f.Calls[1].Request.Project != "shop-api" {
@@ -219,7 +219,7 @@ func TestSetInteractiveGrant(t *testing.T) {
 	}
 	q := f.Calls[1]
 	if q.Kind != "choose" || q.Default != 1 || len(q.Options) != 3 ||
-		!strings.HasPrefix(q.Options[0], "Once:") || !strings.HasPrefix(q.Options[1], "Session:") || !strings.HasPrefix(q.Options[2], "No, just save") {
+		!strings.HasPrefix(q.Options[0], "Once:") || !strings.HasPrefix(q.Options[1], "Session:") || !strings.HasPrefix(q.Options[2], "Save it, don't allow yet") {
 		t.Fatalf("scope question = %+v", q)
 	}
 	_, gout, _ := w.run("", "--json", "grants")
@@ -244,11 +244,11 @@ func TestSetInteractiveGrantChoices(t *testing.T) {
 		answer    int
 		wantOut   string
 	}{
-		{"project layer offers project, the user's --grant project preselected", true, false, "project", []string{"Once:", "Session:", "Always:", "No, just save"}, 2, 2,
+		{"project layer offers project, the user's --grant project preselected", true, false, "project", []string{"Once:", "Session:", "Always:", "Save it, don't allow yet"}, 2, 2,
 			"stored A_KEY (project shop-api)\ngranted A_KEY (project shop-api): project, until revoked\n"},
-		{"sensitive offers once only", false, true, "once", []string{"Once:", "No, just save"}, 0, 0,
+		{"sensitive offers once only", false, true, "once", []string{"Once:", "Save it, don't allow yet"}, 0, 0,
 			"stored A_KEY (global)\ngranted A_KEY (global): once, for pi:sess-aaaa, until TS\n"},
-		{"no grant stores only", false, false, "session", []string{"Once:", "Session:", "No, just save"}, 1, 2,
+		{"no grant stores only", false, false, "session", []string{"Once:", "Session:", "Save it, don't allow yet"}, 1, 2,
 			"stored A_KEY (global)\n"},
 	}
 	for _, tt := range tests {
@@ -390,7 +390,7 @@ func TestGrantConfirmationUsesBackend(t *testing.T) {
 	pinClock(t)
 	w := newWorld(t)
 	w.mustRun(fxVal, "set", "A_KEY", "--global", "--stdin")
-	const q = "Grant A_KEY (global) to pi:sess-aaaa, scope session?"
+	const q = "Grant A_KEY (all projects) to pi:sess-aaaa, scope session?"
 
 	f := withBackend(t, answers(yes()))
 	code, out, errs := w.run("", "--session", sessA, "grant", "A_KEY", "--scope", "session")
@@ -447,7 +447,7 @@ func TestRmConfirmation(t *testing.T) {
 	if code != 0 || out != "removed A_KEY (global)\n" || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if len(f.Calls) != 1 || f.Calls[0].Q != "Remove A_KEY (global)?" {
+	if len(f.Calls) != 1 || f.Calls[0].Q != "Remove A_KEY (all projects)?" {
 		t.Fatalf("calls = %+v", f.Calls)
 	}
 
@@ -486,7 +486,7 @@ func TestMvOverwriteConfirmation(t *testing.T) {
 	if code != 0 || out != "moved A_KEY from project shop-api to global\n" || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if len(f.Calls) != 1 || f.Calls[0].Q != "A_KEY already exists in global; overwrite?" {
+	if len(f.Calls) != 1 || f.Calls[0].Q != "A_KEY already exists in all projects; overwrite?" {
 		t.Fatalf("calls = %+v", f.Calls)
 	}
 	if w.value("A_KEY") != fxVal+"_p" {
@@ -725,7 +725,7 @@ func TestPromptAsksLayerAndRestrictsScopes(t *testing.T) {
 	if p := decodePrompt(t, out); p.Scope != "project" || p.Layer != "project" {
 		t.Fatalf("out = %q", out)
 	}
-	if l := f.Calls[0]; l.Kind != "choose" || len(l.Options) != 2 || l.Options[0] != "All projects (global)" || l.Options[1] != "Only this project (shop-api)" || l.Default != 0 {
+	if l := f.Calls[0]; l.Kind != "choose" || len(l.Options) != 2 || l.Options[0] != "All projects" || l.Options[1] != "Only this project (shop-api)" || l.Default != 0 {
 		t.Fatalf("layer question = %+v", l)
 	}
 	if s := f.Calls[1]; len(s.Options) != 2 || !strings.HasPrefix(s.Options[0], "Always:") || !strings.HasPrefix(s.Options[1], "Don't allow") {
@@ -787,7 +787,7 @@ func TestPromptTimeoutIsCancelledAndChangesNothing(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			withBackend(t, answers(timedOut))
 			code, out, errs := w.run("", args...)
-			if code != exitcode.Failure || out != "" || errs != "error: prompt timed out\n" {
+			if code != exitcode.Failure || out != "" || errs != "error: No answer in time; nothing was saved.\n" {
 				t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 			}
 			if w.snapshot() != before || w.grantsState() != grantsBefore {
@@ -797,7 +797,7 @@ func TestPromptTimeoutIsCancelledAndChangesNothing(t *testing.T) {
 	}
 	withBackend(t, answers(timedOut))
 	code, out, _ := w.run("", "--json", "set", "A_KEY")
-	if code != exitcode.Failure || out != `{"ok":false,"error":{"code":"cancelled","message":"prompt timed out"}}`+"\n" {
+	if code != exitcode.Failure || out != `{"ok":false,"error":{"code":"cancelled","message":"No answer in time; nothing was saved."}}`+"\n" {
 		t.Fatalf("json: code=%d out=%q", code, out)
 	}
 }

@@ -29,10 +29,15 @@ func (powershellTool) classify(_ dialog, r result) status {
 }
 
 func (powershellTool) build(path string, d dialog) command {
+	return psCommand(path, psScript(d))
+}
+
+// psCommand runs script, read from stdin, in a single-threaded apartment.
+func psCommand(path, script string) command {
 	return command{
 		Path:  path,
 		Args:  []string{"-NoProfile", "-NonInteractive", "-STA", "-Command", "-"},
-		Stdin: []byte(psScript(d)),
+		Stdin: []byte(script),
 	}
 }
 
@@ -53,10 +58,7 @@ const psBodyMarker = "# ---- body ----"
 // psPrelude is the data half of the script: everything that comes from the
 // request, as variables.
 func psPrelude(d dialog) string {
-	okLabel, cancelLabel := "OK", "Cancel"
-	if d.kind == dialogConfirm {
-		okLabel, cancelLabel = "Confirm", "Decline"
-	}
+	okLabel, cancelLabel := d.buttons()
 	opts := make([]string, len(d.options))
 	for i, o := range d.options {
 		opts[i] = "(Dec " + psString(o) + ")"
@@ -65,13 +67,24 @@ func psPrelude(d dialog) string {
 	b.WriteString("$ErrorActionPreference = 'Stop'\n")
 	b.WriteString("function Dec($s) { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($s)) }\n")
 	fmt.Fprintf(&b, "$title = Dec %s\n", psString(d.title))
-	if d.kind == dialogShow {
+	fmt.Fprintf(&b, "$heading = Dec %s\n", psString(d.heading))
+	switch {
+	case d.kind == dialogShow:
 		intro, code := splitShown(d.text)
 		fmt.Fprintf(&b, "$text = Dec %s\n", psString(intro))
 		fmt.Fprintf(&b, "$code = Dec %s\n", psString(code))
-	} else {
+	case len(d.rows) > 0:
+		// The request lines go in a grid, the question under it.
+		fmt.Fprintf(&b, "$text = Dec %s\n", psString(d.tail))
+	default:
 		fmt.Fprintf(&b, "$text = Dec %s\n", psString(d.text))
 	}
+	cells := make([]string, 0, 2*len(d.rows))
+	for _, r := range d.rows {
+		cells = append(cells, "(Dec "+psString(r.label+":")+")", "(Dec "+psString(r.value)+")")
+	}
+	fmt.Fprintf(&b, "$rows = @(%s)\n", strings.Join(cells, ", "))
+	fmt.Fprintf(&b, "$confirm = $%t\n", d.kind == dialogConfirm)
 	fmt.Fprintf(&b, "$okLabel = Dec %s\n", psString(okLabel))
 	fmt.Fprintf(&b, "$cancelLabel = Dec %s\n", psString(cancelLabel))
 	fmt.Fprintf(&b, "$opts = @(%s)\n", strings.Join(opts, ", "))
@@ -145,10 +158,14 @@ $h.AutoSize = $true
 $h.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 12)
 $h.ForeColor = Col '#7FD0EC'
 $h.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 10)
-$heading = $title; if ($heading.StartsWith('qbit-vault: ')) { $heading = $heading.Substring(12) }
-if ($heading.Length -gt 0) { $heading = $heading.Substring(0, 1).ToUpper() + $heading.Substring(1) }
 $h.Text = $heading
-$p.Controls.Add($h)
+if ($heading.Length -gt 0) { $p.Controls.Add($h) }
+$g = New-Object System.Windows.Forms.TableLayoutPanel
+$g.AutoSize = $true
+$g.ColumnCount = 2
+$g.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
+for ($i = 0; $i -lt $rows.Count; $i += 2) { $a = New-Object System.Windows.Forms.Label; $a.UseMnemonic = $false; $a.AutoSize = $true; $a.ForeColor = Col '#8FA7B2'; $a.Margin = New-Object System.Windows.Forms.Padding(0, 3, 18, 3); $a.Text = $rows[$i]; $v = New-Object System.Windows.Forms.Label; $v.UseMnemonic = $false; $v.AutoSize = $true; $v.MaximumSize = New-Object System.Drawing.Size(420, 0); $v.Margin = New-Object System.Windows.Forms.Padding(0, 3, 0, 3); $v.Text = $rows[$i + 1]; $g.Controls.Add($a, 0, [int]($i / 2)); $g.Controls.Add($v, 1, [int]($i / 2)) }
+if ($rows.Count -gt 0) { $p.Controls.Add($g) }
 $l = New-Object System.Windows.Forms.Label
 $l.UseMnemonic = $false
 $l.AutoSize = $true
@@ -230,6 +247,7 @@ $bp.Controls.Add($no)
 $p.Controls.Add($bp)
 $f.Controls.Add($p)
 $f.CancelButton = $no
+if ($confirm) { $no.FlatAppearance.BorderSize = 0; $no.BackColor = Col '#2E9BE0'; $no.ForeColor = Col '#FFFFFF'; $no.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 10); $ok.FlatAppearance.BorderSize = 1; $ok.FlatAppearance.BorderColor = Col '#16303D'; $ok.BackColor = Col '#07121B'; $ok.ForeColor = Col '#C7D9DE'; $ok.Font = $f.Font }
 `
 
 const psShow = `if ($f.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 2 }

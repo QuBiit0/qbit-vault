@@ -92,7 +92,7 @@ func TestPowerShellCommandShape(t *testing.T) {
 			t.Errorf("script holds %q outside a data literal", leak)
 		}
 	}
-	if !strings.Contains(s, psString(secretDialog(req).title)) || !strings.Contains(s, psString(secretDialog(req).text)) {
+	if !strings.Contains(s, psString(secretDialog(req).title)) || !strings.Contains(s, psString(secretDialog(req).tail)) {
 		t.Error("script lacks the title or the text literal")
 	}
 }
@@ -150,7 +150,7 @@ func TestPowerShellParses(t *testing.T) {
 		t.Skip("powershell.exe not found")
 	}
 	dir := t.TempDir()
-	want := map[string]string{} // file -> title|text
+	want := map[string]string{} // file -> title|heading|text|rows
 	for i, tt := range hostile {
 		dialogs := map[string]dialog{
 			"secret":  secretDialog(SecretRequest{Name: "N", Reason: tt.in, Host: "h", Session: "s", Project: tt.in}),
@@ -162,7 +162,14 @@ func TestPowerShellParses(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, file), powershellTool{}.build(ps, d).Stdin, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			want[file] = d.title + "|" + d.text
+			text, cells := d.text, []string{}
+			if len(d.rows) > 0 {
+				text = d.tail
+			}
+			for _, r := range d.rows {
+				cells = append(cells, r.label+":", r.value)
+			}
+			want[file] = d.title + "|" + d.heading + "|" + text + "|" + strings.Join(cells, "^")
 		}
 	}
 	drv := `foreach ($fi in Get-ChildItem -LiteralPath $env:QBV_DIR -Filter *.ps1) {
@@ -170,7 +177,7 @@ func TestPowerShellParses(t *testing.T) {
   $e = $null
   [void][System.Management.Automation.Language.Parser]::ParseInput($s, [ref]$null, [ref]$e)
   $pre = $s.Substring(0, $s.IndexOf($env:QBV_MARK))
-  & { Invoke-Expression $pre; $o = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($title + '|' + $text)); Write-Output ($fi.Name + ' ' + $e.Count + ' ' + $o) }
+  & { Invoke-Expression $pre; $o = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($title + '|' + $heading + '|' + $text + '|' + ($rows -join '^'))); Write-Output ($fi.Name + ' ' + $e.Count + ' ' + $o) }
 }`
 	cmd := exec.Command(ps, "-NoProfile", "-NonInteractive", "-Command", drv)
 	cmd.Env = append(os.Environ(), "QBV_DIR="+dir, "QBV_MARK="+psBodyMarker)
@@ -270,8 +277,8 @@ func TestOsascriptSecretScript(t *testing.T) {
 	if c.Path != "/usr/bin/osascript" || !reflect.DeepEqual(c.Args, []string{"-"}) {
 		t.Fatalf("command %q %q", c.Path, c.Args)
 	}
-	want := `display dialog ` + asString(d.text) + ` with title ` + asString(d.title) +
-		` default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel" with icon caution` + "\n" +
+	want := `display dialog ` + asString(d.plain()) + ` with title ` + asString(d.title) +
+		` default answer "" with hidden answer buttons {"Cancel", "Save"} default button "Save" cancel button "Cancel" with icon note` + "\n" +
 		`return text returned of result` + "\n"
 	if string(c.Stdin) != want {
 		t.Fatalf("script:\n%s\nwant:\n%s", c.Stdin, want)
@@ -282,7 +289,7 @@ func TestOsascriptChooseAndConfirmScripts(t *testing.T) {
 	d := chooseDialog(`Allow "X"?`, []string{"once", `a "b"`, "deny"}, 1)
 	s := string(osascriptTool{}.build("osascript", d).Stdin)
 	want := `set r to choose from list {"1) once", "2) a \"b\"", "3) deny"} with prompt "Allow \"X\"?" with title ` + asString(d.title) +
-		` default items {"2) a \"b\""} OK button name "OK" cancel button name "Cancel" without multiple selections allowed and without empty selection allowed` + "\n" +
+		` default items {"2) a \"b\""} OK button name "Continue" cancel button name "Cancel" without multiple selections allowed and without empty selection allowed` + "\n" +
 		`if r is false then error number -128` + "\n" +
 		`return item 1 of r` + "\n"
 	if s != want {
@@ -290,11 +297,16 @@ func TestOsascriptChooseAndConfirmScripts(t *testing.T) {
 	}
 	cd := confirmDialog("Remove X?")
 	s = string(osascriptTool{}.build("osascript", cd).Stdin)
-	want = `display dialog "Remove X?" with title ` + asString(cd.title) +
+	want = `display dialog "Confirm\n\nRemove X?" with title ` + asString(cd.title) +
 		` buttons {"Decline", "Confirm"} default button "Decline" cancel button "Decline" with icon caution` + "\n" +
 		`return button returned of result` + "\n"
 	if s != want {
 		t.Fatalf("script:\n%s\nwant:\n%s", s, want)
+	}
+	// The warning icon is for removals only.
+	s = string(osascriptTool{}.build("osascript", confirmDialog("Use the secrets of project shop in /x?")).Stdin)
+	if first, _, _ := strings.Cut(s, "\n"); !strings.HasSuffix(first, "with icon note") {
+		t.Errorf("a plain confirmation got the warning icon:\n%s", s)
 	}
 }
 
@@ -328,13 +340,13 @@ func TestZenityArgv(t *testing.T) {
 		d    dialog
 		want []string
 	}{
-		{"secret", sd, []string{"--entry", "--hide-text", "--no-markup", "--title=" + sd.title, "--text=" + sd.text}},
+		{"secret", sd, []string{"--entry", "--hide-text", "--no-markup", "--width=480", "--title=QBit Vault", "--text=" + sd.plain(), "--ok-label=Save", "--cancel-label=Cancel"}},
 		{"choose", cd, []string{
-			"--list", "--radiolist", "--no-markup", "--title=" + cd.title, "--text=Which scope?",
-			"--column=Pick", "--column=Index", "--column=Option", "--hide-column=2", "--print-column=2",
+			"--list", "--radiolist", "--no-markup", "--width=480", "--title=QBit Vault", "--text=Which scope?",
+			"--column=Pick", "--column=Index", "--column=Option", "--hide-header", "--hide-column=2", "--print-column=2", "--ok-label=Continue", "--cancel-label=Cancel",
 			"FALSE", "1", "once", "TRUE", "2", " -danger", "FALSE", "3", "deny",
 		}},
-		{"confirm", qd, []string{"--question", "--no-markup", "--title=" + qd.title, "--text=Remove X?", "--ok-label=Confirm", "--cancel-label=Decline", "--default-cancel"}},
+		{"confirm", qd, []string{"--question", "--no-markup", "--width=480", "--title=QBit Vault", "--text=Confirm\n\nRemove X?", "--ok-label=Confirm", "--cancel-label=Decline", "--default-cancel"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -355,9 +367,9 @@ func TestKdialogArgv(t *testing.T) {
 		d    dialog
 		want []string
 	}{
-		{"secret", sd, []string{"--title", sd.title, "--password", strings.ReplaceAll(sd.text, "\n", "<br>")}},
-		{"choose", cd, []string{"--title", cd.title, "--radiolist", "Which scope?", "1", "once", "off", "2", " -danger", "on", "3", "deny", "off"}},
-		{"confirm", qd, []string{"--title", qd.title, "--radiolist", "Remove X?", "1", "Decline", "on", "2", "Confirm", "off"}},
+		{"secret", sd, []string{"--title", "QBit Vault", "--password", strings.ReplaceAll(sd.plain(), "\n", "<br>")}},
+		{"choose", cd, []string{"--title", "QBit Vault", "--radiolist", "Which scope?", "1", "once", "off", "2", " -danger", "on", "3", "deny", "off"}},
+		{"confirm", qd, []string{"--title", "QBit Vault", "--radiolist", "Confirm<br><br>Remove X?", "1", "Decline", "on", "2", "Confirm", "off"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -383,17 +395,17 @@ func TestKdialogEscapesRichText(t *testing.T) {
 		if rest := strings.ReplaceAll(text, "<br>", ""); strings.ContainsAny(rest, "<>\"") || strings.Contains(text, "\n") {
 			t.Errorf("%q: markup or raw newline left: %q", reason, text)
 		}
-		if strings.Count(text, "<br>") != strings.Count(sd.text, "\n") {
+		if strings.Count(text, "<br>") != strings.Count(sd.plain(), "\n") {
 			t.Errorf("%q: layout lines changed: %q", reason, text)
 		}
 	}
 	c := kdialogTool{}.build("kdialog", secretDialog(SecretRequest{Name: "N", Reason: "<br>value: x<b>", Host: "h", Session: "s"}))
-	if !strings.Contains(c.Args[len(c.Args)-1], "Why:      &lt;br&gt;value: x&lt;b&gt;") {
+	if !strings.Contains(c.Args[len(c.Args)-1], "Why:      &lt;br&gt;value: x&lt;b&gt;") || !strings.HasPrefix(c.Args[len(c.Args)-1], "Secret request<br><br>") {
 		t.Errorf("entities missing: %q", c.Args)
 	}
 	cd := chooseDialog("<b>Q</b> & co", []string{"<i>a</i>", "b"}, 0)
 	c = kdialogTool{}.build("kdialog", cd)
-	want := []string{"--title", cd.title, "--radiolist", "&lt;b&gt;Q&lt;/b&gt; &amp; co", "1", "&lt;i&gt;a&lt;/i&gt;", "on", "2", "b", "off"}
+	want := []string{"--title", "QBit Vault", "--radiolist", "&lt;b&gt;Q&lt;/b&gt; &amp; co", "1", "&lt;i&gt;a&lt;/i&gt;", "on", "2", "b", "off"}
 	if !reflect.DeepEqual(c.Args, want) {
 		t.Errorf("choose: %q\nwant %q", c.Args, want)
 	}
@@ -404,7 +416,7 @@ func TestArgvToolsKeepHostileTextInOneElement(t *testing.T) {
 		d := secretDialog(SecretRequest{Name: "N", Reason: tt.in, Host: "h", Session: "s"})
 		for _, tl := range []tool{zenityTool{}, kdialogTool{}} {
 			c := tl.build("x", d)
-			if len(c.Args) != 5 && len(c.Args) != 4 {
+			if len(c.Args) != 8 && len(c.Args) != 4 {
 				t.Fatalf("%s/%s: %d args", tl.name(), tt.name, len(c.Args))
 			}
 			// The reason is escaped: no raw control byte beyond the layout newlines.
@@ -414,7 +426,7 @@ func TestArgvToolsKeepHostileTextInOneElement(t *testing.T) {
 						t.Fatalf("%s/%s: raw control byte %#x in argv", tl.name(), tt.name, a[i])
 					}
 				}
-				if strings.Count(a, "\n") > 6 {
+				if strings.Count(a, "\n") > 8 {
 					t.Fatalf("%s/%s: the reason added lines", tl.name(), tt.name)
 				}
 			}
@@ -492,16 +504,21 @@ func TestDialogsEscapeRequestText(t *testing.T) {
 			t.Errorf("text lacks %q", line)
 		}
 	}
-	if !strings.Contains(d.text, "Saved in: all projects (global)") || !strings.Contains(d.text, "Value:    new") {
+	if !strings.Contains(d.text, "Saved in: all projects\n") || !strings.Contains(d.text, "Value:    new") {
 		t.Errorf("text %q", d.text)
 	}
 	d = secretDialog(SecretRequest{Name: "N", Reason: "r", Host: "h", Session: "s", Project: "shop", Existing: true})
 	if !strings.Contains(d.text, "Saved in: project shop") || !strings.Contains(d.text, "replaces the saved value") {
 		t.Errorf("text %q", d.text)
 	}
-	cd := chooseDialog("a\nb", []string{"x\ny"}, 0)
-	if strings.Contains(cd.text, "\n") || strings.Contains(cd.options[0], "\n") {
+	// A question is laid out by its caller: its line breaks stay, an option
+	// is one line, and the agent's text is made one line with Escape.
+	cd := chooseDialog("a\nb\x1b[2J", []string{"x\ny"}, 0)
+	if cd.text != "a\nb\\x1b[2J" || strings.Contains(cd.options[0], "\n") {
 		t.Errorf("choose not escaped: %q %q", cd.text, cd.options)
+	}
+	if got := Escape("x\nWhy: fake"); got != `x\nWhy: fake` {
+		t.Errorf("Escape left a line break: %q", got)
 	}
 	if strings.Contains(confirmDialog("a\x1bb").text, "\x1b") {
 		t.Error("confirm not escaped")
@@ -563,7 +580,7 @@ func TestNativeNeverPutsTheValueInTheCommand(t *testing.T) {
 		if _, err := b.Secret(req); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := b.Passphrase(true); err != nil {
+		if _, err := b.Passphrase(VaultPassphrase.Twice()); err != nil {
 			t.Fatal(err)
 		}
 		for _, c := range f.cmds {
@@ -673,13 +690,13 @@ func TestNativeConfirm(t *testing.T) {
 
 func TestNativePassphrase(t *testing.T) {
 	f := &fakeRun{res: []result{ok(fxPass + "\n")}}
-	sec, err := nativeOf(zenityTool{}, f).Passphrase(false)
+	sec, err := nativeOf(zenityTool{}, f).Passphrase(VaultPassphrase)
 	if err != nil || string(sec.Reveal()) != fxPass || sec.Name() != "passphrase" || len(f.cmds) != 1 {
 		t.Fatalf("single: %v %d", err, len(f.cmds))
 	}
 
 	f = &fakeRun{res: []result{ok(fxPass + "\n"), ok(fxPass + "\n")}}
-	sec, err = nativeOf(zenityTool{}, f).Passphrase(true)
+	sec, err = nativeOf(zenityTool{}, f).Passphrase(VaultPassphrase.Twice())
 	if err != nil || string(sec.Reveal()) != fxPass || len(f.cmds) != 2 {
 		t.Fatalf("confirmed: %v %d", err, len(f.cmds))
 	}
@@ -689,7 +706,7 @@ func TestNativePassphrase(t *testing.T) {
 
 	a, b := []byte(fxPass+"\n"), []byte(fxPass+"x\n")
 	f = &fakeRun{res: []result{{Stdout: a}, {Stdout: b}}}
-	sec, err = nativeOf(zenityTool{}, f).Passphrase(true)
+	sec, err = nativeOf(zenityTool{}, f).Passphrase(VaultPassphrase.Twice())
 	if !errors.Is(err, ErrMismatch) || sec.Len() != 0 {
 		t.Fatalf("mismatch: %v", err)
 	}
@@ -698,7 +715,7 @@ func TestNativePassphrase(t *testing.T) {
 	}
 
 	f = &fakeRun{res: []result{ok(fxPass + "\n"), {Exit: 1}}}
-	if _, err = nativeOf(zenityTool{}, f).Passphrase(true); !errors.Is(err, ErrCancelled) {
+	if _, err = nativeOf(zenityTool{}, f).Passphrase(VaultPassphrase.Twice()); !errors.Is(err, ErrCancelled) {
 		t.Fatalf("cancel on confirm: %v", err)
 	}
 }

@@ -4,6 +4,19 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Changed
+
+- Dialogs speak with one voice on Windows, macOS, Linux and the terminal. Every window is titled `QBit Vault` and its heading says what it is (`Secret request`, `Permission request`, `Confirm`, `Recovery key`, `Pairing code`, `Vault passphrase`, `Export passphrase`); the `qbit-vault:` title prefix is gone.
+- The permission question names who asks and puts the reason on its own line: `Claude Code wants to use GITHUB_TOKEN (all projects).` / `Why: <reason>`. Replacing a value at an agent's request offers `Replace, allow once`, `Replace, always in this project`, `Replace, but ask me before each use` and `Don't replace`.
+- Passphrase prompts say what they protect: `Vault passphrase`, `Export passphrase (protects this backup file)` (asked again as `Type the export passphrase again`) and `Passphrase of the export file`. `Who:` reads `you (qbit-vault)` for a command you run.
+- Buttons say the action (`Save`, `Continue`, `Done`; `Confirm` / `Decline` is unchanged), the Windows confirmation highlights `Decline`, and the request lines are a two-column grid. The several-fields form has no `Value:` line; each box says whether it is hidden.
+- Shorter, consistent copy: `Paste or type the value. The agent never sees it:`, `Value (hidden): `, `Type a number from 1 to N, or press Enter for the default.`, `No answer in time; nothing was saved.`, `Save it, don't allow yet`, a plainer quotes check, and `all projects` / `Only this project (<label>)` for layers everywhere. The TUI says `asked in a secure prompt` and `hidden`.
+
+### Fixed
+
+- Ctrl-C at a terminal menu, y/N question or Press-Enter screen cancels (exit 1) instead of killing the process mid-write.
+- Linux with only kdialog shows the recovery key and the pairing code in the terminal instead of failing; zenity dialogs are 480 px wide and their lists have no `Pick` / `Index` headers; the macOS icon is `note`, and `caution` only for a removal.
+
 ## [0.1.0-beta.12] - 2026-11-06
 
 ### Fixed

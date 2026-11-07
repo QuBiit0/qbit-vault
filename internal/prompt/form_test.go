@@ -20,14 +20,14 @@ var formReqs = []SecretRequest{
 
 func TestFormDialog(t *testing.T) {
 	d := formDialog(formReqs)
-	if d.kind != dialogForm || len(d.fields) != 2 || d.fields[0].label != "Host" || !d.fields[0].visible || d.fields[1].visible {
+	if d.kind != dialogForm || len(d.fields) != 2 || d.fields[0].label != "Host (shown while you type)" || !d.fields[0].visible || d.fields[1].visible {
 		t.Fatalf("dialog=%+v", d)
 	}
 	if !strings.Contains(d.text, "DB_HOST, DB_PASSWORD") || !strings.Contains(d.text, "run the shop-api migrations") {
 		t.Fatalf("text=%q", d.text)
 	}
 	unnamed := formDialog([]SecretRequest{{Name: "A\x1b[31m"}, {Name: "B"}})
-	if unnamed.fields[0].label != `A\x1b[31m` {
+	if unnamed.fields[0].label != `A\x1b[31m (hidden)` {
 		t.Fatalf("label not escaped: %q", unnamed.fields[0].label)
 	}
 }
@@ -35,7 +35,7 @@ func TestFormDialog(t *testing.T) {
 func TestZenityForm(t *testing.T) {
 	d := formDialog(formReqs)
 	got := zenityTool{}.buildForm("/usr/bin/zenity", d).Args
-	want := []string{"--forms", "--no-markup", "--title=" + d.title, "--text=" + d.text, "--separator=" + formSep, "--add-entry=Host", "--add-password=Password"}
+	want := []string{"--forms", "--no-markup", "--width=480", "--title=QBit Vault", "--text=" + d.plain(), "--ok-label=Save", "--cancel-label=Cancel", "--separator=" + formSep, "--add-entry=Host (shown while you type)", "--add-password=Password (hidden)"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
@@ -158,7 +158,7 @@ func TestPowerShellFormBlankLastField(t *testing.T) {
 // W3, W4 in the header.
 func TestHeaderShowsDescriptionAndStored(t *testing.T) {
 	h := Header(SecretRequest{Name: "A", Reason: "x y z", Description: "staging \x1b[31mdb", Stored: []string{"B", "C"}})
-	if !strings.Contains(h, `  About:    staging \x1b[31mdb`+"\n") || !strings.Contains(h, "  Already saved, not asked again: B, C\n") {
+	if !strings.Contains(h, `  About:    staging \x1b[31mdb`+"\n") || !strings.Contains(h, "  Already saved: B, C (not asked again)\n") {
 		t.Fatalf("header=%q", h)
 	}
 }

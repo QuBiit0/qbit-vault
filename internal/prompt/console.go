@@ -2,8 +2,10 @@ package prompt
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
+	"os/signal"
 	"runtime"
 
 	"golang.org/x/term"
@@ -18,6 +20,9 @@ const maxInput = 64*1024 + 4096 + 1
 // the caller controls cannot answer (L3).
 type console struct {
 	in, out *os.File
+	// interrupts delivers Ctrl-C during a line read and stops delivering it
+	// when released; nil means the process's own SIGINT.
+	interrupts func() (<-chan os.Signal, func())
 }
 
 // openConsole opens the controlling terminal, or reports ErrUnavailable.
@@ -59,14 +64,35 @@ func (c *console) Close() error {
 	return err
 }
 
-func (c *console) ReadLine(ctx context.Context) ([]byte, error) {
-	return untilDone(ctx, func() ([]byte, error) { return readLine(c.in) })
+// notifyInterrupt is the process's SIGINT for the length of one read.
+func notifyInterrupt() (<-chan os.Signal, func()) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt)
+	return ch, func() { signal.Stop(ch) }
 }
 
-// untilDone runs read and returns its result, or ctx.Err() if ctx ends first.
-// A blocked console read cannot be interrupted, so it is left behind; the
-// process is about to exit with the timeout.
-func untilDone(ctx context.Context, read func() ([]byte, error)) ([]byte, error) {
+// ReadLine reads an echoed line. The terminal is in cooked mode, where Ctrl-C
+// is a signal that would kill the process in the middle of whatever it is
+// writing: it is taken here and answered as a cancel, like in a hidden read.
+func (c *console) ReadLine(ctx context.Context) ([]byte, error) {
+	sub := c.interrupts
+	if sub == nil {
+		sub = notifyInterrupt
+	}
+	sigs, release := sub()
+	defer release()
+	b, err := untilDone(ctx, sigs, func() ([]byte, error) { return readLine(c.in) })
+	if errors.Is(err, ErrCancelled) {
+		_, _ = io.WriteString(c.out, "\r\n")
+	}
+	return b, err
+}
+
+// untilDone runs read and returns its result, ctx.Err() if ctx ends first, or
+// ErrCancelled if an interrupt arrives first (sigs may be nil). A blocked
+// console read cannot be interrupted, so it is left behind; the process is
+// about to exit with the timeout or the cancel.
+func untilDone(ctx context.Context, sigs <-chan os.Signal, read func() ([]byte, error)) ([]byte, error) {
 	type result struct {
 		b   []byte
 		err error
@@ -79,6 +105,8 @@ func untilDone(ctx context.Context, read func() ([]byte, error)) ([]byte, error)
 	select {
 	case r := <-ch:
 		return r.b, r.err
+	case <-sigs:
+		return nil, ErrCancelled
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -95,7 +123,7 @@ func (c *console) ReadHidden(ctx context.Context) ([]byte, error) {
 		return nil, ErrNoTerminal
 	}
 	defer func() { _ = term.Restore(fd, state) }()
-	b, err := untilDone(ctx, func() ([]byte, error) {
+	b, err := untilDone(ctx, nil, func() ([]byte, error) {
 		return readHidden(c.in, c.out, func() { flushInput(c.in) })
 	})
 	if err != nil && ctx.Err() != nil {

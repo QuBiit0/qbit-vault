@@ -21,7 +21,7 @@ func TestFakeScriptAndCalls(t *testing.T) {
 	if y, err := f.Confirm("sure?"); err != nil || !y {
 		t.Fatalf("Confirm: %v, %v", y, err)
 	}
-	if p, err := f.Passphrase(true); err != nil || string(p.Reveal()) != "TESTSECRET_p" {
+	if p, err := f.Passphrase(prompt.VaultPassphrase.Twice()); err != nil || string(p.Reveal()) != "TESTSECRET_p" {
 		t.Fatalf("Passphrase: %v", err)
 	}
 	if _, err := f.Confirm("again?"); !errors.Is(err, prompt.ErrCancelled) {

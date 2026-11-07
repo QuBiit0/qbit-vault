@@ -69,10 +69,10 @@ func TestHeaderContent(t *testing.T) {
 		req  SecretRequest
 		want []string
 	}{
-		{"project new", req, []string{"QBit Vault: secret request\n", "  Who:      Claude Code (session sess-aaa)\n", "  Secret:   GITHUB_TOKEN\n", "  Why:      run the release\n", "  Saved in: project shop-api\n", "  Value:    new (hidden as you type)\n"}},
-		{"global stored", SecretRequest{Name: "A_KEY", Reason: "r", Host: "pi", Session: "pi:s-1234", Existing: true}, []string{"  Who:      Pi (session s-1234)\n", "  Saved in: all projects (global)\n", "  Value:    replaces the saved value (hidden as you type)\n"}},
-		{"no host or session", SecretRequest{Name: "A_KEY", Reason: "r"}, []string{"  Who:      an agent\n", "  Saved in: all projects (global)\n"}},
-		{"cli", SecretRequest{Name: "A_KEY", Reason: "r", Host: "cli", Session: "cli:abcdefghij"}, []string{"  Who:      you (qbit-vault set) (session abcdefgh)\n"}},
+		{"project new", req, []string{"QBit Vault: secret request\n", "  Who:      Claude Code (session sess-aaa)\n", "  Secret:   GITHUB_TOKEN\n", "  Why:      run the release\n", "  Saved in: project shop-api\n", "  Value:    new\n"}},
+		{"global stored", SecretRequest{Name: "A_KEY", Reason: "r", Host: "pi", Session: "pi:s-1234", Existing: true}, []string{"  Who:      Pi (session s-1234)\n", "  Saved in: all projects\n", "  Value:    replaces the saved value\n"}},
+		{"no host or session", SecretRequest{Name: "A_KEY", Reason: "r"}, []string{"  Who:      an agent\n", "  Saved in: all projects\n"}},
+		{"cli", SecretRequest{Name: "A_KEY", Reason: "r", Host: "cli", Session: "cli:abcdefghij"}, []string{"  Who:      you (qbit-vault)\n"}},
 		{"mcp", SecretRequest{Name: "A_KEY", Reason: "r", Host: "mcp", Session: "mcp:1d54cd6db0bd3631"}, []string{"  Who:      your agent (session 1d54cd6d)\n"}},
 	}
 	for _, tt := range tests {
@@ -177,7 +177,7 @@ func TestSecretCancel(t *testing.T) {
 func TestPassphrase(t *testing.T) {
 	t.Run("confirm matches", func(t *testing.T) {
 		b, term := backendOf(fxPass, fxPass)
-		got, err := b.Passphrase(true)
+		got, err := b.Passphrase(VaultPassphrase.Twice())
 		if err != nil || string(got.Reveal()) != fxPass {
 			t.Fatalf("err = %v", err)
 		}
@@ -190,7 +190,7 @@ func TestPassphrase(t *testing.T) {
 	})
 	t.Run("mismatch", func(t *testing.T) {
 		b, term := backendOf(fxPass, fxPass+"x")
-		got, err := b.Passphrase(true)
+		got, err := b.Passphrase(VaultPassphrase.Twice())
 		if !errors.Is(err, ErrMismatch) || got.Len() != 0 {
 			t.Fatalf("err = %v, len = %d", err, got.Len())
 		}
@@ -200,7 +200,7 @@ func TestPassphrase(t *testing.T) {
 	})
 	t.Run("asked once without confirm", func(t *testing.T) {
 		b, term := backendOf(fxPass)
-		got, err := b.Passphrase(false)
+		got, err := b.Passphrase(VaultPassphrase)
 		if err != nil || string(got.Reveal()) != fxPass || len(term.hidden) != 1 {
 			t.Fatalf("err = %v, reads = %v", err, term.hidden)
 		}
@@ -208,14 +208,14 @@ func TestPassphrase(t *testing.T) {
 	t.Run("cancel at either question", func(t *testing.T) {
 		for _, lines := range [][]string{{ctrlC}, {fxPass, ctrlC}, {fxPass}} {
 			b, _ := backendOf(lines...)
-			if _, err := b.Passphrase(true); !errors.Is(err, ErrCancelled) {
+			if _, err := b.Passphrase(VaultPassphrase.Twice()); !errors.Is(err, ErrCancelled) {
 				t.Errorf("%d lines: err = %v", len(lines), err)
 			}
 		}
 	})
 	t.Run("surrounding space is kept", func(t *testing.T) {
 		b, _ := backendOf(" a b ")
-		got, err := b.Passphrase(false)
+		got, err := b.Passphrase(VaultPassphrase)
 		if err != nil || string(got.Reveal()) != " a b " {
 			t.Fatalf("err = %v", err)
 		}
@@ -230,7 +230,7 @@ func TestChoose(t *testing.T) {
 		def     int
 		want    int
 		err     error
-		invalid bool // an "invalid choice" message is expected
+		invalid bool // the "Type a number" message is expected
 	}{
 		{"empty takes the default", []string{""}, 0, 0, nil, false},
 		{"empty takes another default", []string{"  "}, 1, 1, nil, false},
@@ -253,7 +253,7 @@ func TestChoose(t *testing.T) {
 			if !strings.Contains(o, "Where does it live?") || !strings.Contains(o, "1) global") || !strings.Contains(o, "2) this project (shop-api)") {
 				t.Errorf("menu not rendered:\n%s", o)
 			}
-			if strings.Contains(o, "invalid choice") != tt.invalid {
+			if strings.Contains(o, "Type a number from 1 to 2, or press Enter for the default.\n") != tt.invalid {
 				t.Errorf("invalid-choice message present = %v, want %v", !tt.invalid, tt.invalid)
 			}
 			for _, h := range term.hidden {
@@ -333,7 +333,7 @@ func TestUnavailableTerminal(t *testing.T) {
 	if _, err := b.Confirm("q"); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("Confirm: %v", err)
 	}
-	if _, err := b.Passphrase(false); !errors.Is(err, ErrUnavailable) {
+	if _, err := b.Passphrase(VaultPassphrase); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("Passphrase: %v", err)
 	}
 	if got := ErrNoTerminal.Error(); got != "no controlling terminal available" {
@@ -487,7 +487,7 @@ func TestReadHiddenFlushesOnCancel(t *testing.T) {
 func TestTrailingInputRefusesValueAndPassphrase(t *testing.T) {
 	for name, call := range map[string]func(Backend) (int, error){
 		"secret":     func(b Backend) (int, error) { s, err := b.Secret(req); return s.Len(), err },
-		"passphrase": func(b Backend) (int, error) { s, err := b.Passphrase(true); return s.Len(), err },
+		"passphrase": func(b Backend) (int, error) { s, err := b.Passphrase(VaultPassphrase.Twice()); return s.Len(), err },
 	} {
 		t.Run(name, func(t *testing.T) {
 			term := &memTerm{trail: true}
@@ -506,7 +506,7 @@ func TestTrailingInputRefusesValueAndPassphrase(t *testing.T) {
 func TestTimeout(t *testing.T) {
 	calls := map[string]func(Backend) error{
 		"secret":     func(b Backend) error { _, err := b.Secret(req); return err },
-		"passphrase": func(b Backend) error { _, err := b.Passphrase(false); return err },
+		"passphrase": func(b Backend) error { _, err := b.Passphrase(VaultPassphrase); return err },
 		"choose":     func(b Backend) error { _, err := b.Choose("q", []string{"a"}, 0); return err },
 		"confirm":    func(b Backend) error { _, err := b.Confirm("q"); return err },
 	}
@@ -516,7 +516,7 @@ func TestTimeout(t *testing.T) {
 			b := New(func() (Terminal, error) { return term, nil }, Timeout(30*time.Millisecond))
 			start := time.Now()
 			err := call(b)
-			if !errors.Is(err, ErrTimeout) || err.Error() != "prompt timed out" {
+			if !errors.Is(err, ErrTimeout) || err.Error() != "No answer in time; nothing was saved." {
 				t.Fatalf("err = %v", err)
 			}
 			if time.Since(start) > 5*time.Second {

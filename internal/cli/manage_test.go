@@ -23,7 +23,7 @@ func TestManageRemove(t *testing.T) {
 		t.Fatalf("code=%d out=%s", code, out)
 	}
 	q := f.Calls[0].Q
-	if f.Calls[0].Kind != "confirm" || !strings.Contains(q, "remove A (global)") || !strings.Contains(q, manageReason) {
+	if f.Calls[0].Kind != "confirm" || !strings.Contains(q, "remove A (all projects)") || !strings.Contains(q, manageReason) {
 		t.Fatalf("question=%q", q)
 	}
 	if strings.Contains(w.snapshot(), `"name":"A"`) {
@@ -127,7 +127,7 @@ func TestManageEditBlankEntriesAreWidening(t *testing.T) {
 	}
 	f := withBackend(t, answers(yes()))
 	w.broker("manage", manageReq(w.outside, `"action":"edit","name":"A","layer":"global","changes":{"binaries":[" gh "]}`))
-	if q := f.Calls[0].Q; !strings.Contains(q, "binaries: gh -> gh;") && !strings.HasSuffix(strings.Split(q, ". Reason")[0], "binaries: gh -> gh") {
+	if q := f.Calls[0].Q; !strings.Contains(q, "binaries: gh -> gh;") && !strings.HasSuffix(strings.Split(q, ".\nWhy")[0], "binaries: gh -> gh") {
 		t.Fatalf("question=%q", q)
 	}
 }

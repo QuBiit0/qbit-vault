@@ -50,7 +50,7 @@ func TestScriptedBackendAnswersInOrderAndWritesTranscript(t *testing.T) {
 	if i, err := b.Choose("scope", []string{"a", "b", "c"}, 0); err != nil || i != 1 {
 		t.Fatalf("choose = %d, %v", i, err)
 	}
-	p, err := b.Passphrase(true)
+	p, err := b.Passphrase(VaultPassphrase.Twice())
 	if err != nil || string(p.Reveal()) != "TESTSECRET_pass" {
 		t.Fatalf("passphrase: %v", err)
 	}

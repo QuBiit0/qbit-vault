@@ -64,7 +64,7 @@ The dialogs open on a real desktop and cannot run in CI; unit tests cover the co
 2. **macOS.** `qbit-vault set NAME` shows the hidden-answer dialog with the request; Cancel ends `cancelled`; `qbit-vault grant NAME` shows the scope list; over `ssh` from a machine with no GUI app the terminal prompt is used.
 3. **Linux, GNOME (zenity) and KDE (kdialog).** With `DISPLAY` or `WAYLAND_DISPLAY` set, `set` opens the dialog; on a console login (no display) the terminal prompt is used; `QBIT_VAULT_PROMPT=kdialog` on a machine without it fails with `prompt backend kdialog is unavailable`.
 4. **Several fields.** A `secret_request` with a `text` and a `secret` field: PowerShell and zenity show one form (the text box visible, the secret box masked); osascript, kdialog and the terminal ask one box after the other with `field N of M`; Cancel on any box stores nothing.
-5. **Every OS.** The value is stored (`exec` with a grant prints it redacted); nothing of the value is in the process list command lines while the dialog is open; a dialog left open ends with `prompt timed out` after `QBIT_VAULT_PROMPT_TIMEOUT` and the helper process is gone.
+5. **Every OS.** The value is stored (`exec` with a grant prints it redacted); nothing of the value is in the process list command lines while the dialog is open; a dialog left open ends with `No answer in time; nothing was saved.` after `QBIT_VAULT_PROMPT_TIMEOUT` and the helper process is gone.
 
 ## CI (`.github/workflows/ci.yml`)
 

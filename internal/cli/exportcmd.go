@@ -12,6 +12,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/audit"
 	"github.com/QuBiit0/qbit-vault/internal/exitcode"
 	"github.com/QuBiit0/qbit-vault/internal/exportfile"
+	"github.com/QuBiit0/qbit-vault/internal/prompt"
 	"github.com/QuBiit0/qbit-vault/internal/secret"
 	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
@@ -82,7 +83,7 @@ func newExport(g *globals) *cobra.Command {
 			if err != nil {
 				return promptFail(err, "")
 			}
-			pass, err := ask.Passphrase(true)
+			pass, err := ask.Passphrase(prompt.ExportPassphrase.Twice())
 			if err != nil {
 				return promptFail(err, "")
 			}
@@ -195,7 +196,7 @@ func importFromExport(g *globals, cmd *cobra.Command, file string, yes bool) err
 	if err != nil {
 		return promptFail(err, "")
 	}
-	pass, err := ask.Passphrase(false)
+	pass, err := ask.Passphrase(prompt.ImportPassphrase)
 	if err != nil {
 		return promptFail(err, "")
 	}

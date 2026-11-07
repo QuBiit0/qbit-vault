@@ -44,7 +44,7 @@ Available Commands:
   restore     List encrypted backups or restore the vault from one
   revoke      Revoke grants
   rm          Delete a secret
-  set         Store or replace a secret value (masked prompt, or --stdin)
+  set         Store or replace a secret value (hidden prompt, or --stdin)
   sync        Re-apply the recorded host registrations (not vault sync: see 'remote')
   uninstall   Revert the host registrations; with --purge also delete the vault
   unlock      Passphrase mode: ask the passphrase and refresh the cached master key

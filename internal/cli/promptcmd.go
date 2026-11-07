@@ -245,7 +245,7 @@ func newPromptCmd(g *globals) *cobra.Command {
 
 			opts, def := scopeLabels(allowed, "", false)
 			opts = append(opts, denyOption)
-			i, err := ask.Choose(allowQuestion([]string{name + " (" + whereText(layerChoice) + ")"}, reason), opts, def)
+			i, err := ask.Choose(allowQuestion(prompt.Requester(hostOf(g.Session), ""), []string{name + " (" + whereText(layerChoice) + ")"}, reason), opts, def)
 			if err != nil {
 				return promptFail(err, "")
 			}

@@ -54,7 +54,7 @@ cd my-project
 qbit-vault set DATABASE_URL --project      # only for this repository
 ```
 
-You type the value in a masked prompt: it is not echoed and not kept in your shell history. You can also skip this step and let the agent ask for what it needs.
+You type the value in a hidden prompt: it is not echoed and not kept in your shell history. You can also skip this step and let the agent ask for what it needs.
 
 ### 4. Use it from your agent
 

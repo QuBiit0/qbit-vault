@@ -307,7 +307,7 @@ func newSet(g *globals) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "set NAME [--global|--project] [--stdin] [--grant once|session|project [--from-prompt-token T]]",
-		Short: "Store or replace a secret value (masked prompt, or --stdin)",
+		Short: "Store or replace a secret value (hidden prompt, or --stdin)",
 		Args:  nameArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
@@ -363,7 +363,7 @@ func newSet(g *globals) *cobra.Command {
 				case perr == nil && stdin:
 					return usageError{"choose --global or --project"}
 				case perr == nil:
-					i, err := ask.Choose("Where should "+name+" live?", []string{"global", "this project (" + proj.Label + ")"}, 0)
+					i, err := ask.Choose("Where should "+name+" live?", layerOptions(proj), 0)
 					if err != nil {
 						return promptFail(err, "use --stdin")
 					}
@@ -491,7 +491,7 @@ func newSet(g *globals) *cobra.Command {
 	}
 	lf.bind(cmd)
 	meta.bind(cmd)
-	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the value from stdin instead of the masked prompt")
+	cmd.Flags().BoolVar(&stdin, "stdin", false, "read the value from stdin instead of the hidden prompt")
 	cmd.Flags().StringVar(&grantStr, "grant", "", "also grant the secret to --session: once, session or project (with --stdin it needs --from-prompt-token; interactively it is the proposed scope)")
 	cmd.Flags().StringVar(&token, "from-prompt-token", "", "prompt token that confirms --grant (with --stdin)")
 	return cmd
@@ -538,7 +538,7 @@ func newRm(g *globals) *cobra.Command {
 			}
 			e.Record.Value.Wipe()
 			if !yes {
-				if err := confirmChange(ask, fmt.Sprintf("Remove %s (%s)?", name, layerText(e.Layer)), usageError{"confirmation required; pass --yes"}); err != nil {
+				if err := confirmChange(ask, fmt.Sprintf("Remove %s (%s)?", name, whereText(e.Layer)), usageError{"confirmation required; pass --yes"}); err != nil {
 					return err
 				}
 			}

@@ -196,7 +196,7 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | LP3 | S6 | worker + parent correction | 076a8da, 80ed221, d3ba4df | done, beta.12 |
 | LP4 | S7 | worker | 9b222e6, 5631041 | done (ships in beta.13) |
 | LP5 | S8 | worker | | done, awaiting review |
-| LP5b | S9 | worker | | in progress |
+| LP5b | S9 | worker + parent (OCI labels) | feat/server-image-status | done, beta.14 |
 | LP6-LP7 | S1-S3 | plan steps 6-7 | | pending |
 
 ## Log
@@ -217,3 +217,4 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L12. Step 5: goreleaser check and a full snapshot build passed (install.sh and install.ps1 in checksums.txt). Review approved; R1-001 (a test PATH override could be written into the real user PATH) fixed before release. Released as 0.1.0-beta.13, the first regular (non pre-release) release, so releases/latest/download serves the installers.
 - L13. beta.13 released as a regular release: 11 assets incl. install.sh/install.ps1; releases/latest/download/install.{sh,ps1} answer 200; this machine reinstalled from the new URL (v0.1.0-beta.13, doctor healthy). Owner asked about simplicity; assessment given (local ~8/10, sync ~5/10). Step 5b added (S9): published server image, branded status page (no web secret management, owner agreed), README first 5 minutes.
 - L14. LP5b (S9.1-S9.4) done by worker, not committed. S9.2 RED first (status_test.go, the page was a 404), then status.go and the route GET /{$}; S9.1 server-image job in release.yml (needs release, contents read + packages write, four docker actions pinned to SHAs, VERSION build arg into QBV_SERVER_VERSION in the Dockerfile), deploy/compose.image.yaml, structural tests in release_files_test.go; S9.3 README First 5 minutes and assets/screenshots/permission-dialog.png rendered with the real builder (temporary test deleted). Image built locally and run: /v1/info and the page report the baked version. Left for the owner: the first push creates the ghcr package as private; make it public in the package settings so compose.image.yaml pulls without login.
+- L15. Step 5b: parent added OCI labels (source, description, license) so the ghcr package links to the repository; docker build verified with the label. Review (risk, reliability) approved, advisory on tests only. Released as 0.1.0-beta.14.

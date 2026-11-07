@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.14] - 2026-11-07
+
 ### Added
 
 - The release publishes the sync server image `ghcr.io/qubiit0/qbit-vault-server` (linux/amd64 and linux/arm64, tagged with the release version and `latest`, version baked in). `deploy/compose.image.yaml` runs it with the same hardening as `deploy/compose.yaml`: copy one file, set `QBV_SERVER_PUBLIC_URL`, `docker compose up -d`. `deploy/README.md` and `docs/INSTALL.md` show that path first.

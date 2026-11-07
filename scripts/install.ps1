@@ -123,10 +123,12 @@ function Install-QBitVault {
         if ($old) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
         Say "installed $target"
 
+        # QBIT_VAULT_USER_PATH stands in for the user PATH in the tests; it is
+        # only read, never written back.
         $userPath = if ($env:QBIT_VAULT_USER_PATH) { $env:QBIT_VAULT_USER_PATH } else { [Environment]::GetEnvironmentVariable('Path', 'User') }
         # A trailing backslash (and case) must not make the same directory look new.
         $onPath = @($userPath -split ';' | ForEach-Object { $_.TrimEnd('\') }) -contains $installDir.TrimEnd('\')
-        if (-not $onPath -and $env:QBIT_VAULT_NO_PATH -ne '1') {
+        if (-not $onPath -and $env:QBIT_VAULT_NO_PATH -ne '1' -and -not $env:QBIT_VAULT_USER_PATH) {
             $newPath = if ($userPath) { "$userPath;$installDir" } else { $installDir }
             [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
             $env:Path = "$env:Path;$installDir"

@@ -13,7 +13,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
-// Slice S.8: the sync round inside the ordinary commands (REMOTE_SYNC § 7.1).
+// The sync round inside the ordinary commands (REMOTE_SYNC § 7.1).
 // Two devices share one in-process server; a tap in front of it counts the
 // requests and can drop every connection.
 

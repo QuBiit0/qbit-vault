@@ -403,7 +403,7 @@ func TestAuditUsageErrors(t *testing.T) {
 	}{
 		{"tail zero", []string{"audit", "--tail", "0"}, "invalid --tail: must be a positive number"},
 		{"tail negative", []string{"audit", "--tail", "-3"}, "invalid --tail: must be a positive number"},
-		{"tail not a number", []string{"audit", "--tail", "many"}, "invalid value for --tail"},
+		{"tail not a number", []string{"audit", "--tail", "many"}, "invalid value for --tail; see 'qbit-vault audit --help'"},
 		{"since garbage", []string{"audit", "--since", "TESTSECRET_x"}, "invalid --since: use a duration such as 24h"},
 		{"since zero", []string{"audit", "--since", "0s"}, "invalid --since: use a duration such as 24h"},
 		{"since negative", []string{"audit", "--since", "-1h"}, "invalid --since: use a duration such as 24h"},

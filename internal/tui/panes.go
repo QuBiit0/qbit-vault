@@ -341,21 +341,21 @@ func (m Model) doctorDetail(w int) (string, []string) {
 
 // ---- Update ----
 
-// updateCommand is how to update today; the screen only shows it.
+// updateCommand is the Go way to upgrade; the screen only shows it.
 const updateCommand = "go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest"
 
 func (m Model) updateBody(w int) []string {
 	t := m.theme
-	rows := []string{"", t.Warn("Planned"), "", t.Frost("Self-update is not available yet.")}
-	rows = append(rows, wrapAll(t.Mist, "Update is planned for Phase 5, with signed releases.", w)...)
+	rows := []string{"", t.Frost("Re-run the install command to upgrade.")}
+	rows = append(rows, wrapAll(t.Mist, "The installer replaces the binary in place and re-applies your agent registrations.", w)...)
 	return rows
 }
 
 func (m Model) updateDetail(w int) (string, []string) {
 	t := m.theme
 	rows := []string{""}
-	rows = append(rows, wrapAll(t.Frost, "Until then, update by hand with the command below.", w)...)
+	rows = append(rows, wrapAll(t.Frost, "Run the one-line installer from the README again, or use the Go command below.", w)...)
 	rows = append(rows, "")
 	rows = append(rows, wrapAll(t.Mist, "No network call is made here.", w)...)
-	return "Update by hand", rows
+	return "Install command", rows
 }

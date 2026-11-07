@@ -22,15 +22,15 @@ QBit Vault (`qbit-vault`) is a local secrets broker for coding agents. Claude Co
 
 ```bash
 # Linux, macOS, WSL
-curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh
+curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
 ```
 
-The script downloads the latest release for your system, checks its SHA-256 and installs `qbit-vault` (Linux and macOS: `~/.local/bin`; Windows: added to your `PATH`, open a new terminal). Running it again upgrades in place. With Go 1.26+ you can use `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` instead. Options and details: [docs/INSTALL.md](docs/INSTALL.md).
+The scripts are assets of every release (`releases/latest/download/…`); the copies in `scripts/` are the same files. The script downloads the latest release for your system, checks its SHA-256 and installs `qbit-vault` (Linux and macOS: `~/.local/bin`; Windows: added to your `PATH`, open a new terminal). Running it again upgrades in place. With Go 1.26+ you can use `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` instead. Options and details: [docs/INSTALL.md](docs/INSTALL.md).
 
 ### 2. Set it up
 
@@ -203,7 +203,11 @@ A broken machine should not cost you the vault. `qbit-vault export FILE` writes 
 
 ## Several machines (optional)
 
-Keep one vault on several machines with `qbit-vault-server`, a small service you host yourself. On a single machine you do not need it.
+**Sync is optional: using QBit Vault on one machine needs no account and no server.**
+
+Keep one vault on several machines with `qbit-vault-server`, a small service you host yourself.
+
+> **Two commands share the word "sync".** `qbit-vault sync` re-applies your coding-agent registrations (after an upgrade or when an agent rewrote its config). `qbit-vault remote sync` syncs your secrets between devices. When your vault syncs with a server, `qbit-vault sync` reminds you of the second one.
 
 - **Zero-knowledge.** The server stores ciphertext, public keys and counters. It has nothing that decrypts them, and the client verifies every object it downloads.
 - **Opt-in.** A vault that never runs `qbit-vault remote register` makes no network call.

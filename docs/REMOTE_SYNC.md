@@ -123,6 +123,17 @@ Other devices see generation `g+1` on their next pull (the generation in the cle
 - `remote status`: server, account (first 8 hex), device, generation, version, last sync, pending push, conflicts, devices, anchor state. Read-only, never prompts and never finishes a rekey: without a key that opens the vault as it is, the counts that need the encrypted roster read `locked (run 'qbit-vault unlock')`.
 - `remote devices`: the roster (labels from the encrypted body, last sync per device, revoked ones marked).
 
+### 4.7 The server is lost or wiped
+
+Nothing local is lost: every device keeps its vault and keeps working, only the sync stops (a round fails with `remote_unreachable`). The recovery keys of the old server no longer apply, because they opened accounts that no longer exist. Start again on the new or empty server:
+
+1. Keep an `export` of the vault first (`INSTALL.md` § Backup without a server).
+2. On each device: `qbit-vault remote logout` (the best-effort call to the old server may fail; the local vault and key stay).
+3. On one device, the one with the secrets you want: `qbit-vault remote register --server URL` (it shows a new recovery key).
+4. On every other device: `qbit-vault remote join --server URL`, approved with `remote approve` on a device that is already in.
+
+A device that joins with secrets of its own merges them into the account (§ 4.4).
+
 ## 5. Server authentication
 
 - **Device token.** `POST /v1/auth/challenge {device_id}` returns a 32-byte nonce valid 60 s; `POST /v1/auth/token {device_id, nonce, sig}` where `sig = Ed25519(sign_key, "qbit-vault/auth/v1" ‖ server_origin ‖ nonce)` returns a random bearer token valid 15 minutes. Binding `server_origin` (the configured public URL) stops a signature from being relayed to another server.

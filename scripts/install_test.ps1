@@ -156,7 +156,8 @@ try {
     # 9. No vault yet: no sync, the next step is init.
     $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest9')
     Check 'no vault: sync is not run' ((SyncLog) -eq '')
-    Check 'no vault: next step is init' ($r.Out -match [regex]::Escape("next: run 'qbit-vault' (guided setup) or 'qbit-vault init'"))
+    Check 'no vault: next step is init' ($r.Out -match [regex]::Escape("next: run 'qbit-vault init'"))
+    Check 'no vault: one next step only' ($r.Out -notmatch 'guided setup')
 
     # 10. A set-up vault: the new binary runs sync, unless QBIT_VAULT_NO_SYNC=1.
     New-Item -ItemType Directory -Force -Path $env:QBIT_VAULT_HOME | Out-Null
@@ -210,10 +211,29 @@ try {
     Remove-Item Env:QBIT_VAULT_RELEASES_API
     Check 'newest published release is chosen' ($r.Out -match [regex]::Escape('installing qbit-vault v0.0.0-test (windows/amd64)'))
     Check 'newest published release installs' ((Installed (Join-Path $work 'dest12')) -eq 'fake-qbit-vault-amd64')
+
+    # 13. The PATH comparison ignores a trailing backslash and case, so a re-run
+    # does not add a duplicate entry.
+    $dest13 = Join-Path $work 'dest13'
+    $env:QBIT_VAULT_USER_PATH = "C:\somewhere;$($dest13.ToUpperInvariant())\"
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') $dest13
+    Check 'PATH entry with a trailing backslash counts as present' ($r.Out -notmatch 'is not on your PATH')
+    $env:QBIT_VAULT_USER_PATH = 'C:\somewhere'
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') $dest13
+    Check 'a directory missing from PATH is reported' ($r.Out -match 'is not on your PATH')
+    Remove-Item Env:QBIT_VAULT_USER_PATH
+
+    # 14. A GitHub API failure says what to do.
+    $env:QBIT_VAULT_RELEASES_API = 'https://127.0.0.1:9/releases'
+    $r = Invoke-Install 'AMD64' (Join-Path $work 'good') (Join-Path $work 'dest14') $null $null ''
+    Remove-Item Env:QBIT_VAULT_RELEASES_API
+    Check 'API failure exits non-zero' ($r.Code -ne 0)
+    Check 'API failure names the way out' (($r.Out -replace '[\s|]+', ' ') -match [regex]::Escape('could not reach the GitHub API (rate limit or network); set QBIT_VAULT_VERSION=vX.Y.Z and try again'))
+    Check 'API failure installs nothing' (-not (Test-Path -LiteralPath (Join-Path $work 'dest14')))
 } finally {
     $env:Path = $realPath
     $env:PROCESSOR_ARCHITECTURE = $realArch
-    'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASES_API', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH', 'QBIT_VAULT_NO_SYNC', 'QBIT_VAULT_HOME', 'QBV_TEST_SYNC_LOG' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+    'QBIT_VAULT_USER_PATH', 'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASES_API', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH', 'QBIT_VAULT_NO_SYNC', 'QBIT_VAULT_HOME', 'QBV_TEST_SYNC_LOG' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 

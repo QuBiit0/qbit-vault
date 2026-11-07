@@ -26,7 +26,7 @@ func TestInitRegistersPiAndPrintsNoExtensionCommand(t *testing.T) {
 	w := newBareWorld(t)
 	withHosts(t, piHost(uh))
 	code, out, errs := w.run("", "init", "--agents", "pi")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n") || !strings.HasSuffix(out, "healthy\n") ||
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host pi: registered (mcp, skill)\n") || !strings.HasSuffix(out, "healthy\n"+restartAgentsLine+"\n") ||
 		strings.Contains(out, "pi install") || strings.Contains(out, "extension") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}

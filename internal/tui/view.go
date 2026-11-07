@@ -164,7 +164,7 @@ func (m Model) homeView() string {
 		listTitle, list = "Doctor", m.doctorBody(listW-3)
 		detailTitle, detail = m.doctorDetail(detailW - 3)
 	case "Update":
-		listTitle, list = "Update · planned", m.updateBody(listW-3)
+		listTitle, list = "Update", m.updateBody(listW-3)
 		detailTitle, detail = m.updateDetail(detailW - 3)
 	}
 	panes := joinPanes(" ",
@@ -173,7 +173,7 @@ func (m Model) homeView() string {
 		m.box(detailTitle, detailW, detail, m.focus == PaneDetail))
 	lines := []string{m.header(), "", panes, ""}
 	if sec.title == "Update" {
-		lines = append(lines, m.theme.Mist("Update today:"), "  "+m.theme.Frost(updateCommand), "")
+		lines = append(lines, m.theme.Mist("With Go:"), "  "+m.theme.Frost(updateCommand), "")
 	}
 	keys := m.focusKeys()
 	switch {

@@ -7,7 +7,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/keychain"
 )
 
-// TestEndToEndSecretLifecycle drives the whole slice 1.4/1.4a surface through
+// TestEndToEndSecretLifecycle drives the whole secret-lifecycle surface through
 // Execute against a temporary home and the mock keychain.
 func TestEndToEndSecretLifecycle(t *testing.T) {
 	w := newBareWorld(t)

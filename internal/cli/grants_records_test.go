@@ -373,7 +373,7 @@ func TestResetIsReportedByRecordOperationsToo(t *testing.T) {
 	}
 }
 
-// TestEndToEndGrants drives the whole slice 1.6 surface through Execute.
+// TestEndToEndGrants drives the whole grants surface through Execute.
 func TestEndToEndGrants(t *testing.T) {
 	pinClock(t)
 	asTerminal(t, true)

@@ -21,7 +21,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/vault"
 )
 
-// Slice S.9a: master-key rotation and device revocation (REMOTE_SYNC § 4.5,
+// Master-key rotation and device revocation (REMOTE_SYNC § 4.5,
 // § 4.6, § 7.2 step 2). Devices are vault homes against one real in-process
 // server; a proxy in front of it plays the server answers the real one does
 // does not give in every case or that a hostile server could give.

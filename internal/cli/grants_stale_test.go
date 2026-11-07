@@ -27,7 +27,7 @@ func (failingDrop) DropLayer([]byte, string) ([]byte, int, error) {
 	return nil, 0, errors.New("simulated drop failure")
 }
 
-// execCheck is what exec (slice 1.8) will do: resolve the record for cwd and
+// execCheck is what exec does: resolve the record for cwd and
 // evaluate the grants against its id.
 func (w *world) execCheck(name, session string) error {
 	w.t.Helper()

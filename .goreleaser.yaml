@@ -58,37 +58,44 @@ archives:
 checksum:
   name_template: checksums.txt
   algorithm: sha256
+  # The one-line installers are release assets too, so their SHA-256 is listed.
+  extra_files:
+    - glob: scripts/install.sh
+    - glob: scripts/install.ps1
 
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot"
 
+# The release notes link the CHANGELOG section instead of listing commits.
 changelog:
-  use: github
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore\\(odd\\):"
+  disable: true
 
 release:
   github:
     owner: QuBiit0
     name: qbit-vault
-  # A tag with a suffix (v0.1.0-beta.1) is published as a pre-release.
-  prerelease: auto
+  # Regular releases, never pre-releases: releases/latest/download/install.sh
+  # skips pre-releases, and the -beta in the version already says what it is.
+  prerelease: "false"
+  # The installers are attached to every release (and listed in checksums.txt).
+  extra_files:
+    - glob: scripts/install.sh
+    - glob: scripts/install.ps1
+  header: |
+    What changed in {{ .Tag }}: see its section in [CHANGELOG.md](https://github.com/QuBiit0/qbit-vault/blob/{{ .Tag }}/CHANGELOG.md).
   footer: |
     ## Install
 
     Linux / macOS:
 
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.sh | sh
+    curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
     ```
 
     Windows (PowerShell):
 
     ```powershell
-    irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+    irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
     ```
 
     With Go 1.26+: `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@{{ .Tag }}`

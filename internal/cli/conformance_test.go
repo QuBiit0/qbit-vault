@@ -15,7 +15,7 @@ import (
 
 // TestContractConformance drives every op through `broker --op` against a real
 // vault and checks each request and response against the contract schema
-// (TESTING.md § Contract conformance, roadmap slice 2.4).
+// (TESTING.md § Contract conformance).
 func TestContractConformance(t *testing.T) {
 	sch, err := conformance.Load(filepath.Join("..", "..", "contracts", "secrets-broker", "v1", "secrets-broker.v1.schema.json"))
 	if err != nil {

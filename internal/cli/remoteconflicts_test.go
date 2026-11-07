@@ -10,7 +10,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
 )
 
-// Slice S.9b: conflicts and their resolution (REMOTE_SYNC § 7.4).
+// Conflicts and their resolution (REMOTE_SYNC § 7.4).
 
 const (
 	conflictOld = "TESTSECRET_conflict_old_9b"

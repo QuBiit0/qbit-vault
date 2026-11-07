@@ -57,7 +57,7 @@ func TestInitRegistersClaudeCodeAndDoctorIsHealthy(t *testing.T) {
 	w := newBareWorld(t)
 	withHosts(t, claudeHost(uh))
 	code, out, errs := w.run("", "init", "--agents", "claude-code")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host claude-code: registered (mcp, hooks, deny, skill)\n") || !strings.HasSuffix(out, "healthy\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host claude-code: registered (mcp, hooks, deny, skill)\n") || !strings.HasSuffix(out, "healthy\n"+restartAgentsLine+"\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	for _, step := range []string{"mcp", "hooks", "deny", "skill"} {

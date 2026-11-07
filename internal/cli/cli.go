@@ -247,21 +247,22 @@ var (
 // to fixed messages. A flag name is shown only when it is a defined flag.
 func flagUsageError(cmd *cobra.Command, err error) error {
 	msg := err.Error()
+	help := "; see '" + cmd.CommandPath() + " --help'"
 	switch {
 	case strings.HasPrefix(msg, "unknown flag"), strings.HasPrefix(msg, "unknown shorthand flag"):
-		return usageError{"unknown flag"}
+		return usageError{"unknown flag" + help}
 	case strings.HasPrefix(msg, "invalid argument "):
 		if m := invalidArgRE.FindAllStringSubmatch(msg, -1); len(m) > 0 {
 			if name := m[len(m)-1][1]; cmd.Flag(name) != nil {
-				return usageError{"invalid value for --" + name}
+				return usageError{"invalid value for --" + name + help}
 			}
 		}
 	case strings.HasPrefix(msg, "flag needs an argument"):
 		if m := needsArgRE.FindStringSubmatch(msg); m != nil && cmd.Flag(m[1]) != nil {
-			return usageError{"invalid value for --" + m[1]}
+			return usageError{"invalid value for --" + m[1] + help}
 		}
 	}
-	return usageError{"invalid flag usage"}
+	return usageError{"invalid flag usage" + help}
 }
 
 func noArgs(_ *cobra.Command, args []string) error {

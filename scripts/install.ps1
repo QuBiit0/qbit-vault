@@ -1,6 +1,6 @@
 # Install qbit-vault from a GitHub release on Windows (docs/INSTALL.md § One-line install).
 #
-#   irm https://raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install.ps1 | iex
+#   irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
 #
 # Environment:
 #   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
@@ -8,6 +8,7 @@
 #   QBIT_VAULT_INSTALL_DIR  target directory (default: where qbit-vault already is, else %LOCALAPPDATA%\Programs\qbit-vault)
 #   QBIT_VAULT_RELEASE_URL  base download URL or local directory (default: the GitHub releases)
 #   QBIT_VAULT_NO_PATH      set to 1 to leave the user PATH unchanged
+#   QBIT_VAULT_USER_PATH    user PATH to compare against (default: the real one; for tests)
 #   QBIT_VAULT_NO_SYNC      set to 1 to skip `qbit-vault sync` after an upgrade
 #
 # It downloads one archive and checksums.txt, verifies the SHA-256, copies the
@@ -47,7 +48,11 @@ function Install-QBitVault {
         # orders them by tag text (v0.1.0-beta.10 after v0.1.0-beta.9), so take the
         # newest publish date; a draft has none.
         $api = if ($env:QBIT_VAULT_RELEASES_API) { $env:QBIT_VAULT_RELEASES_API } else { "https://api.github.com/repos/$repo/releases?per_page=100" }
-        $releases = if ($api -match '^https://') { Invoke-RestMethod -UseBasicParsing -Uri $api } else { Get-Content -Raw -LiteralPath $api | ConvertFrom-Json }
+        try {
+            $releases = if ($api -match '^https://') { Invoke-RestMethod -UseBasicParsing -Uri $api } else { Get-Content -Raw -LiteralPath $api | ConvertFrom-Json }
+        } catch {
+            throw 'qbit-vault install: could not reach the GitHub API (rate limit or network); set QBIT_VAULT_VERSION=vX.Y.Z and try again'
+        }
         $newest = @($releases | ForEach-Object { $_ }) | Where-Object { -not $_.draft -and $_.published_at } | Sort-Object { [datetime]$_.published_at } -Descending | Select-Object -First 1
         $version = $newest.tag_name
         if (-not $version) { throw "qbit-vault install: no release of $repo found" }
@@ -118,9 +123,12 @@ function Install-QBitVault {
         if ($old) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
         Say "installed $target"
 
-        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        $onPath = @($userPath -split ';') -contains $installDir
-        if (-not $onPath -and $env:QBIT_VAULT_NO_PATH -ne '1') {
+        # QBIT_VAULT_USER_PATH stands in for the user PATH in the tests; it is
+        # only read, never written back.
+        $userPath = if ($env:QBIT_VAULT_USER_PATH) { $env:QBIT_VAULT_USER_PATH } else { [Environment]::GetEnvironmentVariable('Path', 'User') }
+        # A trailing backslash (and case) must not make the same directory look new.
+        $onPath = @($userPath -split ';' | ForEach-Object { $_.TrimEnd('\') }) -contains $installDir.TrimEnd('\')
+        if (-not $onPath -and $env:QBIT_VAULT_NO_PATH -ne '1' -and -not $env:QBIT_VAULT_USER_PATH) {
             $newPath = if ($userPath) { "$userPath;$installDir" } else { $installDir }
             [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
             $env:Path = "$env:Path;$installDir"
@@ -144,7 +152,7 @@ function Install-QBitVault {
                 else { Say "'qbit-vault sync' reported a problem (see above); run 'qbit-vault doctor', then restart your agents" }
             }
         } else {
-            Say "next: run 'qbit-vault' (guided setup) or 'qbit-vault init', then 'qbit-vault doctor'"
+            Say "next: run 'qbit-vault init'"
         }
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue

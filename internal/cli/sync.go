@@ -54,6 +54,10 @@ func recordedHosts(reg *hosts.Registry, recorded map[string]vault.HostState) []h
 	return out
 }
 
+// deviceSyncHint ends the human output of `sync` when the vault syncs with a
+// server, because the two commands share a verb.
+const deviceSyncHint = "(to sync secrets between devices: qbit-vault remote sync)"
+
 type syncHostBody struct {
 	Name   string   `json:"name"`
 	Status string   `json:"status"`
@@ -165,7 +169,7 @@ func newSync(g *globals) *cobra.Command {
 			var fail error
 			if len(failed) > 0 {
 				body.OK = false
-				fail = codedError{"host_failed", "host registration failed: " + strings.Join(failed, ", "), exitcode.Failure}
+				fail = codedError{"host_failed", "host registration failed: " + strings.Join(failed, ", ") + hostFailureHint, exitcode.Failure}
 			}
 			out := cmd.OutOrStdout()
 			if g.JSON {
@@ -181,6 +185,12 @@ func newSync(g *globals) *cobra.Command {
 				}
 				if err := rep.WriteHuman(out); err != nil {
 					return err
+				}
+				// `sync` re-applies agent registrations; vault sync is `remote sync`.
+				if r, err := vault.ReadRemote(home); err == nil && r != nil {
+					if _, err := fmt.Fprintln(out, deviceSyncHint); err != nil {
+						return err
+					}
 				}
 				if fail != nil {
 					return fail

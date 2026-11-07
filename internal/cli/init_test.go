@@ -222,7 +222,8 @@ func TestInitRegistersDetectedHostsAndFinishesWithDoctor(t *testing.T) {
 		"ok    permissions      owner-only\n" +
 		"ok    host.fake.mcp    registered\n" +
 		"ok    host.fake.hooks  registered\n" +
-		"healthy\n"
+		"healthy\n" +
+		"Restart your coding agents so they load QBit Vault.\n"
 	if code != exitcode.OK || out != want || errs != "" {
 		t.Fatalf("code=%d\nout=%q\nwant=%q\nerr=%q", code, out, want, errs)
 	}
@@ -245,12 +246,15 @@ func TestInitRerunsHostStepsOnAnExistingVaultAndChangesNothingTwice(t *testing.T
 	if code != exitcode.OK || errs != "" || !strings.HasPrefix(out, "vault already initialized at "+w.home+"\nhost fake: registered (mcp, hooks)\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
+	if !strings.HasSuffix(out, "healthy\nRestart your coding agents so they load QBit Vault.\n") {
+		t.Fatalf("a run that registered a host must end with the restart line: %q", out)
+	}
 	state, vaultEnc := readFile(t, w.home, "state.json"), readFile(t, w.home, "vault.enc")
 	cfg, hooks := readFile(t, h.Dir, "config.json"), readFile(t, h.Dir, "hooks.json")
 	backups := dirNames(t, filepath.Join(w.home, "backups"))
 
 	code, out, errs = w.run("", "init")
-	if code != exitcode.OK || errs != "" || !strings.HasPrefix(out, "vault already initialized at "+w.home+"\nhost fake: up to date\n") || !strings.HasSuffix(out, "healthy\n") {
+	if code != exitcode.OK || errs != "" || !strings.HasPrefix(out, "vault already initialized at "+w.home+"\nhost fake: up to date\n") || !strings.HasSuffix(out, "healthy\n") || strings.Contains(out, "Restart") {
 		t.Fatalf("second run: code=%d out=%q err=%q", code, out, errs)
 	}
 	if readFile(t, w.home, "state.json") != state || readFile(t, w.home, "vault.enc") != vaultEnc ||
@@ -313,7 +317,7 @@ func TestInitFailingHostStepIsReportedAndEarlierStepsKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := w.run("", "init")
-	if code != exitcode.Failure || errs != "error: host registration failed: fake (hooks)\n" {
+	if code != exitcode.Failure || errs != "error: host registration failed: fake (hooks); run 'qbit-vault doctor' for details\n" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 	if !strings.Contains(out, "host fake: failed at hooks\n") || !strings.Contains(out, "warn  host.fake.hooks") {
@@ -364,5 +368,29 @@ func TestInitJSONWithHosts(t *testing.T) {
 	if !body.OK || !body.Initialized || len(body.Hosts) != 1 || body.Hosts[0].Name != "fake" || !body.Hosts[0].Changed ||
 		strings.Join(body.Hosts[0].Steps, ",") != "mcp,hooks" || !body.Doctor.OK || len(body.Doctor.Checks) != 4 {
 		t.Fatalf("body: %s", out)
+	}
+}
+
+func TestInitWithAnExistingMasterKeyPointsToDoctor(t *testing.T) {
+	h := newHarness(t)
+	// A key file without a vault: the key already exists for this home.
+	if err := os.MkdirAll(h.home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h.home, "key.enc"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := h.run("", "init")
+	if code != exitcode.Failure || out != "" || errs != "error: a master key already exists for this vault home; run 'qbit-vault doctor'\n" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+	}
+}
+
+func TestInitJSONOmitsTheAgentReminder(t *testing.T) {
+	w := newBareWorld(t)
+	withHosts(t, fakeHost(t, w))
+	_, out, _ := w.run("", "--json", "init")
+	if strings.Contains(out, "load QBit Vault") {
+		t.Fatalf("out=%q", out)
 	}
 }

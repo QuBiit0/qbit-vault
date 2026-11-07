@@ -4,8 +4,16 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.13] - 2026-11-07
+
 ### Changed
 
+- The one-line installers are release assets: every release carries `install.sh` and `install.ps1` (listed in `checksums.txt`), releases are regular releases, and the README and docs use `https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh` / `install.ps1`. The copies in `scripts/` stay. The release notes link that version's `CHANGELOG.md` section instead of listing commits.
+- The installers end with one next step, `next: run 'qbit-vault init'`, and `init` ends with `Restart your coding agents so they load QBit Vault.` when it registered or changed an agent.
+- `qbit-vault sync` ends with `(to sync secrets between devices: qbit-vault remote sync)` when the vault syncs with a server; the README and `docs/CLI.md` explain the two `sync` commands.
+- Every GitHub Action in CI and the release workflow is pinned to a full commit SHA, and Dependabot updates them weekly.
+- Clearer errors: an existing master key and failed host registrations point to `qbit-vault doctor`, and a mistyped flag adds `see 'qbit-vault <command> --help'`. The TUI Update screen says `Re-run the install command to upgrade`.
+- Docs: where the installers put the binary and how to remove the Windows `PATH` entry, a copy-pasteable `set` / `grant` / `exec` example, what to do when the sync server is lost or wiped, and a bold line saying sync is optional.
 - Dialogs speak with one voice on Windows, macOS, Linux and the terminal. Every window is titled `QBit Vault` and its heading says what it is (`Secret request`, `Permission request`, `Confirm`, `Recovery key`, `Pairing code`, `Vault passphrase`, `Export passphrase`); the `qbit-vault:` title prefix is gone.
 - The permission question names who asks and puts the reason on its own line: `Claude Code wants to use GITHUB_TOKEN (all projects).` / `Why: <reason>`. Replacing a value at an agent's request offers `Replace, allow once`, `Replace, always in this project`, `Replace, but ask me before each use` and `Don't replace`.
 - Passphrase prompts say what they protect: `Vault passphrase`, `Export passphrase (protects this backup file)` (asked again as `Type the export passphrase again`) and `Passphrase of the export file`. `Who:` reads `you (qbit-vault)` for a command you run.
@@ -14,6 +22,7 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Fixed
 
+- `install.ps1` compares `PATH` entries ignoring a trailing `\` (no duplicate entry on a re-run) and turns a GitHub API failure into `could not reach the GitHub API (rate limit or network); set QBIT_VAULT_VERSION=vX.Y.Z and try again`.
 - Ctrl-C at a terminal menu, y/N question or Press-Enter screen cancels (exit 1) instead of killing the process mid-write.
 - Linux with only kdialog shows the recovery key and the pairing code in the terminal instead of failing; zenity dialogs are 480 px wide and their lists have no `Pick` / `Index` headers; the macOS icon is `note`, and `caution` only for a removal.
 

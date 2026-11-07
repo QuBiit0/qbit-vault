@@ -12,7 +12,7 @@ import (
 	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
 )
 
-// Slice S.9b: server history and restore (REMOTE_SYNC § 7.6).
+// Server history and restore (REMOTE_SYNC § 7.6).
 
 type historyRow struct {
 	Version int64  `json:"version"`

@@ -47,6 +47,14 @@ type initHostBody struct {
 
 const agentsNone = "none"
 
+const (
+	// restartAgentsLine ends an init that wrote a host config: a running
+	// agent loaded its config before.
+	restartAgentsLine = "Restart your coding agents so they load QBit Vault."
+	// hostFailureHint ends the error of a failed host registration.
+	hostFailureHint = "; run 'qbit-vault doctor' for details"
+)
+
 // pickHosts resolves --agents before anything is created: no flag selects the
 // detected hosts, a list selects those hosts whether or not they are
 // detected, and `none` selects nothing.
@@ -125,6 +133,7 @@ func newInit(g *globals) *cobra.Command {
 			show := len(results) > 0 || !rep.OK // a vault-only run keeps its one line
 
 			var failed []string
+			changed := false
 			for _, r := range results {
 				hb := initHostBody{Name: r.Host, Changed: r.Changed(), Steps: []string{}}
 				for _, s := range r.Steps {
@@ -133,6 +142,7 @@ func newInit(g *globals) *cobra.Command {
 					}
 				}
 				body.Hosts = append(body.Hosts, hb)
+				changed = changed || hb.Changed
 				if r.Err() != nil {
 					step := r.FailedStep()
 					if step == "" {
@@ -143,7 +153,7 @@ func newInit(g *globals) *cobra.Command {
 			}
 			var fail error
 			if len(failed) > 0 {
-				fail = codedError{"host_failed", "host registration failed: " + strings.Join(failed, ", "), exitcode.Failure}
+				fail = codedError{"host_failed", "host registration failed: " + strings.Join(failed, ", ") + hostFailureHint, exitcode.Failure}
 			}
 
 			if g.JSON {
@@ -167,6 +177,11 @@ func newInit(g *globals) *cobra.Command {
 				}
 				if show {
 					if err := rep.WriteHuman(out); err != nil {
+						return err
+					}
+				}
+				if changed {
+					if _, err := fmt.Fprintln(out, restartAgentsLine); err != nil {
 						return err
 					}
 				}
@@ -224,7 +239,7 @@ func (g *globals) createVault(cmd *cobra.Command, passphrase, passphraseStdin bo
 	key, mode, err := keychain.Setup(home, id, opts)
 	if err != nil {
 		if errors.Is(err, keychain.ErrKeyExists) {
-			return "", errors.New("a key already exists for this vault location")
+			return "", errors.New("a master key already exists for this vault home; run 'qbit-vault doctor'")
 		}
 		if !passphrase && (errors.Is(err, prompt.ErrUnavailable) || errors.Is(err, keychain.ErrUnavailable)) {
 			return "", usageError{"no OS keychain found and no terminal to ask for a passphrase; run 'qbit-vault init --passphrase --passphrase-stdin'"}
@@ -245,7 +260,7 @@ func (g *globals) createVault(cmd *cobra.Command, passphrase, passphraseStdin bo
 }
 
 // removeKey deletes the key Setup just created, so a failed vault.Init does
-// not leave an orphan (slice 1.3 follow-up).
+// not leave an orphan.
 func removeKey(home, id string, mode keychain.Mode, opts keychain.Options) {
 	if mode == keychain.ModePassphrase {
 		_ = os.Remove(filepath.Join(home, "key.enc")) // keychain's key file name

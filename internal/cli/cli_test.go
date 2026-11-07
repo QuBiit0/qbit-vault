@@ -76,10 +76,11 @@ func jsonUsage(msg string) string {
 func TestUsageErrors(t *testing.T) {
 	const (
 		unknownCmd  = "unknown command"
-		unknownFlag = "unknown flag"
+		unknownFlag = "unknown flag; see 'qbit-vault version --help'"
 		extraArg    = "unexpected arguments"
-		badJSON     = "invalid value for --json"
-		badHome     = "invalid value for --home"
+		badJSON     = "invalid value for --json; see 'qbit-vault version --help'"
+		badHome     = "invalid value for --home; see 'qbit-vault --help'"
+		badHomeVer  = "invalid value for --home; see 'qbit-vault version --help'"
 	)
 	tests := []struct {
 		name       string
@@ -99,7 +100,7 @@ func TestUsageErrors(t *testing.T) {
 		{"invalid session from env", []string{"version"}, map[string]string{"QBIT_VAULT_SESSION": "BAD"}, "", "error: " + sessionHelp + "\n" + helpHint},
 		{"bad flag value human", []string{"version", "--json=maybe"}, nil, "", "error: " + badJSON + "\n" + helpHint},
 		{"bad flag value with json requested", []string{"--json", "--home"}, nil, jsonUsage(badHome), ""},
-		{"flag missing value human", []string{"version", "--home"}, nil, "", "error: " + badHome + "\n" + helpHint},
+		{"flag missing value human", []string{"version", "--home"}, nil, "", "error: " + badHomeVer + "\n" + helpHint},
 		{"no command json", []string{"--json"}, nil, jsonUsage("no command given"), ""},
 	}
 	for _, tt := range tests {

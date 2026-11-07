@@ -32,7 +32,7 @@ jobs:
           go test -count=1 -timeout 30m ./... 2>&1 | tee "$RUNNER_TEMP/ci-logs/go-test.log"
       - name: leak grep
         run: go run ./tools/leakgrep "$RUNNER_TEMP/ci-logs"
-      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
           version: "~> v2"

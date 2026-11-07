@@ -225,9 +225,9 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | LP5b | S9 | worker + parent (OCI labels) | feat/server-image-status | done, beta.14 |
 | LP6a | S10 | worker | | done, awaiting review |
 | LP6b | S11 | parent + worker | feat/sync-protocol-fixes | done, beta.16 |
-| T7a | S12.1-S12.3 | worker | | done (uncommitted) |
-| T7b | S12.4-S12.5 | worker | | done (uncommitted) |
-| T7c | S12.6-S12.7 | worker | | done (uncommitted) |
+| T7a | S12.1-S12.3 | worker | | done, beta.17 |
+| T7b | S12.4-S12.5 | worker | | done, beta.17 |
+| T7c | S12.6-S12.7 | worker | | done, beta.17 |
 | T7d | S12.8 | parent | | pending |
 
 ## Log
@@ -260,3 +260,4 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L24. beta.16 release workflow: GoReleaser published the release and its 11 assets, then `attest-build-provenance` failed with a Sigstore transparency log 500, so the server-image job was skipped. Not re-run (it would re-run GoReleaser over published assets); fixed forward in beta.17. Owner chose step 7 scope: group 1 (follow-ups) + the cheap part of group 2 (docs, env denylist); S12 written.
 - L25. T7a done, not committed. S12.1 `encodedPowerShell` skips known valued options with their value (prefix match, `:`-joined, typographic dashes); shared with the pre-bash hook through `dumpguard.EncodedPowerShellArgs`; the hook scanner no longer turns non-ASCII bytes into runes. S12.2 `scriptOf` skips `--rcfile`/`--init-file` values. S12.3 `checkStartupEnv` in `exec` (the injected name) and `set`; usage error naming the variable; dump-guard cache capped at 64 sets. Tests RED first: `TestMatchRefusesEncodedCommandBehindValuedOptions`, `TestScriptOfSkipsValuedLongOptions`, `TestCompiledCacheIsCapped`, hook deny cases, `TestExecRefusesStartupEnvNames`, `TestSetRefusesStartupEnvNames`. `import` still stores such names (exec refuses them at injection).
 - L26. T7b and T7c done, not committed. S12.4 did not reproduce: `set` already grants `res.RecordID` (pinned by `TestSetReplaceGrantIsForTheNewRecord` and `TestSetReplaceInteractiveGrantIsForTheNewRecord`; both fail if the grant uses the replaced id), code unchanged. S12.5 dead session branch removed from `replaceOption`; the approver's confirmation-code dialog is headed `Confirmation code` (was `Pairing code`; `TestApproveShowsTheConfirmationCodeUnderItsOwnHeading`, RED first); orphan notice and revoke audits moved right after `crashAt("after-server")` (`TestOrphanNoticeSurvivesALocalFailureAfterTheServerCall`, `TestExplicitRevokeIsAuditedAfterALocalFailureFollowingTheServerCall`, `-tags crashseam`, RED first). S12.6 `install.sh` splits fields onto lines with `tr` before the awk (install_test.sh case 13, RED first); install.ps1 uses ConvertFrom-Json, unchanged. S12.7 THREAT_MODEL R17-R19, STORAGE project-path bullet, CLI timeout text, runner comments. Follow-ups outside the T7b surface: e2e/docker-test.sh:252 waits for `SHOW Pairing code` and docs/AGENT_INTEGRATIONS.md:177 lists the old heading.
+- L27. T7a-T7c committed (c26148c, b80b546, e68fee5); parent fixed the two references to the old heading (e2e/docker-test.sh, AGENT_INTEGRATIONS.md). Native review (risk, reliability) of the three commits approved with no findings. Released as 0.1.0-beta.17; Dependabot PRs (T7d) handled after the release so a broken action bump cannot block it.

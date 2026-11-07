@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.17] - 2026-11-07
+
+This release also carries the build provenance attestation and the `ghcr.io/qubiit0/qbit-vault-server` image that 0.1.0-beta.16 lacks: its attestation step failed on a transient error of the Sigstore transparency log after the release was published, so its server-image job did not run. The beta.16 binaries and checksums are unaffected.
+
 ### Fixed
 
 - Dump guard and pre-bash hook: `pwsh -EncodedCommand` is refused after any valued option (`-WorkingDirectory /f`, `-ep:Bypass`, quoted values), as `-e:VALUE`, and with typographic dashes; `bash --rcfile FILE -c …` no longer hides its script. The hook's command scanner keeps non-ASCII bytes intact.

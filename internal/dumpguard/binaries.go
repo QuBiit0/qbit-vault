@@ -12,7 +12,6 @@ var assignRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 var (
 	shellNames  = set("sh", "bash", "zsh", "dash", "ksh", "ash", "fish")
 	psNames     = set("pwsh", "powershell")
-	psCmdFlags  = set("-c", "-command")
 	cmdExeFlags = set("/c", "/k")
 )
 
@@ -95,8 +94,10 @@ func scriptOf(w []string) (string, bool) {
 			}
 		}
 	case psNames[name]:
+		// PowerShell resolves -c and every longer prefix of -Command to it;
+		// -ConfigurationName and -CustomPipeName are other options.
 		for i, a := range args {
-			if psCmdFlags[strings.ToLower(a)] && i+1 < len(args) {
+			if f, joined, ok := psOption(a); ok && !joined && strings.HasPrefix("command", f) && i+1 < len(args) {
 				return strings.Join(args[i+1:], " "), true
 			}
 		}

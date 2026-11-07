@@ -356,14 +356,37 @@ func TestHeadBehindByACrashIsValid(t *testing.T) {
 	}
 }
 
-func TestMissingHeadWithLogIsValid(t *testing.T) {
+// A head is never more than one record behind the log, so a missing head next
+// to two or more records was deleted; with a single record it is a crash
+// between the log write and the head write.
+func TestMissingHeadWithRecordsIsMismatch(t *testing.T) {
 	home := t.TempDir()
 	appendN(t, home, 3)
 	if err := os.Remove(headPath(home)); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ := Verify(home); !res.Valid || res.Records != 3 {
+	res := wantProblem(t, home, 3, HeadMismatch)
+	if res.Records != 3 || res.Problem.Seq != 4 {
+		t.Fatalf("result = %+v, problem = %+v", res, res.Problem)
+	}
+}
+
+func TestMissingHeadWithOneRecordIsValid(t *testing.T) {
+	home := t.TempDir()
+	appendN(t, home, 1)
+	if err := os.Remove(headPath(home)); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := Verify(home); !res.Valid || res.Records != 1 {
 		t.Fatalf("result = %+v", res)
+	}
+	// The next audited write puts the head back.
+	appendN(t, home, 1)
+	if res, _ := Verify(home); !res.Valid || res.Records != 2 {
+		t.Fatalf("result = %+v", res)
+	}
+	if _, _, ok := ReadHead(home); !ok {
+		t.Fatal("no head after the next append")
 	}
 }
 

@@ -43,7 +43,8 @@ type Result struct {
 // canonical form with a matching hash, prev must be the hash of the previous
 // raw line, seq must count up from 1 and the last line must end with a
 // newline. It then compares the end of the log with audit.head. A missing log
-// and a missing head are valid with 0 records. The error is for I/O
+// is valid with 0 records; a missing head is valid only next to at most one
+// record, otherwise it is head_mismatch. The error is for I/O
 // failures, not for a broken chain.
 func Verify(home string) (Result, error) {
 	release, err := lock(home)
@@ -145,6 +146,11 @@ func verifyReader(r io.Reader, h *head, badHead bool) (Result, error) {
 	}
 	switch {
 	case badHead:
+		return fail(HeadMismatch)
+	case h == nil && res.Records > 1:
+		// A head is at most one record behind the log, so with two or more
+		// records a missing head was removed. One record is a crash between
+		// the log write and the head write.
 		return fail(HeadMismatch)
 	case h != nil && uint64(res.Records) < h.Seq:
 		expect = h.Seq

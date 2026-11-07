@@ -224,6 +224,9 @@ func (g *globals) readEnv(src *importSource, names []string) error {
 		if err := checkName(n); err != nil {
 			return err
 		}
+		if err := checkStartupEnv(n); err != nil {
+			return err
+		}
 		if seen[n] {
 			return usageError{n + " is listed twice"}
 		}
@@ -276,6 +279,9 @@ func readDotenv(src *importSource, path string, only []string) error {
 	seen := map[string]bool{}
 	for _, n := range want {
 		if err := checkName(n); err != nil {
+			return err
+		}
+		if err := checkStartupEnv(n); err != nil {
 			return err
 		}
 		if seen[n] {

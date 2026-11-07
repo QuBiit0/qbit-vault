@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -76,6 +78,41 @@ func TestSetRefusesStartupEnvNames(t *testing.T) {
 		}
 		if strings.Contains(out+errs, "TESTSECRET_") || w.snapshot() != before {
 			t.Errorf("%s: a value was echoed or the vault changed", name)
+		}
+	}
+}
+
+func TestImportRefusesStartupEnvNames(t *testing.T) {
+	for _, name := range append(startupEnvNames, "DYLD_FALLBACK_LIBRARY_PATH") {
+		w := newWorld(t)
+		before := w.snapshot()
+		env := map[string]string{name: "TESTSECRET_startup", "GH_TOKEN": "TESTSECRET_gh"}
+		dotenv := filepath.Join(t.TempDir(), ".env")
+		if err := os.WriteFile(dotenv, []byte("GH_TOKEN=TESTSECRET_gh\n"+name+"=TESTSECRET_startup\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{
+			{"import", "--from-env", "GH_TOKEN," + name, "--yes"},
+			{"import", "--from-file", dotenv, "--yes"},
+			{"import", "--from-file", dotenv, "--names", name, "--yes"},
+		} {
+			code, out, errs := w.runEnv(env, "", args...)
+			if code != exitcode.Usage || out != "" || errs != usageErr(startupMsg(name)) {
+				t.Errorf("%v: code=%d out=%q err=%q", args[1:], code, out, errs)
+			}
+			noFixtures(t, "import error", out+errs)
+		}
+		code, out, errs := w.runEnv(env, "", "--json", "import", "--from-env", name, "--yes")
+		wantJSON := `{"ok":false,"error":{"code":"usage","message":"` + startupMsg(name) + `"}}` + "\n"
+		if code != exitcode.Usage || out != wantJSON || errs != "" {
+			t.Errorf("%s json: code=%d out=%q err=%q", name, code, out, errs)
+		}
+		if w.snapshot() != before {
+			t.Errorf("%s: a refused import changed the vault", name)
+		}
+		// A startup name the user did not select is not imported, so it is not refused.
+		if code, _, errs := w.runEnv(env, "", "import", "--from-file", dotenv, "--names", "GH_TOKEN", "--yes"); code != exitcode.OK {
+			t.Errorf("%s: unselected name refused: code=%d err=%q", name, code, errs)
 		}
 	}
 }

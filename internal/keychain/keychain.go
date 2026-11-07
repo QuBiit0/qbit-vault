@@ -187,9 +187,15 @@ func Setup(home, vaultID string, opts Options) (secret.Secret, Mode, error) {
 	}
 	// Passphrase mode. An OS entry for this id also counts as an existing key.
 	if osUp {
-		if k, err := osb.Get(vaultID); err == nil {
+		k, err := osb.Get(vaultID)
+		switch {
+		case err == nil:
 			k.Wipe()
 			return secret.Secret{}, "", ErrKeyExists
+		case !errors.Is(err, ErrNoKey):
+			// Not "no key": an entry may exist behind a keychain we could
+			// not read, so do not create a second key next to it.
+			return secret.Secret{}, "", err
 		}
 	}
 	if opts.Passphrase == nil {

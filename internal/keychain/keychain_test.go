@@ -775,3 +775,37 @@ func TestSetupVaultInitUnlockOpenResolve(t *testing.T) {
 		})
 	}
 }
+
+// errBackend is a keychain that is reachable but fails every read.
+type errBackend struct{ err error }
+
+func (errBackend) Name() string                        { return "test-keychain" }
+func (b errBackend) Get(string) (secret.Secret, error) { return secret.Secret{}, b.err }
+func (errBackend) Set(string, secret.Secret) error     { return nil }
+func (errBackend) Delete(string) error                 { return nil }
+
+// B-F11: Setup in passphrase mode must not treat a keychain it could not read
+// as "no key there": an entry may exist behind the failure.
+func TestSetupPassphraseReportsKeychainReadError(t *testing.T) {
+	cheapKDF(t)
+	boom := errors.New("keychain locked")
+	home := t.TempDir()
+	opts := Options{ForcePassphrase: true, Passphrase: pass(fixturePass), getenv: env(nil), backend: errBackend{boom}}
+	if _, _, err := Setup(home, testID, opts); !errors.Is(err, boom) {
+		t.Fatalf("Setup = %v, want the keychain error", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "key.enc")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("key.enc was written despite the keychain error")
+	}
+}
+
+func TestSetupPassphraseIgnoresMissingKeychainEntry(t *testing.T) {
+	cheapKDF(t)
+	home := t.TempDir()
+	opts := Options{ForcePassphrase: true, Passphrase: pass(fixturePass), getenv: env(nil), backend: errBackend{ErrNoKey}}
+	k, mode, err := Setup(home, testID, opts)
+	if err != nil || mode != ModePassphrase {
+		t.Fatalf("Setup = %v, %v", mode, err)
+	}
+	k.Wipe()
+}

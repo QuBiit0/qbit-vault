@@ -129,7 +129,7 @@ func Promote(home, vaultID string, next secret.Secret, opts Options) error {
 		if err := cacheDelete(opts, vaultID); err != nil {
 			return err
 		}
-		if err := os.Rename(stagedPath(home), keyFilePath(home)); err != nil {
+		if err := renameWithRetry(stagedPath(home), keyFilePath(home)); err != nil {
 			return fmt.Errorf("keychain: promote staged key: %w", bare(err))
 		}
 		cachePut(opts, vaultID, next)

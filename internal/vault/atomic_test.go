@@ -212,3 +212,18 @@ func TestSnapshotIsSynced(t *testing.T) {
 		}
 	}
 }
+
+// B-F7: a temp file is created exclusively; a leftover or planted file at the
+// name is refused and left as it is, never truncated or reused.
+func TestWriteSyncedRefusesAnExistingFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "vault.enc.tmp.1.aa")
+	if err := os.WriteFile(p, []byte("planted"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSynced(p, []byte("new")); err == nil {
+		t.Fatal("writeSynced reused an existing file")
+	}
+	if b, _ := os.ReadFile(p); string(b) != "planted" {
+		t.Fatalf("existing file was modified: %q", b)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/QuBiit0/qbit-vault/internal/secret"
@@ -251,4 +252,46 @@ func fill(b byte) []byte {
 		out[i] = b
 	}
 	return out
+}
+
+// B-F5: an unreadable retired list is an I/O error to report, not "no key
+// opens this backup"; an undecryptable one still means no older key.
+func TestRestoreSurfacesUnreadableRetiredList(t *testing.T) {
+	v, home := newVault(t)
+	mustPut(t, v, Global(), "A", rec("TESTSECRET_a"))
+	mustPut(t, v, Global(), "B", rec("TESTSECRET_b"))
+	ids := backupsOf(t, home) // sealed with key 1
+	if err := Rekey(home, testKey(1), testKey(2)); err != nil {
+		t.Fatal(err)
+	}
+	p := retiredPath(home)
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(p, 0o700); err != nil { // reading it fails, but it is not "missing"
+		t.Fatal(err)
+	}
+	err := Restore(home, ids[1], testKey(2))
+	if err == nil || errors.Is(err, ErrBackupKey) {
+		t.Fatalf("restore = %v, want the retired-list read error", err)
+	}
+	if !strings.Contains(err.Error(), "retired keys") {
+		t.Fatalf("error does not say what failed: %v", err)
+	}
+}
+
+func TestRestoreCorruptRetiredListMeansNoOlderKey(t *testing.T) {
+	v, home := newVault(t)
+	mustPut(t, v, Global(), "A", rec("TESTSECRET_a"))
+	mustPut(t, v, Global(), "B", rec("TESTSECRET_b"))
+	ids := backupsOf(t, home)
+	if err := Rekey(home, testKey(1), testKey(2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(retiredPath(home), []byte("garbage"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(home, ids[1], testKey(2)); !errors.Is(err, ErrBackupKey) {
+		t.Fatalf("restore = %v, want ErrBackupKey", err)
+	}
 }

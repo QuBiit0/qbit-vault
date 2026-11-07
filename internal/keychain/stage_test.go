@@ -190,3 +190,66 @@ func TestPromoteDropsStaleCacheEvenWhenItFails(t *testing.T) {
 		t.Fatal("the old key is still cached after a failed promotion")
 	}
 }
+
+// B-F6: on Windows another process (antivirus, indexer) can briefly hold the
+// staged key file open; Promote retries that instead of failing the rekey.
+func TestPromoteRetriesTransientRename(t *testing.T) {
+	cheapKDF(t)
+	noOS(t)
+	home, run := t.TempDir(), t.TempDir()
+	opts := cacheOpts(run)
+	opts.Passphrase = pass(fixturePass)
+	cur, _, err := Setup(home, testID, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := fixedKey(5)
+	if err := Stage(home, testID, cur, next, opts); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	oldRename, oldTransient := renameFile, isTransientFS
+	renameFile = func(a, b string) error {
+		if filepath.Base(a) != stagedFileName {
+			return os.Rename(a, b) // the unlock cache refresh
+		}
+		calls++
+		if calls < 3 {
+			return &os.LinkError{Op: "rename", Old: a, New: b, Err: errors.New("sharing violation")}
+		}
+		return os.Rename(a, b)
+	}
+	isTransientFS = func(error) bool { return true }
+	t.Cleanup(func() { renameFile, isTransientFS = oldRename, oldTransient })
+	if err := Promote(home, testID, next, opts); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("rename called %d times, want 3", calls)
+	}
+	if k, _, err := Unlock(home, testID, opts); err != nil || revealStr(k) != revealStr(next) {
+		t.Fatalf("promoted key not in place: %v", err)
+	}
+}
+
+func TestPromoteDoesNotRetryAPermanentRenameError(t *testing.T) {
+	cheapKDF(t)
+	noOS(t)
+	home, run := t.TempDir(), t.TempDir()
+	opts := cacheOpts(run)
+	opts.Passphrase = pass(fixturePass)
+	cur, _, err := Setup(home, testID, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Stage(home, testID, cur, fixedKey(5), opts); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	oldRename := renameFile
+	renameFile = func(a, b string) error { calls++; return errors.New("disk on fire") }
+	t.Cleanup(func() { renameFile = oldRename })
+	if err := Promote(home, testID, fixedKey(5), opts); err == nil || calls != 1 {
+		t.Fatalf("err=%v calls=%d, want one failed attempt", err, calls)
+	}
+}

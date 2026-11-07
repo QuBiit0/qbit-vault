@@ -33,7 +33,7 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
 | T1 | S3.1-S3.5 | worker | | done (uncommitted) |
-| T2 | S3.6 | worker | | pending |
+| T2 | S3.6 | worker | | done (uncommitted) |
 | T3 | S4.1-S4.4 | worker | | pending |
 | T4 | S5 | parent (Dokploy API) | | pending |
 | T5 | S6 + S2 attribution + odd/README | worker(s) | | pending |
@@ -45,3 +45,4 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 - L1. User (verbatim): "los pendientes, actualizar toda la documentacion y limpiar el repo para que no quede nada desprolijo"
 - L2. Owner answers to four questions: audit.head "Detectarlo (recomendado)"; remote status exit "0, con los avisos en texto (recomendado)"; attribution "qbitdev"; odd/tasks "Dejarlas, con un README que explique (recomendado)". Parent defaults for passphrase retry (3 tries) and no cadence note. Order: code (T1-T3) before the docs pass so docs describe the final code.
 - T1 (worker, uncommitted): S3.1 missing `audit.head` next to 2+ records is `head_mismatch` (1 record = crash window; every released version wrote the head, so no upgrade alarm); S3.2 30 s all-sessions cooldown per name and layer (`grants.CoolShared`); S3.3 race confirmed, `request` now stores with `vault.PutMissing` (never replaces) and refuses retryably; S3.4 `import` runs `checkStartupEnv`; S3.5 `scriptOf` resolves any `-Command` prefix via `psOption`. Docs: STORAGE, CLI, THREAT_MODEL, CHANGELOG.
+- T2 (worker, uncommitted): S3.6 confirmed and fixed test-first: restore surfaces an unreadable retired list (B-F5), keychain `renameWithRetry` for Promote and key-file writes (B-F6), vault temp files `O_EXCL` (B-F7), Windows `Check` rejects an empty DACL and a foreign owner (B-F14), stale-lock break serialized under `<lock>.break` with a re-check (B-F10), `Setup` returns a non-ErrNoKey keychain read error (B-F11); `retired.enc` rollback counter needs a format change: documented as a limit (STORAGE § Retired keys, THREAT_MODEL R8); "nits" and `init`'s `removeKey` ignoring a failed cleanup not mapped to a concrete item, left as is.

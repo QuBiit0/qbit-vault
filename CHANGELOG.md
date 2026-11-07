@@ -4,6 +4,8 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [0.1.0-beta.13] - 2026-11-07
+
 ### Changed
 
 - The one-line installers are release assets: every release carries `install.sh` and `install.ps1` (listed in `checksums.txt`), releases are regular releases, and the README and docs use `https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh` / `install.ps1`. The copies in `scripts/` stay. The release notes link that version's `CHANGELOG.md` section instead of listing commits.

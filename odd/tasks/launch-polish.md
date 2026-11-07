@@ -32,6 +32,21 @@ Full read-only audit before sharing QBit Vault with the community (five parallel
   - S6.7 (B-F2) On Linux the unlock cache is used only when `XDG_RUNTIME_DIR` is on tmpfs (statfs); otherwise there is no cache (the passphrase is asked each time), and nothing is written.
   - S6.8 (B-F3) A lock file whose mtime is more than the stale age in the future is stale too (clock skew, copied home).
   - S6.9 Tests RED first for each rule (S6.6 may be structural: the snapshot path uses the synced writer), leak battery extended for S6.3, docs (THREAT_MODEL, STORAGE, CLI where they describe these) and CHANGELOG [Unreleased] in the same change.
+- S7. Step 4, dialogs with one voice (same words on Windows, macOS, Linux and the terminal; UI text stays English), exactly:
+  - S7.1 (V2, D-B11) Every native dialog window is titled `QBit Vault`; the heading inside says what it is: `Secret request`, `Permission request`, `Confirm`, `Recovery key`, `Pairing code`, `Vault passphrase`, `Export passphrase`. No `qbit-vault:` prefix anywhere in dialogs.
+  - S7.2 (D-B3) The permission question names who asks first: `Claude Code wants to use GITHUB_TOKEN (all projects).` then a line `Why: <reason>`; the options stay `Once: only the next command` / `Always: in this project, until you revoke it` / `Don't allow`. The manage replace options read `Replace, allow once` / `Replace, always in this project` / `Replace, but ask me before each use` / `Don't replace`.
+  - S7.3 (D-B4, V5) Passphrase prompts say what they protect: unlock/init `Vault passphrase`; export `Export passphrase (protects this backup file)`, again `Type the export passphrase again`; import `Passphrase of the export file`.
+  - S7.4 (D-B2) `Who: you (qbit-vault)` for every command the user runs (not `qbit-vault set`).
+  - S7.5 (D-B6, V7) The multi-field form header has no `Value:` line; each box says whether it is hidden.
+  - S7.6 (V3) In the Windows dialog the header lines (Who, Secret, Why, Saved in, Value) are a two-column grid (label column, value column), not space-aligned text.
+  - S7.7 (V4) Buttons say the action: secret and form `Save` / `Cancel`; choose `Continue` / `Cancel`; show `Done` / `Cancel`; confirm keeps `Confirm` / `Decline`. Same labels on every backend that can set them (zenity `--ok-label`, osascript buttons, PowerShell).
+  - S7.8 (V8) Windows confirm: Decline (the default, Enter) is the highlighted button; Confirm is neutral.
+  - S7.9 (D-B9) One phrase for layers: text says `all projects` / `project <label>`; pickers offer `All projects` / `Only this project (<label>)` (set, import, request, prompt).
+  - S7.10 (Audit D copy) Secret dialog line `Paste or type the value. The agent never sees it:` (visible field: `Type the value (shown while you type):`); terminal `Value (hidden): ` / `Value (shown while you type): `; invalid menu answer `Type a number from 1 to N, or press Enter for the default.`; timeout `No answer in time; nothing was saved.`; `No, just save the value` -> `Save it, don't allow yet`; quotes check `The value of X has quotes around it. Most keys and tokens don't, and extra characters break logins. Which one should be saved?` with `Without them (recommended)` / `Keep it as typed` / `Cancel`; no prompt available `Nobody can answer here (no terminal or desktop session). Run it from a terminal.`; unknown backend lists the valid ones.
+  - S7.11 (D-B12) Ctrl-C at a terminal choose/confirm/show answers `cancelled` (exit 1) like the hidden reads, never kills the process mid-write.
+  - S7.12 (D-B10, D-B14..16) kdialog-only Linux shows the recovery key and pairing code in the terminal; zenity dialogs get `--width=480`; zenity lists have no `Pick`/`Index` headers; macOS icon `note` for requests, `caution` only for removals.
+  - S7.13 TUI copy: `asked in a secure prompt` (not `terminal prompt`), `hidden` (not `masked`).
+  - S7.14 Tests updated/added for every text and behaviour above (RED first where behaviour changes: S7.2 who, S7.3 labels, S7.5, S7.11, S7.12 fallback); render every Windows dialog with the real builders and check the screenshots (title, heading, grid, buttons, default); docs and CHANGELOG [Unreleased] in the same change.
 
 ## How to read the findings
 
@@ -164,7 +179,8 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 | LP1 | S4 | worker | | done, awaiting review |
 | LP2 | S5 | worker + parent correction | ab worker commit + 00799f7 (kdialog) | done, beta.11 |
 | LP3 | S6 | worker + parent correction | 076a8da, 80ed221, d3ba4df | done, beta.12 |
-| LP4-LP7 | S1-S3 | plan steps 4-7 | | pending |
+| LP4 | S7 | worker | (this branch) | done, review pending |
+| LP5-LP7 | S1-S3 | plan steps 5-7 | | pending |
 
 ## Log
 
@@ -176,3 +192,5 @@ Each step is one PR, test-first (RED then GREEN), docs in the same PR, CI green 
 - L5. beta.11 released (9 assets), this machine upgraded, doctor healthy. Step 3 started on branch fix/boundary-storage.
 - L6. LP3 (S6.1-S6.8) done by worker, not committed. RED first for each rule, then GREEN. S6.1 `scriptOf` skips `-o/+o/-O/+O VALUE` and `--long` options before `-c`. S6.2 `encodedPowerShell` in `Match`/`MatchRaw` and `encodedCommand` in the pre-bash hook. S6.3 `utf16Form` (LE and BE) in `addEncodings`; leak battery gets a UTF-16 child and needles. S6.4 `prompt --value` keeps the existing record id and `set` redeems with it. S6.5 `recover` in `broker.Handle` and the MCP handler, one fixed stderr line (`broker.PanicLine`). S6.6 snapshot uses `writeSynced` (seam `syncFile`). S6.7 `memoryBacked` seam, statfs tmpfs/ramfs on Linux, true elsewhere. S6.8 `stale()` also true for an age below minus the stale age. Docs: THREAT_MODEL (R2, R5), STORAGE, CLI, AGENT_INTEGRATIONS, TESTING, CHANGELOG.
 - L7. Step 3 review: two CRITICAL findings (encoded PowerShell after an option with a value, `-ExecutionPolicy Bypass -EncodedCommand`, passed the guard and the hook) corrected in d3ba4df and validated. Advisory follow-ups for step 7: R1-psenc-valued-option-bypass and R4-encoded-ps-option-value (binaries.go:119), R3-scriptof-valued-long-options (bash long options with a value before -c), R3-set-replace-grant-id (secrets.go:438). Released as 0.1.0-beta.12.
+- L8. beta.12 released, this machine upgraded, doctor healthy. Step 4 started on branch feat/dialogs-one-voice.
+- L9. LP4 (S7.1-S7.14) done by worker, not committed. RED first for who in the question (S7.2), passphrase labels (S7.3), form header (S7.5), Ctrl-C at cooked reads (S7.11, `console.interrupts` seam) and the kdialog show fallback (S7.12, `native.open` seam). `Backend.Passphrase` takes a `PassphraseRequest` (heading, label, again, confirm; keychain's `PassphraseFunc` unchanged). Dialogs carry a heading, request rows (Windows grid), button labels and one title `QBit Vault`; `prompt.Escape` keeps an agent's reason on one line because `Choose`/`Confirm` now keep layout line breaks. Windows dialogs rendered with the real builders to PNG and checked. Left for the owner: `e2e/docker-test.sh:252` waits for `SHOW Confirmation code` (now `SHOW Pairing code`); `docs/TESTING.md:67` and `contracts/secrets-broker/v1/CONTRACT.md:162` still quote `prompt timed out` and the old replace options.

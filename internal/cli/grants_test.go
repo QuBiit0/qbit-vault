@@ -57,6 +57,9 @@ func asTerminal(t *testing.T, on bool) {
 }
 
 func grantPrompt(name, layer, who string, scope string) string {
+	if layer == "global" {
+		layer = "all projects"
+	}
 	return fmt.Sprintf("Grant %s (%s) to %s, scope %s? [y/N] ", name, layer, who, scope)
 }
 

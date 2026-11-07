@@ -83,7 +83,7 @@ func newMv(g *globals) *cobra.Command {
 				if berr != nil {
 					return orInstead(berr, exists)
 				}
-				if err := confirmChange(ask, name+" already exists in "+layerName(dest)+"; overwrite?", exists); err != nil {
+				if err := confirmChange(ask, name+" already exists in "+whereText(dest)+"; overwrite?", exists); err != nil {
 					return err
 				}
 				res, err = s.v.MoveWithGrants(name, from, dest, true, newGrantsEditor())

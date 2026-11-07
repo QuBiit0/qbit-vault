@@ -128,7 +128,7 @@ func TestExportWritesAnEncryptedFileAndSays(t *testing.T) {
 	if code != exitcode.OK || out != "exported 4 secrets (global: 3, projects: 1) to "+file+"\n" || errs != msgExportKeep {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if len(f.Calls) != 1 || f.Calls[0].Kind != "passphrase" || !f.Calls[0].Confirm {
+	if len(f.Calls) != 1 || f.Calls[0].Kind != "passphrase" || !f.Calls[0].Confirm || f.Calls[0].Passphrase.Label != "Export passphrase (protects this backup file)" || f.Calls[0].Passphrase.Again != "Type the export passphrase again" {
 		t.Fatalf("calls=%+v, want one confirmed passphrase prompt", f.Calls)
 	}
 	data := readBytes(t, file)
@@ -193,7 +193,7 @@ func TestExportRoundTripIntoAFreshVault(t *testing.T) {
 	if code != exitcode.OK || out != "imported 4 secrets from the export\n" || errs != "" {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if len(f.Calls) != 2 || f.Calls[0].Kind != "passphrase" || f.Calls[0].Confirm || f.Calls[1].Q != "Import 4 secrets from the export?" {
+	if len(f.Calls) != 2 || f.Calls[0].Kind != "passphrase" || f.Calls[0].Confirm || f.Calls[0].Passphrase.Label != "Passphrase of the export file" || f.Calls[1].Q != "Import 4 secrets from the export?" {
 		t.Fatalf("calls=%+v, want one single passphrase prompt and the short question", f.Calls)
 	}
 	if got := n.dump(); got != want {
@@ -257,7 +257,7 @@ func TestExportPassphraseRulesWriteNothing(t *testing.T) {
 		{"blank", val("               "), exitcode.Usage, usageErr("the export passphrase must be at least 12 characters")},
 		{"mismatch", prompttest.Answer{Err: prompt.ErrMismatch}, exitcode.Usage, usageErr("passphrases do not match")},
 		{"cancelled", cancel(), exitcode.Failure, msgCancelled},
-		{"timeout", prompttest.Answer{Err: prompt.ErrTimeout}, exitcode.Failure, "error: prompt timed out\n"},
+		{"timeout", prompttest.Answer{Err: prompt.ErrTimeout}, exitcode.Failure, "error: No answer in time; nothing was saved.\n"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -112,16 +112,17 @@ func scopeLabels(scopes []grants.Scope, proposed grants.Scope, userChose bool) (
 // denyOption is the last choice of every permission question.
 const denyOption = "Don't allow"
 
-// allowQuestion is the permission question: the secrets (each with where it is
-// saved) and the agent's reason.
-func allowQuestion(secrets []string, reason string) string {
-	return "Allow the agent to use " + strings.Join(secrets, ", ") + "? Why: " + reason
+// allowQuestion is the permission question: who asks, the secrets (each with
+// where it is saved), then the reason on a line of its own. The reason is the
+// agent's: made one line so it cannot add a line of the question.
+func allowQuestion(who string, secrets []string, reason string) string {
+	return who + " wants to use " + strings.Join(secrets, ", ") + ".\nWhy: " + prompt.Escape(reason)
 }
 
 // whereText is where a layer's secrets apply, in plain words.
 func whereText(l vault.Layer) string {
 	if l.Project {
-		return "project " + l.Label
+		return "project " + prompt.Escape(l.Label)
 	}
 	return "all projects"
 }
@@ -131,7 +132,7 @@ func layerOption(l vault.Layer) string {
 	if l.Project {
 		return "Only this project (" + l.Label + ")"
 	}
-	return "All projects (global)"
+	return "All projects"
 }
 
 // layerOptions are the two answers, global first, for a request in project p.
@@ -191,7 +192,7 @@ func (g *globals) captureValue(ask prompt.Backend, name string, layer vault.Laye
 	}
 	scopes := g.allowedScopes(name, layer, sensitive, scopeOrder)
 	opts, def := scopeLabels(scopes, flagScope, flagScope != "")
-	opts = append(opts, "No, just save the value")
+	opts = append(opts, "Save it, don't allow yet")
 	i, err := ask.Choose(fmt.Sprintf("Allow agents to use %s (%s) right away?", name, whereText(layer)), opts, def)
 	if err != nil {
 		clear(raw)

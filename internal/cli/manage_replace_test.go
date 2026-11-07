@@ -24,10 +24,10 @@ func TestManageReplaceGrantsInTheSameDecision(t *testing.T) {
 		t.Fatalf("dialogs = %+v", f.Calls)
 	}
 	q := f.Calls[0]
-	if q.Q != "The agent proposes to replace the value of A (all projects). Why: "+manageReason || q.Default != 0 {
+	if q.Q != "Pi wants to replace the value of A (all projects).\nWhy: "+manageReason || q.Default != 0 {
 		t.Fatalf("question = %q default %d", q.Q, q.Default)
 	}
-	want := []string{"Replace, then Once: only the next command", "Replace only: ask me again before it is used", "Don't replace"}
+	want := []string{"Replace, allow once", "Replace, but ask me before each use", "Don't replace"}
 	if strings.Join(q.Options, "|") != strings.Join(want, "|") {
 		t.Fatalf("options = %q", q.Options)
 	}
@@ -83,7 +83,7 @@ func TestManageReplaceSensitiveOffersOnceOnly(t *testing.T) {
 	if code, m, _ := w.broker("manage", manageReq(w.outside, `"action":"replace","name":"A","layer":"global"`)); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
-	if o := f.Calls[0].Options; len(o) != 3 || o[0] != "Replace, then Once: only the next command" || f.Calls[0].Default != 0 {
+	if o := f.Calls[0].Options; len(o) != 3 || o[0] != "Replace, allow once" || f.Calls[0].Default != 0 {
 		t.Fatalf("options = %q default %d", o, f.Calls[0].Default)
 	}
 	if err := w.execCheck("A", brokerSession); err != nil {
@@ -100,7 +100,7 @@ func TestManageReplaceInARepositoryCanGrantAlways(t *testing.T) {
 	if code, m, _ := w.broker("manage", manageReq(w.repo, `"action":"replace","name":"A","layer":"global"`)); code != exitcode.OK {
 		t.Fatalf("code=%d m=%v", code, m)
 	}
-	want := []string{"Replace, then Once: only the next command", "Replace, then Always: in this project, until you revoke it", "Replace only: ask me again before it is used", "Don't replace"}
+	want := []string{"Replace, allow once", "Replace, always in this project", "Replace, but ask me before each use", "Don't replace"}
 	if strings.Join(f.Calls[0].Options, "|") != strings.Join(want, "|") || f.Calls[0].Default != 0 {
 		t.Fatalf("options=%q default=%d", f.Calls[0].Options, f.Calls[0].Default)
 	}

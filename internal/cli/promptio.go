@@ -42,7 +42,9 @@ func (g *globals) askPassphrase(confirm bool) (secret.Secret, error) {
 	if err != nil {
 		return secret.Secret{}, err
 	}
-	return b.Passphrase(confirm)
+	req := prompt.VaultPassphrase
+	req.Confirm = confirm
+	return b.Passphrase(req)
 }
 
 // unlockPassphrase is the keychain's passphrase source for unlocking a vault

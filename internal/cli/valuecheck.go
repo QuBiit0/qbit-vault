@@ -38,11 +38,11 @@ func valueIssues(v []byte) (problem string, fixed []byte) {
 	}
 	switch {
 	case quoted && hidden:
-		problem = "starts and ends with quotes and has invisible characters"
+		problem = "has quotes around it and invisible characters in it"
 	case quoted:
-		problem = "starts and ends with quotes"
+		problem = "has quotes around it"
 	case hidden:
-		problem = "has invisible characters"
+		problem = "has invisible characters in it"
 	default:
 		clear(out)
 		return "", nil
@@ -60,10 +60,10 @@ func reviewValue(ask prompt.Backend, name string, v []byte) ([]byte, error) {
 	if problem == "" {
 		return bytes.Clone(v), nil
 	}
-	q := "The value of " + name + " " + problem + ". Keys and tokens usually don't, and a pasted extra breaks the login. Save it:"
+	q := "The value of " + name + " " + problem + ". Most keys and tokens don't, and extra characters break logins. Which one should be saved?"
 	// Without the extras nothing may be left (a value of invisible characters
 	// only): then that choice is not offered, rather than saving nothing.
-	const withoutThem, asTyped, cancel = "Without them (recommended)", "Exactly as typed", "Cancel"
+	const withoutThem, asTyped, cancel = "Without them (recommended)", "Keep it as typed", "Cancel"
 	opts := []string{withoutThem, asTyped, cancel}
 	if len(fixed) == 0 {
 		opts = opts[1:]

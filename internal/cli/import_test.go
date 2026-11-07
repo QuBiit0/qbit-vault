@@ -155,7 +155,7 @@ func TestImportConfirmationAndLayerQuestion(t *testing.T) {
 	if code != exitcode.Failure || out != "" || errs != msgCancelled {
 		t.Fatalf("declined: code=%d out=%q err=%q", code, out, errs)
 	}
-	if len(f.Calls) != 1 || f.Calls[0].Q != "Import A, B from the dotenv file into global? Existing secrets with these names are replaced." {
+	if len(f.Calls) != 1 || f.Calls[0].Q != "Import A, B from the dotenv file into all projects? Existing secrets with these names are replaced." {
 		t.Fatalf("question: %+v", f.Calls)
 	}
 	if w.snapshot() != before {

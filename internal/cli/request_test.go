@@ -33,7 +33,7 @@ func TestRequestNewSecretOutsideRepo(t *testing.T) {
 	if req.Name != "A" || req.Reason != reqReason || req.Session != brokerSession || req.Host != "pi" || req.Existing {
 		t.Fatalf("prompt request=%+v", req)
 	}
-	if f.Calls[1].Default != 0 || f.Calls[1].Q != "Allow the agent to use A (all projects)? Why: "+reqReason {
+	if f.Calls[1].Default != 0 || f.Calls[1].Q != "Pi wants to use A (all projects).\nWhy: "+reqReason {
 		t.Fatalf("scope question=%+v", f.Calls[1])
 	}
 	if w.value("A") != "TESTSECRET_request_value" {
@@ -129,7 +129,7 @@ func TestRequestCancelAndNoPrompt(t *testing.T) {
 	withBackend(t, &prompttest.Fake{Unavailable: true})
 	c := strings.Replace(reqFor(w.outside, ""), `"name":"A"`, `"name":"C"`, 1)
 	code, m, _ := w.broker("request", c)
-	if code != exitcode.Refusal || refusalType(m) != "internal" || m["refusal"].(map[string]any)["message"] != "no prompt is available to ask the user" {
+	if code != exitcode.Refusal || refusalType(m) != "internal" || m["refusal"].(map[string]any)["message"] != "Nobody can answer here (no terminal or desktop session). Run it from a terminal." {
 		t.Fatalf("no prompt: code=%d m=%v", code, m)
 	}
 	if w.snapshot() != before {
@@ -175,7 +175,7 @@ func TestRequestSeveralFieldsInOnePrompt(t *testing.T) {
 	if !host.Visible || host.Label != "Host" || host.Field != 1 || host.Fields != 2 || pass.Visible || pass.Field != 2 || pass.Label != "Password" {
 		t.Fatalf("boxes: %+v / %+v", host, pass)
 	}
-	if q := f.Calls[2].Q; q != "Allow the agent to use DB_HOST (all projects), DB_USER (all projects, already saved), DB_PASSWORD (all projects)? Why: run the shop-api migrations" {
+	if q := f.Calls[2].Q; q != "Pi wants to use DB_HOST (all projects), DB_USER (all projects, already saved), DB_PASSWORD (all projects).\nWhy: run the shop-api migrations" {
 		t.Fatalf("scope question=%q", q)
 	}
 	w.outRepo()

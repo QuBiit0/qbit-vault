@@ -57,7 +57,7 @@ func TestWizardStep2OffersKeychainAndPassphraseWithTheirConsequences(t *testing.
 	if !strings.Contains(m.View(), "▸ Passphrase") {
 		t.Errorf("down did not select the passphrase:\n%s", m.View())
 	}
-	wantView(t, m, "passphrase selected", "asked in the terminal prompt", "never typed in this screen")
+	wantView(t, m, "passphrase selected", "asked in a secure prompt", "never typed in this screen")
 }
 
 func TestWizardStep3ListsHostsWithDetectionAndToggles(t *testing.T) {

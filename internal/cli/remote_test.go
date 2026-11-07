@@ -126,7 +126,9 @@ func (b noShow) Secret(r prompt.SecretRequest) (secret.Secret, error) {
 }
 func (b noShow) Choose(q string, o []string, d int) (int, error) { return b.f.Choose(q, o, d) }
 func (b noShow) Confirm(q string) (bool, error)                  { return b.f.Confirm(q) }
-func (b noShow) Passphrase(c bool) (secret.Secret, error)        { return b.f.Passphrase(c) }
+func (b noShow) Passphrase(r prompt.PassphraseRequest) (secret.Secret, error) {
+	return b.f.Passphrase(r)
+}
 
 func asBackend(t *testing.T, b prompt.Backend) {
 	t.Helper()

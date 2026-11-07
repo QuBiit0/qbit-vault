@@ -137,7 +137,7 @@ func newImport(g *globals) *cobra.Command {
 				if err != nil {
 					return orInstead(err, usageError{"confirmation required; pass --yes"})
 				}
-				q := fmt.Sprintf("Import %s from %s into %s? Existing secrets with these names are replaced.", strings.Join(src.order, ", "), from, layerText(layer))
+				q := fmt.Sprintf("Import %s from %s into %s? Existing secrets with these names are replaced.", strings.Join(src.order, ", "), from, whereText(layer))
 				if err := confirmChange(b, q, usageError{"confirmation required; pass --yes"}); err != nil {
 					return err
 				}
@@ -311,7 +311,7 @@ func (g *globals) importLayer(lf layerFlags, cwd string, backend func() (prompt.
 	if err != nil {
 		return vault.Layer{}, orInstead(err, usageError{"choose --global or --project"})
 	}
-	i, err := b.Choose("Where should these secrets live?", []string{"global", "this project (" + proj.Label + ")"}, 0)
+	i, err := b.Choose("Where should these secrets live?", layerOptions(proj), 0)
 	if err != nil {
 		return vault.Layer{}, orInstead(err, usageError{"choose --global or --project"})
 	}

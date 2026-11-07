@@ -59,7 +59,7 @@ func TestSecretsListScrollsToKeepTheSelectionVisible(t *testing.T) {
 func TestEmptyVaultInvitesTheFirstSecret(t *testing.T) {
 	b := &fakeBackend{status: ready, secrets: tui.SecretList{}}
 	m := newModel(b, false)
-	wantView(t, m, "empty vault", "No secrets yet", "Press a to add", "masked prompt")
+	wantView(t, m, "empty vault", "No secrets yet", "Press a to add", "hidden prompt")
 	m = pressAll(m, runeKey('a'))
 	wantView(t, m, "add form from the empty state", "Add secret")
 }
@@ -69,7 +69,7 @@ func TestLockedVaultExplainsHowToUnlockAndUnlocksThroughThePrompt(t *testing.T) 
 	after := ready
 	b.afterUnlk = &after
 	m := newModel(b, false)
-	wantView(t, m, "locked secrets", "vault is locked", "passphrase", "terminal prompt", "u", "unlock")
+	wantView(t, m, "locked secrets", "vault is locked", "passphrase", "secure prompt", "u", "unlock")
 	if strings.Contains(m.View(), "GITHUB_TOKEN") {
 		t.Error("a locked vault listed names")
 	}

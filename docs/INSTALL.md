@@ -92,7 +92,7 @@ qbit-vault doctor    # read-only health report; exit 1 on any problem
 - The TUI wizard runs `init` with the key storage and hosts you pick. `QBIT_VAULT_NO_TUI=1` makes bare `qbit-vault` print the help instead.
 - `init` registers the hosts it detects: Claude Code (`~/.claude/` or a `claude` binary), Codex (`~/.codex/` or `codex`) and Pi / Gentle Shell (`~/.pi/` or a `pi` / `gentle-shell` binary). Choose them yourself with `init --agents claude-code,codex,pi` or skip them with `--agents none`.
 - The registered MCP entry holds the **absolute path** of the binary that ran `init`. Moving or reinstalling to another directory means running `qbit-vault sync` (below).
-- Store your first secret yourself: `qbit-vault set GITHUB_TOKEN --global` (masked prompt). `init` never asks for a value and never reads your environment.
+- Store your first secret yourself: `qbit-vault set GITHUB_TOKEN --global` (hidden prompt). `init` never asks for a value and never reads your environment.
 
 ## Update
 

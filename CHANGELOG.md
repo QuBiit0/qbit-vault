@@ -6,6 +6,11 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Fixed
 
+- A device the account revoked can join again (`remote join`, pairing or `--recovery`): it takes a new device id and its project roots move to it, so project secrets still resolve; the old id stays revoked. A refused join changes nothing.
+- The joiner's confirmation code is asked as its own question, headed `Confirmation code`, without the `Saved in` / `Value` lines of a secret request.
+- `remote devices` shows `last seen` from the server and `last sync` only when known, instead of `last sync: never` for a device that only pulls (`--json` adds `last_seen`).
+- A new passphrase that does not match its confirmation (vault, export) is asked again, up to 3 times, before it fails with `passphrases do not match`.
+- `request` names the field that was stored meanwhile when several are asked.
 - `restore` reports an unreadable `keys/retired.enc` instead of "backup cannot be opened"; vault temp files are created with `O_EXCL`; promoting a staged key (`rekey`) and `key.enc` writes retry the transient sharing errors of Windows; `init --passphrase` stops when the OS keychain cannot be read instead of assuming it holds no key.
 - Windows: `doctor` and `perm.Check` no longer call a file with an empty ACL (nobody can open it) or an unrelated owner private, and `EnsureFile` repairs the ACL.
 - A stale lock is broken under a `.break` guard that re-checks its age, so two processes cannot delete a lock another one just took.

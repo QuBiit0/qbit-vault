@@ -308,24 +308,33 @@ func (n *native) Secret(req SecretRequest) (secret.Secret, error) {
 }
 
 func (n *native) Passphrase(req PassphraseRequest) (secret.Secret, error) {
-	first, err := n.read("passphrase", passphraseDialog(req, false), passphraseInput)
-	if err != nil || !req.Confirm {
-		return first, err
-	}
-	second, err := n.read("passphrase", passphraseDialog(req, true), passphraseInput)
-	defer second.Wipe()
-	if err != nil {
+	for try := 1; ; try++ {
+		d := passphraseDialog(req, false)
+		if try > 1 {
+			d = retryDialog(req)
+		}
+		first, err := n.read("passphrase", d, passphraseInput)
+		if err != nil || !req.Confirm {
+			return first, err
+		}
+		second, err := n.read("passphrase", passphraseDialog(req, true), passphraseInput)
+		if err != nil {
+			first.Wipe()
+			return secret.Secret{}, err
+		}
+		a, b := first.Reveal(), second.Reveal()
+		same := subtle.ConstantTimeCompare(a, b) == 1
+		clear(a)
+		clear(b)
+		second.Wipe()
+		if same {
+			return first, nil
+		}
 		first.Wipe()
-		return secret.Secret{}, err
+		if try == maxPassphraseTries {
+			return secret.Secret{}, ErrMismatch
+		}
 	}
-	a, b := first.Reveal(), second.Reveal()
-	defer clear(a)
-	defer clear(b)
-	if subtle.ConstantTimeCompare(a, b) != 1 {
-		first.Wipe()
-		return secret.Secret{}, ErrMismatch
-	}
-	return first, nil
 }
 
 func (n *native) Choose(q string, options []string, def int) (int, error) {

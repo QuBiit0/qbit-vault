@@ -233,10 +233,11 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 		for _, rec := range recs {
 			rec.Value.Wipe()
 		}
-		if errors.Is(err, vault.ErrExists) {
+		var exists vault.ExistsError
+		if errors.As(err, &exists) {
 			// A `set` stored it while the user was answering: it wins.
 			return broker.RequestResponse{}, refusal.New(refusal.Internal, "").
-				WithMessage(firstName(fresh) + " changed while it was being asked; ask again").WithRetryable(true)
+				WithMessage(exists.Name + " changed while it was being asked; ask again").WithRetryable(true)
 		}
 		if err != nil {
 			return broker.RequestResponse{}, asRefusal(mapErr(err, ""))

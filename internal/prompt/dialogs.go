@@ -11,6 +11,9 @@ const dialogTitle = "QBit Vault"
 
 // secretDialog is the capture dialog: the request as headerRows lays it out.
 func secretDialog(req SecretRequest) dialog {
+	if req.Heading != "" {
+		return dialog{kind: dialogSecret, title: dialogTitle, heading: escape(req.Heading), text: escape(req.Reason), visible: req.Visible, okLabel: "Continue", cancelLabel: "Cancel"}
+	}
 	rows := headerRows(req, true)
 	input := "Paste or type the value. The agent never sees it:"
 	if req.Visible {
@@ -111,4 +114,11 @@ func (d dialog) buttons() (ok, cancel string) {
 		cancel = "Cancel"
 	}
 	return ok, cancel
+}
+
+// retryDialog is the first entry of a passphrase asked again after a mismatch.
+func retryDialog(req PassphraseRequest) dialog {
+	d := passphraseDialog(req, false)
+	d.text = mismatchText + " Try again.\n\n" + d.text
+	return d
 }

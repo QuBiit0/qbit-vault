@@ -91,6 +91,10 @@ type SecretRequest struct {
 	// Stored names the other fields of the request that are already stored
 	// and get no box (R-CAP-08).
 	Stored []string
+	// Heading turns the request into a plain question (the joiner's
+	// confirmation code): the heading and Reason, none of the request lines
+	// of a capture.
+	Heading string
 }
 
 // PassphraseRequest says what a passphrase prompt protects, so the user does
@@ -263,13 +267,19 @@ func readErr(err error) error {
 func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 	var out secret.Secret
 	err := b.with(func(ctx context.Context, t Terminal) error {
-		_, _ = io.WriteString(t, Header(req))
+		label := "Value"
+		if req.Heading != "" {
+			_, _ = io.WriteString(t, "QBit Vault: "+escape(req.Heading)+"\n  "+escape(req.Reason)+"\n")
+			label = "Answer"
+		} else {
+			_, _ = io.WriteString(t, Header(req))
+		}
 		read := t.ReadHidden
 		if req.Visible {
-			_, _ = io.WriteString(t, "Value (shown while you type): ")
+			_, _ = io.WriteString(t, label+" (shown while you type): ")
 			read = t.ReadLine
 		} else {
-			_, _ = io.WriteString(t, "Value (hidden): ")
+			_, _ = io.WriteString(t, label+" (hidden): ")
 		}
 		raw, err := read(ctx)
 		if err != nil {
@@ -285,29 +295,42 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 func (b *tty) Passphrase(req PassphraseRequest) (secret.Secret, error) {
 	var out secret.Secret
 	err := b.with(func(ctx context.Context, t Terminal) error {
-		_, _ = io.WriteString(t, req.Label+": ")
-		first, err := t.ReadHidden(ctx)
-		if err != nil {
-			return readErr(err)
-		}
-		defer clear(first)
-		if req.Confirm {
+		for try := 1; ; try++ {
+			_, _ = io.WriteString(t, req.Label+": ")
+			first, err := t.ReadHidden(ctx)
+			if err != nil {
+				return readErr(err)
+			}
+			defer clear(first)
+			if !req.Confirm {
+				out = secret.New("passphrase", first)
+				return nil
+			}
 			_, _ = io.WriteString(t, req.again()+": ")
 			second, err := t.ReadHidden(ctx)
 			if err != nil {
 				return readErr(err)
 			}
 			defer clear(second)
-			if subtle.ConstantTimeCompare(first, second) != 1 {
-				_, _ = io.WriteString(t, "Passphrases do not match.\n")
+			if subtle.ConstantTimeCompare(first, second) == 1 {
+				out = secret.New("passphrase", first)
+				return nil
+			}
+			_, _ = io.WriteString(t, mismatchText+"\n")
+			if try == maxPassphraseTries {
 				return ErrMismatch
 			}
 		}
-		out = secret.New("passphrase", first)
-		return nil
 	})
 	return out, err
 }
+
+// maxPassphraseTries bounds how many times a new passphrase is asked twice
+// when the two entries differ; the last mismatch is ErrMismatch.
+const maxPassphraseTries = 3
+
+// mismatchText is what the user is told when the two entries differ.
+const mismatchText = "Passphrases do not match."
 
 // maxChoiceTries bounds how many invalid menu answers are tolerated.
 const maxChoiceTries = 5

@@ -509,6 +509,7 @@ type deviceRow struct {
 	AddedBy   string `json:"added_by"`
 	AddedAt   string `json:"added_at,omitempty"`
 	LastSync  string `json:"last_sync,omitempty"`
+	LastSeen  string `json:"last_seen,omitempty"` // from the server, when it could be asked
 	Revoked   bool   `json:"revoked"`
 	RevokedAt string `json:"revoked_at,omitempty"`
 	This      bool   `json:"this"`
@@ -525,7 +526,8 @@ func newRemoteDevices(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
-			if _, err := requireRemote(s); err != nil {
+			st, err := requireRemote(s)
+			if err != nil {
 				return err
 			}
 			roster, err := s.v.Roster()
@@ -533,10 +535,11 @@ func newRemoteDevices(g *globals) *cobra.Command {
 				return mapErr(err, "")
 			}
 			me, _ := vault.ReadDeviceID(s.home)
+			seen := g.serverLastSeen(cmd, s, st)
 			rows := make([]deviceRow, 0, len(roster))
 			for id, d := range roster {
 				// Every field comes from a body another device wrote: one line each.
-				r := deviceRow{ID: oneLine(id), Label: oneLine(d.Label), AddedBy: oneLine(d.AddedBy), AddedAt: oneLine(d.AddedAt), This: id == me}
+				r := deviceRow{ID: oneLine(id), Label: oneLine(d.Label), AddedBy: oneLine(d.AddedBy), AddedAt: oneLine(d.AddedAt), LastSeen: oneLine(seen[id]), This: id == me}
 				if d.LastSync != nil {
 					r.LastSync = oneLine(d.LastSync.At)
 				}
@@ -559,11 +562,13 @@ func newRemoteDevices(g *globals) *cobra.Command {
 			}
 			w := cmd.OutOrStdout()
 			for _, r := range rows {
-				last := r.LastSync
-				if last == "" {
-					last = "never"
+				line := fmt.Sprintf("%s  %s  added: %s", r.ID, r.Label, r.AddedBy)
+				if r.LastSync != "" {
+					line += "  last sync: " + r.LastSync
 				}
-				line := fmt.Sprintf("%s  %s  added: %s  last sync: %s", r.ID, r.Label, r.AddedBy, last)
+				if r.LastSeen != "" {
+					line += "  last seen: " + r.LastSeen
+				}
 				if r.Revoked {
 					line += "  revoked: " + r.RevokedAt
 				}
@@ -577,6 +582,36 @@ func newRemoteDevices(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// serverLastSeen asks the server when it last saw each device, best effort:
+// offline, with remote calls off or refused it answers nothing and the list
+// shows the roster alone. It changes nothing here, not even the sync state a
+// revoked device would turn off.
+func (g *globals) serverLastSeen(cmd *cobra.Command, s *session, st *vault.Remote) map[string]string {
+	if g.remoteOff() {
+		return nil
+	}
+	me, err := s.device()
+	if err != nil {
+		return nil
+	}
+	defer me.wipe()
+	ctx, cancel := netCtx(cmd, 10*time.Second)
+	defer cancel()
+	c, err := remote.NewClient(st.Server, st.CAFile)
+	if err != nil || c.Login(ctx, me.id, me.key) != nil {
+		return nil
+	}
+	list, err := c.Devices(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(list))
+	for _, d := range list {
+		out[d.ID] = d.LastSeen
+	}
+	return out
 }
 
 // warnNewDevices audits a device this device did not know that joined by

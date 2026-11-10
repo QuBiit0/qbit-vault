@@ -79,6 +79,10 @@ func TestPutMissingNeverReplacesAndWritesNothingOnAConflict(t *testing.T) {
 	if !errors.Is(err, ErrExists) {
 		t.Fatalf("err = %v, want ErrExists", err)
 	}
+	var exists ExistsError
+	if !errors.As(err, &exists) || exists.Name != "B" || err.Error() != ErrExists.Error()+": B" {
+		t.Fatalf("err = %v, want it to name B, the one that exists", err)
+	}
 	if after, _ := os.ReadFile(filepath.Join(home, vaultFile)); string(after) != string(live) {
 		t.Fatal("vault.enc changed on a refused store")
 	}

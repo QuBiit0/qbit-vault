@@ -34,7 +34,7 @@ After 1.0.0. One command that brings an installed `qbit-vault` to the latest rel
 | --- | --- | --- | --- | --- |
 | T1 | S3, S5 (CLI parts), S6 (CLI) | worker | | done (uncommitted) |
 | T2 | S4, S5 (TUI parts), S6 (TUI) | worker | | done (uncommitted) |
-| T3 | S7 | parent | | pending |
+| T3 | S7 | parent | v1.1.0 | in progress |
 
 ## Log
 

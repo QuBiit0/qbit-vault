@@ -37,7 +37,7 @@ The agent must never send the user to a terminal to run `grant` or `unlock`: the
 | T2 | S5 | worker | | done (uncommitted) |
 | T3 | S6 audit | explorer | L3 | done |
 | T4 | S6 fixes | worker | | done (uncommitted) |
-| T6 | S9 (issue #42) | worker | | done (uncommitted) |
+| T6 | S9 (issue #42) | worker | 85e49a4 | done |
 | T5 | S8 | parent + owner | | pending |
 
 ## Log
@@ -50,3 +50,4 @@ The agent must never send the user to a terminal to run `grant` or `unlock`: the
 - L6. Review follow-ups (uncommitted): the unlock dialog text keeps only valid secret names (max 5, then `and N more`), a known layer and a requester cut to 40 runes; tests for grant/revoke through the named, gated dialog, a hostile name refused before any dialog, and `stdinOverride` restored with t.Cleanup.
 - L7. Issue #42 opened by lalvarez-ai-mate on qbitdevz/qbit-vault (beta.17, WSL2, Pi): list and exec disagree on a project grant of a global secret. Added S9 / T6; parent hypothesis to check: exec needs the exact repository root the grant was approved in (grants.Check: global record + project scope => ProjectRoot == cwd) while list decides differently; WSL path forms may differ.
 - L8. T6 (S9.1-S9.4) done, uncommitted. Cause: the broker `list` took any project grant of the record (`applicableGrant`, record id only) while `exec` (`grants.Check`) needs a global record's project grant to equal the repository root it was approved in, so a grant approved in repo A showed as active from repo B, a nested repo or a plain directory. Not bugs (tests pass): subdirectory, trailing separator, dot segments, letter case, real symlinks (checked on Linux), value replace (grants dropped, new id), sync (a record keeps its id unless its value changes). Fix: `grants.Lookup` shares `covers` with `Check`; list uses it for `grantCwdOf` (the same root helper exec uses); additive optional `grant_note`; `grant_required` messages name the cause. Tests: `internal/grants/lookup_test.go`, `internal/cli/grants_listexec_test.go`.
+- L9. All commits of the branch reviewed one by one (update, WSL, MCP, unlock, TUI, follow-ups + #42): approved; open advisories for after 1.1.0: R3-explain-ignores-session (grants.go:324), R3-list-cwd-error-swallowed (brokercmd.go:183), R3-tui-recheck-success-untested (update_test.go:157).

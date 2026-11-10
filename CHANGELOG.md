@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-10
+
+Self-update, Windows dialogs from WSL, the passphrase asked on demand, a sturdier MCP server, and the fix for #42.
+
 ### Fixed
 
 - `secret_list` showed a project grant that `secret_exec` then refused with `grant_required` (#42). The listing matched a grant by record only, while `exec` also requires a project grant of a global secret to be for the exact repository it was approved in, so a grant approved in one repository showed as active from another directory. The listing now uses the same check as `exec` (without spending a `once` grant) for the caller's repository root; a grant that exists but does not apply is `"grant":null` with a new optional `grant_note` (contract 1.0 stays valid: the field is additive), and the `grant_required` message says when the grant is for another directory or for an earlier value of the secret. The agent skill says what to do.

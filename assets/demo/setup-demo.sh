@@ -24,15 +24,15 @@ qv() { qbit-vault "$@" >/dev/null; }
 answers
 qv init --passphrase --agents claude-code
 
-answers 'ghp_DEMO0000000000000000000000000000fake'
+answers 'demo-github-value-not-real'
 qv set GITHUB_TOKEN --global --description 'GitHub CLI and API access' --binaries gh,git
-answers 'sk-demo-0000000000000000000000000000fake'
+answers 'demo-openai-value-not-real'
 qv set OPENAI_API_KEY --global --description 'OpenAI API, used by the eval scripts'
-answers 'postgres://demo:demo-pass-fake@db.example.test:5432/app'
+answers 'demo-database-url-not-real'
 qv set DATABASE_URL --global --description 'Staging database connection string'
-answers 'sk_test_DEMO0000000000000000000000fake'
+answers 'demo-stripe-value-not-real'
 qv set STRIPE_SECRET_KEY --global --description 'Stripe test-mode secret key' --sensitive
-answers 'acme-api-demo-token-0000000000fake'
+answers 'demo-acme-value-not-real'
 (cd "$HOME/work/acme-api" && qv set ACME_API_TOKEN --project --description 'Token for the acme-api service')
 
 # Two session grants, confirmed on the (scripted) prompt like a user would.

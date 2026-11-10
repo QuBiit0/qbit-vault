@@ -7,7 +7,7 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 - S1. User (verbatim): "los pendientes, actualizar toda la documentacion y limpiar el repo para que no quede nada desprolijo"
 - S2. Owner decisions (verbatim answers, 2026-11-07):
   - audit.head: "Detectarlo (recomendado)" — `audit.head` is written when the vault is created, and a missing head is reported as `head_mismatch` by `audit verify` and `doctor`; an existing vault without one gets it written the next time the audit log is opened by a command that writes (no false alarm on upgrade).
-  - `remote status` exit code with warnings: "0, con los avisos en texto (recomendado)" — unchanged, documented.
+  - `remote status` exit code with warnings: the owner chose "0, con los avisos en texto (recomendado)", but the question wrongly said 0 was the current behavior; the code exits 1 with warnings (pinned by tests). Told on 2026-11-10 with the recommendation to keep 1; no objection, so it stays 1 (documented in CLI.md and REMOTE_SYNC.md).
   - Attribution: "qbitdev" — the project is presented as "QBit Vault by qbitdev" wherever an author or brand line appears (README, design, docs, TUI/splash text if any); repository URLs, the Go module path and the ghcr image keep `QuBiit0`/`qubiit0`.
   - `odd/tasks/`: "Dejarlas, con un README que explique (recomendado)" — kept; `odd/README.md` explains what they are and indexes them.
   - Parent defaults for the two minor open decisions (owner may override): a passphrase that does not match its confirmation is asked again, up to 3 times, instead of failing; no beta-cadence note (the CHANGELOG is enough).
@@ -39,7 +39,7 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 | T3 | S4.1-S4.4 | worker | 4071677, PR #38 | done |
 | T4 | S5 | parent (Dokploy API) | | pending |
 | T5 | S6 + S2 attribution + odd/README + S10 README | worker | | done (uncommitted) |
-| T6 | S7 | parent | | pending |
+| T6 | S7 | parent | docs/v1-launch | done |
 | T8 | S9 | parent | 26809e9, PR #39 | done |
 | T9 | S10 demo assets | worker | | in progress |
 | T7 | S8 | parent | | pending |
@@ -55,3 +55,4 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 - L6. Resumed 2026-11-10. T3 reviewed (risk, reliability; approved, advisory R3-001 remotesync.go:600) and merged as PR #38. Transfer QuBiit0/qbit-vault -> qbitdevz/qbit-vault requested via API (pending the owner's acceptance on qbitdevz). Rename prepared on chore/move-to-qbitdevz: every QuBiit0/qbit-vault and ghcr.io/qubiit0 reference outside odd/tasks and CHANGELOG history (221 files); build, vet, focused release/docs tests, install_test.sh and install_test.ps1 green. Not merged until the transfer is accepted (the new module path must resolve).
 - L7. Transfer accepted: qbitdevz/qbit-vault, QuBiit0 has write. PR #39 (rename) merged. Dokploy still deploys from the QuBiit0 GitHub app, which cannot see the moved repo: T4 switches it to a raw compose with the published image after the release (same appName, so the same vault-data volume). Release version is 1.0.0 (owner). T5 docs pass and T9 demo assets run in parallel on docs/v1-launch with disjoint edit surfaces.
 - T5 (worker, uncommitted): S6/S10 docs pass against the built binary's `--help` and a real `init`/`doctor` run. README rewritten for 1.0.0 (hero `assets/demo/cli.gif`, Why, Install, First 5 minutes, TUI screenshot and tour link, sync with `compose.image.yaml`, security in brief, docs table); ROADMAP status and Phase 5 now state plainly what is not built (npm, Homebrew, Pi extension, Minisign, `qbit-vault update`); INSTALL, PRD, ARCHITECTURE, CLI, AGENT_INTEGRATIONS, REMOTE_SYNC, TESTING, THREAT_MODEL, SECURITY, AGENTS, deploy/README lose beta/unpublished text and use 1.0.0 in version examples; odd/README indexes every task file. CONTRACT.md untouched. Open: S2 says `remote status` exits 0 with warnings, the code exits 1 (remotesync.go, pinned by remote_test.go); docs describe the code (exit 1) until the owner picks one.
+- L8. T9 demo assets (04aedf8) and T5 docs pass (442e152) on docs/v1-launch; the parent looked at the TUI screenshot, a frame sheet of tui.gif and the last frame of cli.gif (`[REDACTED:OPENAI_API_KEY]`, no value visible). T6: GitHub has only main and this branch, no open PRs, local tool folders are ignored; CHANGELOG gets the 1.0.0 section. Release next.

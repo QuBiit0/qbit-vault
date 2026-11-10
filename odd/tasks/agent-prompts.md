@@ -28,7 +28,7 @@ The agent must never send the user to a terminal to run `grant` or `unlock`: the
 
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
-| T1 | S4 | worker | | pending |
+| T1 | S4 | worker | | done (uncommitted) |
 | T2 | S5 | worker | | pending |
 | T3 | S6 audit | explorer | | pending |
 | T4 | S6 fixes | worker | | pending |
@@ -37,3 +37,4 @@ The agent must never send the user to a terminal to run `grant` or `unlock`: the
 ## Log
 
 - L1. User requests S1, S2, S3 (verbatim above), during the self-update work. Root cause of S2 found by the parent: `nativeFor` on Linux only tries zenity/kdialog when DISPLAY is set; the WSL PowerShell path exists in `locate` but is reached only when forced with `QBIT_VAULT_PROMPT=powershell`.
+- L2. T1 (S4.1-S4.3) done, uncommitted: `nativeFor` picks the Windows PowerShell helper under WSL (`isWSL`: `WSL_DISTRO_NAME` or WSLInterop) before zenity/kdialog; `forced` no longer applies the Windows session check off Windows; `prompt.Describe` and a `prompt` doctor line (`powershell (WSL)`; silent for the terminal so existing exact-output tests of init/sync stay valid). Decoding needed no change: the helper writes raw UTF-8 on stdout, `normalize` trims CR/LF. Tests: `internal/prompt/wsl_test.go`, `internal/cli/doctor_prompt_test.go`.

@@ -12,11 +12,15 @@ import (
 	"github.com/qbitdevz/qbit-vault/internal/hosts/claude"
 	"github.com/qbitdevz/qbit-vault/internal/hosts/codex"
 	"github.com/qbitdevz/qbit-vault/internal/hosts/pi"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
 )
 
 // hostRegistry returns the host adapters of this build: Claude Code, Codex and
 // Pi (docs/ROADMAP.md 3.2, 3.3, 3.5). Tests replace it.
 var hostRegistry = func(*globals) *hosts.Registry { return hosts.NewRegistry(claude.New(), codex.New(), pi.New()) }
+
+// describePrompt names the prompt backend for doctor. Tests replace it.
+var describePrompt = func(g *globals) (string, error) { return prompt.Describe(g.getenv) }
 
 // hostEnv is what host adapters need to know about this machine: the vault
 // home and the user's home directory (a path, never a value).
@@ -32,6 +36,7 @@ func (g *globals) runDoctor() doctor.Report {
 		Home:     g.Home(),
 		Env:      g.hostEnv(),
 		Registry: hostRegistry(g),
+		Prompt:   func() (string, error) { return describePrompt(g) },
 		Open: func() (doctor.Opened, error) {
 			s, err := g.openSessionQuiet()
 			switch {

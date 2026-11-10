@@ -67,7 +67,7 @@ go install ./cmd/qbit-vault
 | --- | --- |
 | macOS, Linux (including WSL2) or Windows 10+, amd64 or arm64 | The unit suite, the install-script tests and the leak grep run on all three in CI; the Docker batteries (`e2e/`) run on Linux. |
 | `curl` or `wget`, `tar` and `sha256sum` or `shasum` (Linux, macOS) | Used by `install.sh`; present on stock systems. |
-| An OS keychain, or a passphrase | Without a keychain (WSL, a headless Linux box without Secret Service) `init` asks for a passphrase instead (below). |
+| An OS keychain, or a passphrase | Without a keychain (WSL, a headless Linux box without Secret Service) `init` asks for a passphrase instead (below). Under WSL the dialogs (passphrase, secrets, permissions) are the Windows ones, through `powershell.exe` at its fixed `/mnt/c/Windows/…` path; no `zenity` or `kdialog` is needed, and `qbit-vault doctor` shows `prompt: powershell (WSL)`. |
 
 ## Where `go install` puts the binary
 

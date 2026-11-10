@@ -212,6 +212,25 @@ func SelectWith(e Env) (Backend, error) {
 	}
 }
 
+// Describe names the backend Select would pick, for `doctor`: the backend
+// name, with " (WSL)" for the Windows dialog reached from Linux. It starts
+// no helper and shows nothing. A backend named by QBIT_VAULT_PROMPT that
+// cannot run is an error, as it is for any command.
+func Describe(getenv func(string) string) (string, error) {
+	return describeWith(Env{GOOS: runtime.GOOS, Getenv: getenv, LookPath: exec.LookPath, Interactive: interactiveSession, SystemRoot: systemRoot})
+}
+
+func describeWith(e Env) (string, error) {
+	b, err := SelectWith(e)
+	if err != nil {
+		return "", err
+	}
+	if n, ok := b.(*native); ok && e.GOOS == "linux" && n.t.name() == "powershell" {
+		return n.t.name() + " (WSL)", nil
+	}
+	return b.Name(), nil
+}
+
 // New builds the terminal backend over open, which is called for every
 // prompt and whose terminal is closed when the prompt ends.
 func New(open func() (Terminal, error), opts ...Option) Backend {

@@ -199,6 +199,15 @@ type DoctorReport struct {
 	Checks []DoctorCheck
 }
 
+// UpdateInfo is the answer of the release check. It names versions and a link,
+// nothing else. Available is true when Latest is newer than Current.
+type UpdateInfo struct {
+	Current   string
+	Latest    string
+	URL       string // release notes page
+	Available bool
+}
+
 // Backend is everything the screens need. It grows with the screens that
 // need more; it must never grow a method that returns a secret value or
 // creates or approves a grant (AGENTS.md invariant 6): granting happens in
@@ -246,4 +255,11 @@ type Backend interface {
 
 	// Doctor is `doctor`.
 	Doctor() (DoctorReport, error)
+
+	// CheckUpdate asks the releases API for the latest release, with a short
+	// timeout. The model runs it off the event loop. Its error is never shown.
+	CheckUpdate() (UpdateInfo, error)
+	// Update is `update`: it confirms in the prompt backend, so it must run
+	// under tea.Exec.
+	Update() Action
 }

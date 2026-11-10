@@ -171,7 +171,7 @@ An interactive app for the things you do by hand: first-run setup, secrets, gran
 | 4 Audit | `v` verify the chain | Lists the newest 50 records, newest first: time, event, names, layer, by. `v` is `audit --verify --offline`: the local chain only; the check against server anchors stays in the CLI. |
 | 5 Sync | none | Read-only `remote status`: server, device, last round, conflicts, pending push, offline. It makes no network call. Linking, pairing and resolving are named in the detail pane and run in your shell (`remote register`, `remote join`, `remote sync`, `remote conflicts`, `remote resolve`, `remote approve`). |
 | 6 Doctor | `r` rerun | The report of `doctor`: same checks, no prompt, nothing written. |
-| 7 Update | none | A static screen: `Re-run the install command to upgrade` (the one-line installer upgrades in place). It also shows the `go install …@latest` command and makes no network call. There is no in-app self-update. |
+| 7 Update | `u` update now (when a newer release exists), `c` check now | Every time the TUI opens it checks the releases API in the background (5 s timeout, `QBIT_VAULT_RELEASES_API` honored; the first frame never waits). A newer release puts `update available <latest>` in the header and shows `current <v>`, `latest <v>`, the release notes link and `u update now`. `u` runs the same update as `qbit-vault update` with the TUI suspended (the confirmation is the out-of-band prompt), then the section says `updated to <latest>; restart qbit-vault and your agents`; a failure shows its one-line message. No network or a failed check only says `could not check for updates` (no error notice). With `QBIT_VAULT_NO_UPDATE_CHECK=1` nothing is checked on open and the section offers `c check now`. A build that is not a release shows `this build is not a release`, makes no check and does not offer `u`. The section holds no secret value and creates no grant. |
 
 In Grants, Hosts, Audit, Sync and Doctor a locked vault offers `u` to unlock, and a failed read offers `enter` to retry. A backend error is shown as one short line with a next action, never a stack trace.
 
@@ -254,7 +254,7 @@ Failures that are not typed refusals (usage errors, `not_initialized`, internal 
 | `QBIT_VAULT_RELEASES_API` | `update` (and the installers): the URL of the release to read, one release object or a list of releases (default: the `releases/latest` endpoint of `qbitdevz/qbit-vault`). `https://` only, or `http://` for a loopback host |
 | `QBIT_VAULT_NO_PROMPT_UNLOCK=1` | Agent calls (MCP, host transport) that find a passphrase vault locked answer `vault_locked` instead of opening the passphrase dialog; `unlock` and every other command you run keep prompting |
 | `QBIT_VAULT_NO_SYNC=1` | `update` (like the installers) does not run `sync` after replacing the binary |
-| `QBIT_VAULT_NO_UPDATE_CHECK=1` | *Not built:* there is no update check, so nothing reads it |
+| `QBIT_VAULT_NO_UPDATE_CHECK=1` | The TUI does not check for a newer release when it opens (the Update section offers `c check now`). It never affects `qbit-vault update` |
 | `QBIT_VAULT_NO_REMOTE=1` | Skip every remote call for this process; changes are marked pending and `audit --verify` skips the anchors |
 | `QBIT_VAULT_NO_TUI=1` | Stop `qbit-vault` with no arguments from opening the TUI (it prints the help). `qbit-vault tui` still opens it. |
 | `NO_COLOR` | Honored |

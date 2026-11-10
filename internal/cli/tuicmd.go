@@ -9,10 +9,14 @@ import (
 	"golang.org/x/term"
 
 	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/selfupdate"
 	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
-const envNoTUI = "QBIT_VAULT_NO_TUI"
+const (
+	envNoTUI         = "QBIT_VAULT_NO_TUI"
+	envNoUpdateCheck = "QBIT_VAULT_NO_UPDATE_CHECK"
+)
 
 // isInteractive reports whether the process has a terminal on both stdin and
 // stdout. It looks at the real file descriptors, not at the writers Execute was
@@ -61,6 +65,10 @@ func (g *globals) startTUI(explicit bool) error {
 	opts := tui.Options{
 		Version: Version,
 		Profile: tui.Profile{Color: !g.NoColorEnabled(), TrueColor: g.trueColor()},
+		// QBIT_VAULT_NO_UPDATE_CHECK=1 only silences the open-time check; the
+		// explicit 'update' never reads it.
+		NoUpdateCheck: g.getenv(envNoUpdateCheck) == "1",
+		NotRelease:    !selfupdate.IsRelease(Version),
 	}
 	if err := runTUI(&tuiBackend{g: g}, opts); err != nil {
 		// The runner's error text is not shown: nothing in it is worth a leak risk.

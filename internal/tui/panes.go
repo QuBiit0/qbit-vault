@@ -344,18 +344,126 @@ func (m Model) doctorDetail(w int) (string, []string) {
 // updateCommand is the Go way to upgrade; the screen only shows it.
 const updateCommand = "go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest"
 
+// updateState is where the release check is.
+type updateState int
+
+const (
+	upIdle      updateState = iota // not checked (the check is off, or a non-release build)
+	upChecking                     // the check is running
+	upFailed                       // no network, or the check failed
+	upCurrent                      // this is the latest release
+	upAvailable                    // a newer release exists
+	upDone                         // updated; the running binary is still the old one
+)
+
+// updatePane is the Update section: versions and a link, never a value.
+type updatePane struct {
+	st   updateState
+	info UpdateInfo
+}
+
+// updateCheckedMsg carries the result of the release check.
+type updateCheckedMsg struct {
+	info UpdateInfo
+	err  error
+}
+
+// autoCheck reports whether opening the TUI checks for a release.
+func (m Model) autoCheck() bool { return !m.opts.NoUpdateCheck && !m.opts.NotRelease }
+
+// checkCmd is the release check as a command, so no frame waits for it.
+func (m Model) checkCmd() tea.Cmd {
+	b := m.b
+	return func() tea.Msg {
+		info, err := b.CheckUpdate()
+		return updateCheckedMsg{info: info, err: err}
+	}
+}
+
+func (m Model) updateChecked(msg updateCheckedMsg) Model {
+	if m.up.st == upDone {
+		return m
+	}
+	switch {
+	case msg.err != nil:
+		m.up = updatePane{st: upFailed}
+	case msg.info.Available:
+		m.up = updatePane{st: upAvailable, info: msg.info}
+	default:
+		m.up = updatePane{st: upCurrent, info: msg.info}
+	}
+	return m
+}
+
+func (m *Model) updateDone(err error) {
+	if err != nil {
+		m.notice = notice{text: errText(err), bad: true}
+		return
+	}
+	m.up.st = upDone
+}
+
+// canCheck: c checks again unless a check runs, the build cannot update, or
+// the update just ran.
+func (m Model) canCheck() bool {
+	return !m.opts.NotRelease && m.up.st != upChecking && m.up.st != upDone
+}
+
+func (m Model) updateSectionKey(key tea.KeyMsg) (Model, tea.Cmd, bool) {
+	switch {
+	case isRune(key, 'u') && m.up.st == upAvailable && !m.opts.NotRelease:
+		return m, m.exec(m.b.Update(), func(err error) tea.Msg { return actionDoneMsg{kind: actUpdate, err: err} }), true
+	case isRune(key, 'c') && m.canCheck():
+		m.up.st = upChecking
+		return m, m.checkCmd(), true
+	}
+	return m, nil, false
+}
+
+func (m Model) currentVersion() string {
+	if m.up.info.Current != "" {
+		return m.up.info.Current
+	}
+	return m.opts.Version
+}
+
 func (m Model) updateBody(w int) []string {
 	t := m.theme
-	rows := []string{"", t.Frost("Re-run the install command to upgrade.")}
-	rows = append(rows, wrapAll(t.Mist, "The installer replaces the binary in place and re-applies your agent registrations.", w)...)
+	field := func(label, value string) string {
+		return t.Mist(label+" ") + t.Frost(trunc(value, max(w-len(label)-1, 4)))
+	}
+	rows := []string{"", field("current", clean(m.currentVersion()))}
+	if m.opts.NotRelease {
+		return append(rows, "", t.Frost("this build is not a release"), t.Mist("Updating applies to released builds only."))
+	}
+	switch m.up.st {
+	case upChecking:
+		rows = append(rows, "", t.Mist("checking for updates…"))
+	case upFailed:
+		rows = append(rows, "", t.Frost("could not check for updates"))
+	case upCurrent:
+		rows = append(rows, "", t.Green("up to date"))
+	case upAvailable:
+		rows = append(rows, field("latest", clean(m.up.info.Latest)), "", t.Mist("release notes below"))
+	case upDone:
+		rows = append(rows, "")
+		rows = append(rows, wrapAll(t.Green, "updated to "+clean(m.up.info.Latest)+"; restart qbit-vault and your agents", w)...)
+	default:
+		rows = append(rows, "")
+		rows = append(rows, wrapAll(t.Mist, "The update check is off (QBIT_VAULT_NO_UPDATE_CHECK=1).", w)...)
+	}
 	return rows
 }
 
 func (m Model) updateDetail(w int) (string, []string) {
 	t := m.theme
 	rows := []string{""}
-	rows = append(rows, wrapAll(t.Frost, "Run the one-line installer from the README again, or use the Go command below.", w)...)
+	if m.up.st == upAvailable && !m.opts.NotRelease {
+		rows = append(rows, wrapAll(t.Frost, "u downloads the release, checks its SHA-256, asks you to confirm in a native dialog and replaces this binary.", w)...)
+	} else {
+		rows = append(rows, wrapAll(t.Frost, "Or run the one-line installer from the README again, or use the Go command below.", w)...)
+	}
 	rows = append(rows, "")
-	rows = append(rows, wrapAll(t.Mist, "No network call is made here.", w)...)
-	return "Install command", rows
+	rows = append(rows, wrapAll(t.Mist, "Only the release check contacts the network. No secret is read and no grant is made here.", w)...)
+	return "How to update", rows
 }

@@ -33,7 +33,7 @@ After 1.0.0. One command that brings an installed `qbit-vault` to the latest rel
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
 | T1 | S3, S5 (CLI parts), S6 (CLI) | worker | | done (uncommitted) |
-| T2 | S4, S5 (TUI parts), S6 (TUI) | worker | | pending |
+| T2 | S4, S5 (TUI parts), S6 (TUI) | worker | | done (uncommitted) |
 | T3 | S7 | parent | | pending |
 
 ## Log
@@ -41,3 +41,4 @@ After 1.0.0. One command that brings an installed `qbit-vault` to the latest rel
 - L1. User (verbatim): "vale, arrancamos con lo que esta pendiente.. ni bien tenga el feedback de la comunidad (si es que alguno la utiliza) te lo paso"; chose "qbit-vault update (recomendado primero)".
 - L2. Decisions: verification "SHA-256 de checksums.txt (recomendado)"; notice "la manera tiene que ser como hacen muchas otras app como gentle-shell cada vez que se abre que compruebe si hay una version nueva y en la misma tui aparezca para actualizarla". Parent choices to confirm in review: update is a user-only command with an out-of-band confirm (an agent cannot swap the binary silently); `--check` and the TUI check never prompt.
 - L3. T1 built (uncommitted): `internal/selfupdate` (lookup, semver, download, SHA-256, tar.gz/zip extract, atomic swap with the Windows `.old-<8 hex>` path) and `internal/cli/update.go` (`update`, `update --check`, `--json`); tests in both packages written RED first. Decisions: the re-registration runs the new binary's `sync` as a subprocess (only when `state.json` exists; not opened); `--check` on a non-release build reports an update as available; the lookup accepts one release object or a list (newest published stable); a `sync` failure after a swap is a stderr note, exit 0. TUI lines in the docs are left to T2.
+- L4. T2 built (uncommitted): `tui.Backend` gains `CheckUpdate() (UpdateInfo, error)` and `Update() Action` (cli: `selfupdate` client with a 5 s `tuiCheckTimeout`, `update` run under tea.Exec); `Options.NoUpdateCheck` (from `QBIT_VAULT_NO_UPDATE_CHECK=1`) and `Options.NotRelease`; the check is `Init`'s tea.Cmd so the first frame never waits; header `update available <latest>`; Update section states checking/failed/up to date/available/updated; keys `u`, `c`. Decisions: a non-release build makes no check; a failed check is silent apart from the section line; the release notes link is shown under the panes (too long for the list pane); `c` is also offered after a failed check; after `u` succeeds nothing more is offered (the running binary is still the old one). Tests RED first (compile failure on the new API) in internal/tui/update_test.go and internal/cli/tuibackend_test.go, tuicmd_test.go. Two expectations in model_test.go (`TestSectionSwitching` rows for Update) changed for the new section text.

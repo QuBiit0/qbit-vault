@@ -282,4 +282,6 @@ What it does, in order:
 5. Swaps it in atomically (the same rename the installers do; on Windows the running `qbit-vault.exe` is renamed to `qbit-vault.exe.old-<8 hex>` and a later `update` removes the old copies).
 6. When the vault is set up, runs `sync` of the new binary (skip with `QBIT_VAULT_NO_SYNC=1`) and prints `updated qbit-vault <current> -> <latest>; restart your agents so they load the new version`.
 
+The TUI does the same from its Update section: each time it opens it checks for a newer release in the background (5 s timeout; the screen never waits and a failure only shows `could not check for updates`), shows `update available <latest>` in the header, and `u` runs this update with the TUI suspended for the confirmation. `QBIT_VAULT_NO_UPDATE_CHECK=1` turns the open-time check off (the section then offers `c check now`).
+
 It never opens the vault, grants, audit log or sync state, reads no secret, and contacts only the GitHub API and the release assets. The trust anchor is the same as the installers': a SHA-256 `checksums.txt` served over HTTPS from the repository's releases. Minisign-signed checksums are not built yet; when they are, the command verifies them without changing its interface (THREAT_MODEL L12).

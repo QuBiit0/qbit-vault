@@ -78,7 +78,11 @@ type fakeBackend struct {
 	doctorErr   error
 	doctorCalls int
 
-	ran []string // names of the actions that ran, in order
+	update       tui.UpdateInfo
+	updateErr    error
+	updateCalls  int // CheckUpdate calls
+	updateRunErr error
+	ran          []string // names of the actions that ran, in order
 }
 
 func (f *fakeBackend) Status() (tui.Status, error) {
@@ -245,6 +249,15 @@ func (f *fakeBackend) SyncStatus() (tui.SyncStatus, error) { return f.syncStatus
 func (f *fakeBackend) Doctor() (tui.DoctorReport, error) {
 	f.doctorCalls++
 	return f.doctor, f.doctorErr
+}
+
+func (f *fakeBackend) CheckUpdate() (tui.UpdateInfo, error) {
+	f.updateCalls++
+	return f.update, f.updateErr
+}
+
+func (f *fakeBackend) Update() tui.Action {
+	return &fakeAction{name: "update", ran: &f.ran, err: f.updateRunErr}
 }
 
 var (

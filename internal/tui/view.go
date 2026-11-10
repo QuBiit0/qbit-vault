@@ -56,6 +56,9 @@ func (m Model) header() string {
 	lines := []string{m.theme.Wordmark(), m.theme.Mist(m.opts.Version + "  by qbitdev")}
 	if s := m.statusLine(); s != "" {
 		lines = append(lines, s)
+		if m.up.st == upAvailable {
+			lines = append(lines, m.theme.Glow("update available "+clean(m.up.info.Latest)))
+		}
 	}
 	text := strings.Join(lines, "\n")
 	if !m.opts.Profile.Color {
@@ -173,6 +176,9 @@ func (m Model) homeView() string {
 		m.box(detailTitle, detailW, detail, m.focus == PaneDetail))
 	lines := []string{m.header(), "", panes, ""}
 	if sec.title == "Update" {
+		if m.up.st == upAvailable && m.up.info.URL != "" {
+			lines = append(lines, m.theme.Mist("Release notes:"), "  "+m.theme.Frost(trunc(clean(m.up.info.URL), m.width-6)), "")
+		}
 		lines = append(lines, m.theme.Mist("With Go:"), "  "+m.theme.Frost(updateCommand), "")
 	}
 	keys := m.focusKeys()
@@ -291,6 +297,15 @@ func (m Model) sectionKeys() [][2]string {
 		return m.stateKeysFor(m.sy.st, func() [][2]string { return nil })
 	case "Doctor":
 		return m.stateKeysFor(m.dr.st, func() [][2]string { return [][2]string{kv("r", "rerun")} })
+	case "Update":
+		var keys [][2]string
+		if m.up.st == upAvailable && !m.opts.NotRelease {
+			keys = append(keys, kv("u", "update now"))
+		}
+		if m.canCheck() {
+			keys = append(keys, kv("c", "check now"))
+		}
+		return keys
 	}
 	return nil
 }

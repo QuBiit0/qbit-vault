@@ -3,12 +3,15 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -1271,5 +1274,81 @@ func TestTUIFramesOverTheRealAdapterNeverHoldAFixture(t *testing.T) {
 	}
 	for i, f := range frames {
 		noFixtures(t, fmt.Sprintf("frame %d", i), f)
+	}
+}
+
+// ---- update check and update ----
+
+func updBackend(w *updWorld) *tuiBackend {
+	return &tuiBackend{g: &globals{getenv: envFrom(w.env), home: w.home}}
+}
+
+func TestTUICheckUpdateReportsANewerRelease(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	got, err := updBackend(w).CheckUpdate()
+	want := tui.UpdateInfo{Current: "v1.0.0", Latest: "v1.1.0", URL: w.srv.URL + "/notes", Available: true}
+	if err != nil || got != want {
+		t.Fatalf("got %+v, %v; want %+v", got, err, want)
+	}
+	if w.hits.Load() != 0 {
+		t.Error("the check downloaded an asset")
+	}
+}
+
+func TestTUICheckUpdateUpToDate(t *testing.T) {
+	w := newUpdWorld(t, "v1.1.0", "v1.1.0")
+	got, err := updBackend(w).CheckUpdate()
+	if err != nil || got.Available || got.Latest != "v1.1.0" || got.Current != "v1.1.0" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestTUICheckUpdateFailureIsAFixedLine(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	w.srv.Close()
+	_, err := updBackend(w).CheckUpdate()
+	if err == nil || strings.Contains(err.Error(), w.srv.URL) {
+		t.Fatalf("err = %v, want a failure that does not echo the URL", err)
+	}
+}
+
+func TestTUICheckUpdateTimesOut(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	block := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) { <-block }))
+	t.Cleanup(func() { close(block); slow.Close() })
+	w.env["QBIT_VAULT_RELEASES_API"] = slow.URL
+	old := tuiCheckTimeout
+	tuiCheckTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { tuiCheckTimeout = old })
+	start := time.Now()
+	if _, err := updBackend(w).CheckUpdate(); err == nil || time.Since(start) > 3*time.Second {
+		t.Fatalf("err = %v after %v, want a timeout error", err, time.Since(start))
+	}
+}
+
+func TestTUIUpdateActionIsTheUpdateCommand(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	f := withBackend(t, answers(yes()))
+	if err := updBackend(w).Update().(tuiAction).Run(); err != nil {
+		t.Fatal(err)
+	}
+	if w.binary() != updNew {
+		t.Fatal("binary not replaced")
+	}
+	if len(f.Calls) != 1 || f.Calls[0].Kind != "confirm" || f.Calls[0].Q != "Update QBit Vault v1.0.0 to v1.1.0?" {
+		t.Fatalf("prompt calls: %+v", f.Calls)
+	}
+}
+
+func TestTUIUpdateActionDeclinedChangesNothingAndSaysSo(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	withBackend(t, answers(no()))
+	err := updBackend(w).Update().(tuiAction).Run()
+	if err == nil || strings.Contains(err.Error(), "\n") {
+		t.Fatalf("err = %v, want one line", err)
+	}
+	if w.binary() != updOld {
+		t.Fatal("a declined update changed the binary")
 	}
 }

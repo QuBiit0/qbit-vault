@@ -127,7 +127,7 @@ Each secret lives in one of two **layers**: **global** (every folder: a personal
 | Take back every permission you gave | `qbit-vault revoke --all` |
 | Move a secret between global and this project | `qbit-vault mv NAME --to global` (or `--to project`) |
 | Open a passphrase-protected vault | `qbit-vault unlock` |
-| Upgrade | `qbit-vault update` (or run the install command again) |
+| Upgrade | `qbit-vault update`, or `u` in the TUI Update section when the header says `update available` (or run the install command again) |
 | Uninstall | `qbit-vault uninstall` (keeps the vault) or `qbit-vault uninstall --purge` (deletes it) |
 
 Every command, flag and exit code: [docs/CLI.md](docs/CLI.md). Most commands take `--json`.

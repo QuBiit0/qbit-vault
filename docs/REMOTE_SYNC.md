@@ -1,6 +1,6 @@
 # Remote sync: one vault on several machines
 
-Status: built (Phase 2S: the client in `internal/remote` and the commands, `internal/merge`, the server in `internal/server`; the Docker sync battery `bash e2e/docker-test.sh` passes). Not built: a published server image and release jobs (Phase 5), and the `config.yaml` tunables mentioned below (budgets and intervals are constants). Requirement IDs `R-SYNC-*` live in `PRD.md` § 5.10; this document is the normative protocol behind them.
+Status: built (Phase 2S: the client in `internal/remote` and the commands, `internal/merge`, the server in `internal/server`; the Docker sync battery `bash e2e/docker-test.sh` passes). The server image `ghcr.io/qbitdevz/qbit-vault-server` is published by the release workflow (`deploy/README.md`). Not built: the `config.yaml` tunables mentioned below (budgets and intervals are constants). Requirement IDs `R-SYNC-*` live in `PRD.md` § 5.10; this document is the normative protocol behind them.
 
 qbit-vault can keep the same vault on several machines through **`qbit-vault-server`**, a small self-hosted service. The server is **zero-knowledge**: it stores ciphertext, public keys and counters, and has nothing that decrypts them. Sync is opt-in; a vault that never runs `qbit-vault remote register` makes no network call (AGENTS.md invariant 8).
 

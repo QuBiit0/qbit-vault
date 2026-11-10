@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-10
+
+The first stable release. QBit Vault now lives at `github.com/qbitdevz/qbit-vault`. Everything below is on top of 0.1.0-beta.17.
+
 ### Fixed
 
 - A device the account revoked can join again (`remote join`, pairing or `--recovery`): it takes a new device id and its project roots move to it, so project secrets still resolve; the old id stays revoked. A refused join changes nothing.
@@ -14,7 +18,6 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 - `restore` reports an unreadable `keys/retired.enc` instead of "backup cannot be opened"; vault temp files are created with `O_EXCL`; promoting a staged key (`rekey`) and `key.enc` writes retry the transient sharing errors of Windows; `init --passphrase` stops when the OS keychain cannot be read instead of assuming it holds no key.
 - Windows: `doctor` and `perm.Check` no longer call a file with an empty ACL (nobody can open it) or an unrelated owner private, and `EnsureFile` repairs the ACL.
 - A stale lock is broken under a `.break` guard that re-checks its age, so two processes cannot delete a lock another one just took.
-- Documented limit: `keys/retired.enc` has no rollback counter in `state.json` (THREAT_MODEL R8, STORAGE § Retired keys).
 - `audit --verify` and `doctor` report a missing `audit.head` next to two or more audit records as `head_mismatch` (it was valid, so deleting the head hid a truncation); a log of one record without a head is still fine.
 - A declined or cancelled `request` also blocks the same name and layer for every session for 30 s, so a new session cannot re-prompt it at once.
 - `request` no longer overwrites a value that `set` stored while the prompt was open: it answers `internal` (retryable) `<NAME> changed while it was being asked; ask again` and stores nothing.
@@ -23,7 +26,9 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Changed
 
+- Documented limit: `keys/retired.enc` has no rollback counter in `state.json` (THREAT_MODEL R8, STORAGE § Retired keys).
 - The project moved to `github.com/qbitdevz/qbit-vault` (the Go module path, the installers, the release links and the server image `ghcr.io/qbitdevz/qbit-vault-server` follow). Old links redirect; images up to 0.1.0-beta.17 stay at `ghcr.io/qubiit0/qbit-vault-server`.
+- The README is rewritten for the first stable release, with a terminal GIF, a TUI screenshot and a TUI tour (`assets/demo/`, recorded from the real binary on a throwaway demo vault; `bash assets/demo/make.sh` regenerates them). Every document was checked against the binary's `--help` and behavior: text that called finished things planned, pending or unpublished (the server image, the installers, build provenance) is gone, and what is still not built (npm package, Homebrew formula, Pi extension, Minisign signatures, `qbit-vault update`) is stated plainly in `docs/ROADMAP.md`.
 
 ## [0.1.0-beta.17] - 2026-11-07
 

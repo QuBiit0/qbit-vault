@@ -1,6 +1,6 @@
 # PRD: QBit Vault (`qbit-vault`)
 
-Version 0.1. Requirement IDs are stable; reference them from issues, PRs and tests. The requirements are normative: a requirement is met unless a *Status* note says otherwise.
+Version 1.0. Requirement IDs are stable; reference them from issues, PRs and tests. The requirements are normative: a requirement is met unless a *Status* note says otherwise.
 
 ## 0. Implementation status
 
@@ -8,13 +8,13 @@ Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants
 
 - the Pi extension `qbit-vault-pi` (Phase 4): R-HOST-01, the Pi parts of R-CAP-01 and R-CAP-06, R-RED-04 and R-EXEC-02 on Pi; `set --stdin --fields` and `prompt --field` (R-CAP-08 is met by the broker for MCP hosts);
 - the Claude Code `PreToolUse` rewrite of secret references into `exec` (R-EXEC-02) and its `grant_required` / `dump_command` denials; today `pre-bash` only keeps user-only commands out of the agent's shell;
-- the npm launcher, signed releases, Homebrew and `qbit-vault update` (Phase 5): R-INS-01 as worded, R-INS-02, R-NFR-03, the binary-signature part of R-INS-07;
+- the npm launcher, Minisign-signed checksums, Homebrew and `qbit-vault update` (Phase 5, not built): R-INS-01 as worded, R-INS-02, R-NFR-03 (releases do carry SHA-256 `checksums.txt` and a build-provenance attestation), the binary-signature part of R-INS-07;
 - OpenCode (R-HOST-04): dropped by a recorded decision (`odd/tasks/hosts.md` S8);
-- self-update, in the TUI or as `qbit-vault update` (Phase 5): the TUI's Update section is a static *planned* screen.
+- self-update, in the TUI or as `qbit-vault update` (Phase 5): the TUI's Update section is a static screen that says to re-run the install command.
 
 Also built, outside the numbered requirements of this document: the interactive TUI (`qbit-vault tui`, and `qbit-vault` with no arguments on a terminal; `CLI.md` § TUI, `ROADMAP.md`). It is a front end over the existing commands and keeps their invariants (no value shown, values typed only in the prompt backend, grants revoke-only). Not exercised: its suspend and resume around the masked prompt on a real terminal.
 
-Public beta: published releases run from `v0.1.0-beta.2`, the newest is listed in `CHANGELOG.md`. Install with the `install.sh` / `install.ps1` one-liners (release archive, SHA-256 verified), `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest`, or from source (`INSTALL.md`).
+Releases: 1.0.0 is the first stable one; every release is listed in `CHANGELOG.md`. Install with the `install.sh` / `install.ps1` one-liners (release archive, SHA-256 verified), `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest`, or from source (`INSTALL.md`).
 
 ## 1. Problem statement
 
@@ -30,7 +30,7 @@ Agent harnesses can already block the *reading* of credential files through deny
 
 - G1. An agent can complete a task that needs a credential without the credential value ever entering its context, transcript, session file or provider request.
 - G2. Supplying a credential takes the user one masked input and one grant decision, inside the same terminal session, with no context switch.
-- G3. Installation is one command on macOS, Linux and Windows and configures every supported agent that is present. (Today: the `install.sh` / `install.ps1` one-liners or `go install`, then `qbit-vault init`; the `npx` launcher is Phase 5.)
+- G3. Installation is one command on macOS, Linux and Windows and configures every supported agent that is present. (Today: the `install.sh` / `install.ps1` one-liners or `go install`, then `qbit-vault init`; the `npx` launcher is Phase 5 and not built.)
 - G4. The design is embeddable by any agent harness without rewrite: one static binary, a versioned contract, snapshot-first config mutation and a documented release discipline.
 - G5. Pi / Gentle Shell gets the richest experience (inline masked input, shell-tool override, sidebar audit; the extension is Phase 4); Claude Code and Codex get a functionally equivalent one through MCP and, for Claude Code, hooks. OpenCode is out of scope.
 - G6. Secrets are organized in a **global** layer (used everywhere) and **project** layers (bound to one repository), managed with the same few commands by the user and, with user confirmation, by the agent.
@@ -142,10 +142,10 @@ Agent harnesses can already block the *reading* of credential files through deny
 
 ### 5.7 Hosts
 
-- R-HOST-01. *Status: Phase 4, not built; today `init` registers Pi's MCP entry and prints the extension install command.* Pi / Gentle Shell: the extension `qbit-vault-pi` MUST provide masked capture, bash override, read/write redaction, paste interception, `/vault` commands and a sidebar audit widget. See `GENTLE_SHELL_EXTENSION.md`.
+- R-HOST-01. *Status: Phase 4, not built; today `init` registers Pi's MCP entry and prints no extension install command.* Pi / Gentle Shell: the extension `qbit-vault-pi` MUST provide masked capture, bash override, read/write redaction, paste interception, `/vault` commands and a sidebar audit widget. See `GENTLE_SHELL_EXTENSION.md`.
 - R-HOST-02. Claude Code: `init` MUST register the MCP server (a `~/.claude.json` merge), a `PreToolUse` hook on `Bash`/`PowerShell` that rewrites to `exec` and enforces the dump-command list, a `PostToolUse` hook on `Bash`/`PowerShell`/`Read` for redaction, a `UserPromptSubmit` hook for paste interception, and add `$QBIT_VAULT_HOME` to the `permissions.deny` read list. *Status: built, except that the `PreToolUse` hook does not rewrite or apply the dump guard yet; it keeps user-only `qbit-vault` commands out of the agent's shell (R-SYNC-05).*
 - R-HOST-03. Codex: `init` MUST register the MCP server in `~/.codex/config.toml`. Capture uses the native dialog. Exec is through `secret_exec` only.
-- R-HOST-04. *Status: dropped (`odd/tasks/hosts.md` S8); no OpenCode adapter exists and none is planned for 0.1.* OpenCode: `init` MUST register the MCP server in the OpenCode config and, where the OpenCode plugin API offers `tool.execute.before/after`, install a plugin for bash rewrite and redaction; otherwise `secret_exec` only.
+- R-HOST-04. *Status: dropped (`odd/tasks/hosts.md` S8); no OpenCode adapter exists and none is planned.* OpenCode: `init` MUST register the MCP server in the OpenCode config and, where the OpenCode plugin API offers `tool.execute.before/after`, install a plugin for bash rewrite and redaction; otherwise `secret_exec` only.
 - R-HOST-05. Every host registration MUST be reversible by `qbit-vault uninstall` using the snapshots taken at registration time.
 
 ### 5.8 Audit
@@ -156,7 +156,7 @@ Agent harnesses can already block the *reading* of credential files through deny
 
 ### 5.9 Install, sync, doctor, uninstall
 
-- R-INS-01. `qbit-vault init` MUST complete the whole setup (R-INS-03..06) with no further input on a machine with a working keychain. Where no keychain exists, `init` falls back to the passphrase mode of R-VAULT-02 (two prompts) and says so; with no way to prompt it fails naming `--passphrase --passphrase-stdin`. The `npx qbit-vault@latest init` form is Phase 5; today the binary comes from `go install`.
+- R-INS-01. `qbit-vault init` MUST complete the whole setup (R-INS-03..06) with no further input on a machine with a working keychain. Where no keychain exists, `init` falls back to the passphrase mode of R-VAULT-02 (two prompts) and says so; with no way to prompt it fails naming `--passphrase --passphrase-stdin`. The `npx qbit-vault@latest init` form is Phase 5 and not built; the binary comes from the release installers or `go install`.
 - R-INS-02. *Status: Phase 5, not built (no `packages/`).* The npm launcher MUST have no `postinstall`. Platform binaries MUST ship as `optionalDependencies` (`@qbit-vault/cli-darwin-arm64`, etc.) and be verified against a checksum embedded in the launcher before first run.
 - R-INS-03. `init` MUST detect installed agents by their config directories and register only those present, unless `--agents` is given.
 - R-INS-04. Every config file `init` touches MUST be snapshotted first to `$QBIT_VAULT_HOME/backups/<timestamp>/<path>` and written atomically with a merge that preserves unrelated keys.
@@ -187,7 +187,7 @@ Normative protocol: `REMOTE_SYNC.md`.
 
 - R-NFR-01 *Portability*: macOS (arm64, amd64), Linux (amd64, arm64, including WSL2 and headless without Secret Service), Windows 10+ (amd64). Headless Linux uses the passphrase fallback.
 - R-NFR-02 *Latency*: `exec` overhead ≤ 50 ms over running the command directly on a warm keychain; prompt round-trip is user-bound.
-- R-NFR-03 *Supply chain* (*Phase 5, not built*): releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
+- R-NFR-03 *Supply chain* (*Phase 5, partly built: SHA-256 `checksums.txt` and a build-provenance attestation exist; Minisign signatures, npm packages and version pinning in the configs `init` writes do not*): releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
 - R-NFR-04 *Observability*: `--json` on every command for host adapters; human output otherwise.
 - R-NFR-05 *Compatibility*: contract `qbit-vault.secrets-broker/v1` is frozen on first stable release; additive changes bump the minor capability version; consumers refuse unknown major versions.
 - R-NFR-06 *Testing*: leak tests on every tier (see `TESTING.md`); a PR touching exec/redact/prompt/mcp/hooks/remote/server without extending the leak test is rejected by CI.

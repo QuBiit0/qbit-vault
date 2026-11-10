@@ -29,4 +29,4 @@ Out of scope: attacks that need the user's unlocked OS account or root on the ma
 
 ## Supported versions
 
-QBit Vault is pre-release. Only the latest release is supported: fixes ship in a new release and older betas do not get them. Upgrade by re-running the install command.
+Only the latest release is supported: fixes ship in a new release and older versions, including the 0.1.0 betas, do not get them. Upgrade by re-running the install command.

@@ -2,7 +2,7 @@
 
 Sliced so every PR stays ≤ 400 changed lines (the review budget), each with code + tests + docs. Phases are sequential; slices within a phase are mostly parallelizable. IDs refer to `docs/PRD.md`.
 
-**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *pending* = not built. Releases `v0.1.0-beta.2` to the newest in `CHANGELOG.md` are published (archives, `checksums.txt` and build provenance), and the one-line installers pick the newest (`INSTALL.md`). Not published yet: the npm package, the Homebrew formula and the server image.
+**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *not built* = not implemented. Releases are published from the `v*` tags (`CHANGELOG.md`): archives for Linux, macOS and Windows, `checksums.txt`, the two installers, a build-provenance attestation and the server image `ghcr.io/qbitdevz/qbit-vault-server`. 1.0.0 is the first stable release. **Not built:** the npm package, the Homebrew formula, the Pi / Gentle Shell native extension, Minisign-signed checksums and `qbit-vault update`; Pi and Gentle Shell work through MCP in the meantime.
 
 | Phase | Status |
 | --- | --- |
@@ -11,9 +11,9 @@ Sliced so every PR stays ≤ 400 changed lines (the review budget), each with co
 | 2 contract and MCP | done |
 | 2S remote sync | done |
 | 3 hosts | done as scoped: Claude Code, Codex, Pi / Gentle Shell through MCP; OpenCode dropped; packaging moved to Phase 5 |
-| 4 Gentle Shell / Pi extension | pending |
-| 5 hardening and release 0.1.0 | pending (now includes the packaging dropped from Phase 3) |
-| TUI | done (`odd/tasks/tui.md`); self-update inside it waits for Phase 5 |
+| 4 Gentle Shell / Pi extension | not built (Pi uses its MCP entry) |
+| 5 hardening and release 1.0.0 | 1.0.0 is the first stable release: archives, installers, provenance and the server image are done; npm, Homebrew, Minisign and `qbit-vault update` are not built |
+| TUI | done (`odd/tasks/tui.md`); a static Update screen (no self-update) |
 
 ## Phase 0 — alignment (no code)
 
@@ -63,7 +63,7 @@ Runs after Phase 2 so the contract is settled; S.1 can land earlier because it o
 | S.3 | `internal/remote` crypto: key derivations, device keys, recovery key format, key and recovery envelopes, remote vault object with padding, anchors, pairing and confirmation codes (pure, test vectors) | R-SYNC-02,04 | done (ea50f5f) |
 | S.4 | `internal/server` core: file store, accounts and invites, device auth (challenge, token), vault CAS and last 10 versions, limits and rate limits, logging rules | R-SYNC-02,03 | done (fdca3e7) |
 | S.5 | Server pairing, recovery, atomic `rekey`/revoke, anchors endpoints | R-SYNC-04,06,10 | done (4c3f05e) |
-| S.6 | Packaging: `cmd/qbit-vault-server` (`serve`, `invite`), Dockerfile (static, non-root, read-only), `deploy/compose.yaml` for Dokploy, release jobs | R-SYNC-12 | binary, Dockerfile and `deploy/compose.yaml` done (39c8b6b); release jobs and the published image are Phase 5 (no registry yet) |
+| S.6 | Packaging: `cmd/qbit-vault-server` (`serve`, `invite`), Dockerfile (static, non-root, read-only), `deploy/compose.yaml` for Dokploy, release jobs | R-SYNC-12 | done: binary, Dockerfile and `deploy/compose.yaml` (39c8b6b); the release workflow publishes `ghcr.io/qbitdevz/qbit-vault-server` (linux/amd64 and arm64) and `deploy/compose.image.yaml` runs it |
 | S.7 | Client transport and `remote register` / `join` (pairing and `--recovery`) / `approve` / `logout`, all user-only through the prompt backend | R-SYNC-01,03,04,05 | done (9f3113f vault side, bc5d4b2 transport, d6f1fff commands) |
 | S.8 | Sync rounds wired into mutating and reading commands, pending pushes, `remote sync` / `status` / `devices`, `--json` `remote` field, `doctor` | R-SYNC-07,09 | done (8c29c20); `doctor` landed with Phase 3 (bff3a29) |
 | S.9 | `remote revoke-device`, `recovery-key --rotate`, rekey with sync, `conflicts` / `resolve`, `history` / `restore`, `audit --verify` anchors | R-SYNC-06,10 | done (f57ce32 revoke and rekey, 0f22398 conflicts, history, restore, anchors) |
@@ -73,7 +73,7 @@ Exit criterion (met by the Docker sync battery): TESTING.md Tier 2 step 7 green;
 
 ## Phase 3 — hosts — done as scoped
 
-Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; packaging moves to Phase 5 (meanwhile: `go install`). Pi works through its MCP entry; the native extension is Phase 4 (until it is published, `init` prints no install line for it).
+Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; npm and Homebrew packaging moved to Phase 5 (they are not built; install with the release scripts or `go install`). Pi works through its MCP entry; the native extension is Phase 4 (it is not built, so `init` prints no install line for it).
 
 | Slice | Content | Req | Status |
 | --- | --- | --- | --- |
@@ -88,7 +88,7 @@ Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for C
 
 Dogfood round 1 (real use on Windows with Claude Code and Pi, `odd/tasks/dogfood-1.md`) added: `bash`/`sh` in `exec` never resolve to WSL and shell words stay intact (5180b22); a `once` grant is released when the child never started (5180b22); refusals answered over the broker and MCP are audited (97b796e); the dump guard stays strict and only `${#NAME}` is allowed, which the `secret_exec` description now tells agents (eaed280, after a relaxation was tried and withdrawn); session grants last 12 h and `session` is preselected in the approval dialog (2d5f944; superseded in 0.1.0-beta.8: agent dialogs offer once, always in this project, or no, see `CHANGELOG.md`).
 
-## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — pending
+## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — not built
 
 Nothing of `packages/qbit-vault-pi` exists yet (there is no `packages/` directory). Until it does, Pi and Gentle Shell use QBit Vault through the MCP entry that `init` registers: the four tools and the native dialogs. The bash override, paste interception, `/vault` commands and the sidebar need the extension. Also planned here: `set --stdin --fields`, `prompt --field` and `prompt --confirm`.
 
@@ -103,14 +103,22 @@ Nothing of `packages/qbit-vault-pi` exists yet (there is no `packages/` director
 | 4.7 | `/vault` commands (manual `set`, `mv`, `edit`, layer filters) and fullscreen views |
 | 4.8 | Sidebar widget / status footer; session_end revoke |
 
-## Phase 5 — hardening and release 0.1.0 — pending
+## Phase 5 — hardening and release 1.0.0
 
-- Cross-agent battery green on macOS/Linux/Windows (today only the three Docker batteries exist, all on Linux: sync, hosts and install from scratch).
-- Packaging moved here from Phase 3 (slice 3.7): npm launcher and platform packages, Minisign-signed checksums, Homebrew tap, `qbit-vault update` and its opt-out check. Done early (`odd/tasks/public-launch.md`): GoReleaser archives for Linux, macOS and Windows, `checksums.txt`, GitHub build provenance, the release workflow on `v*` tags, and `scripts/install.sh` / `install.ps1` with SHA-256 verification, tested in CI.
-- Sync battery green; `qbit-vault-server` image published and deployed once on Dokploy from `deploy/compose.yaml`.
-- Security review checklist (THREAT_MODEL.md) walked for every package.
-- Docs pass; `README` quickstart verified on a clean VM per OS in < 3 min.
-- Tag `v0.1.0`, publish npm with provenance, Homebrew tap formula.
+Done:
+
+- GoReleaser archives for Linux, macOS and Windows (amd64 and arm64), `checksums.txt`, GitHub build provenance (`gh attestation verify`), the release workflow on `v*` tags, and `scripts/install.sh` / `install.ps1` (SHA-256 verified, in-place upgrade; both are release assets and are tested in CI on Linux, macOS and Windows). `odd/tasks/public-launch.md`.
+- The server image `ghcr.io/qbitdevz/qbit-vault-server`, published by the release workflow, and `deploy/compose.image.yaml`.
+- The three Docker batteries (sync, hosts, install from scratch; all on Linux), the unit suite and the leak grep in CI on Linux, macOS and Windows.
+- Post-launch fixes and the documentation pass (`odd/tasks/post-launch.md`), the demo assets (`assets/demo/`, `assets/screenshots/`) and the README.
+- Release 1.0.0, the first stable one (an immutable tag; see AGENTS.md § Conventions).
+
+Not built (stated plainly, nothing here is promised for a date):
+
+- The npm launcher and platform packages (`npx qbit-vault init`), the Homebrew formula, and reserving the npm names.
+- Minisign-signed checksums (the SHA-256 `checksums.txt` and the provenance attestation exist).
+- `qbit-vault update` and the opt-out update check (upgrade by running the installer again).
+- A cross-agent battery (Tier 3 in `TESTING.md`) and Docker batteries for macOS and Windows.
 
 ## TUI — done
 
@@ -118,7 +126,7 @@ User request (2026-11-05, `odd/tasks/polish.md` S5): an interactive terminal app
 
 - **Built.** `qbit-vault tui`, and `qbit-vault` with no arguments on a terminal (not with `--json` or `QBIT_VAULT_NO_TUI=1`). First-run splash and setup wizard (`init` with the chosen key storage and hosts). Three-pane home: Secrets (add, edit info, remove, unlock), Grants (list, revoke, revoke all; it cannot grant), Hosts (status, repair, uninstall, register), Audit (recent records, verify the local chain), Sync (status only), Doctor, and Update. Every action runs the real command path in-process; no value is ever shown and values and passphrases are typed only in the suspended prompt.
 - **Not exercised.** The suspend and resume of the TUI around the masked prompt on a real terminal: tests replace that step. Leak tests use a fake host adapter, not real host config files.
-- **Planned, not built.** Self-update: the Update section is a static screen that shows the manual `go install` command and makes no network call. `qbit-vault update` and the opt-out update check are Phase 5 and need published releases.
+- **Not built.** Self-update: the Update section is a static screen that says to re-run the install command (and shows the `go install` alternative) and makes no network call. `qbit-vault update` and the opt-out update check do not exist.
 
 ## v2 candidates (not scheduled)
 

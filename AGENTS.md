@@ -53,6 +53,7 @@ qbit-vault/                     (module github.com/qbitdevz/qbit-vault)
 │   ├── filemerge/              snapshot + atomic JSON/TOML merge and 3-way revert
 │   ├── doctor/                 read-only health report
 │   ├── dotenv/                 dotenv parser for import
+│   ├── exportfile/             encrypted portable export file (export / import --from-export)
 │   ├── merge/                  three-way per-record merge for sync (pure)
 │   ├── remote/                 sync client: keys, pairing, envelopes, rounds, anchors
 │   ├── server/                 qbit-vault-server: zero-knowledge store and HTTP API
@@ -66,13 +67,15 @@ qbit-vault/                     (module github.com/qbitdevz/qbit-vault)
 │                               install-test.sh (install from scratch); helpers leakscan/, mcpclient/, proxy/
 ├── design/                     identity and TUI artboards (HTML), system.md (tokens), system.html
 ├── assets/brand/               banner, mark and icon SVGs, terminal marks (.ans), term-mark.py
+├── assets/demo/, screenshots/  VHS tapes and script that record the README GIFs from the real binary on a throwaway
+│                               demo vault (fake values); the README and docs screenshots
 ├── tools/leakgrep/             CI leak grep over captured test output
 ├── .agents/skills/contribution-review/   how an agent reviews a PR or triages issues for the
 │                               maintainer (copy in .claude/skills/, CI keeps them equal)
 ├── odd/tasks/                  work logs (what was built, decisions, commits)
 ├── .github/workflows/ci.yml    gofmt, vet, build, test on Linux/macOS/Windows, plus a latest-stable-Go job; leak grep
-├── packages/qbit-vault-pi/     planned (Phase 4): TypeScript Pi / Gentle Shell extension
-├── packages/qbit-vault/        planned (Phase 5): npm launcher
+├── packages/qbit-vault-pi/     not built (Phase 4): TypeScript Pi / Gentle Shell extension
+├── packages/qbit-vault/        not built (Phase 5): npm launcher
 ├── scripts/                    install.sh, install.ps1 (one-line install from a release, SHA-256
 │                               verified) and their tests install_test.sh, install_test.ps1
 └── .goreleaser.yaml            release archives; .github/workflows/release.yml runs it on v* tags

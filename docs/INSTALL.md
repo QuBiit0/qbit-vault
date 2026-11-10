@@ -1,6 +1,6 @@
 # Install: one command, then `qbit-vault init`
 
-QBit Vault is a public beta. Published releases run from `v0.1.0-beta.2` to the newest one listed in `CHANGELOG.md`, and the installers pick the newest (the `v0.1.0-beta.1` tag has no release, on purpose). Each `v*` tag publishes a GitHub release with archives for Linux, macOS and Windows (amd64 and arm64), a `checksums.txt` and a build-provenance attestation (`.github/workflows/release.yml`, `.goreleaser.yaml`). There is no npm package and no Homebrew formula yet (Phase 5, `ROADMAP.md`).
+Each `v*` tag publishes a GitHub release with archives for Linux, macOS and Windows (amd64 and arm64), a `checksums.txt`, the two installer scripts and a build-provenance attestation (`.github/workflows/release.yml`, `.goreleaser.yaml`); 1.0.0 is the first stable one and the newest is listed in `CHANGELOG.md`. There is no npm package and no Homebrew formula (not built, `ROADMAP.md`).
 
 ## Quick path
 
@@ -25,7 +25,7 @@ irm https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.ps1 
 What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them before piping them to a shell):
 
 1. Pick the archive for your OS and architecture: `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows).
-2. Resolve the version: `QBIT_VAULT_VERSION` if set, else the newest release **including pre-releases** (GitHub's `releases/latest` skips them): the one with the latest publish date among the last 100, because the releases API orders by tag text (`v0.1.0-beta.10` sorts after `v0.1.0-beta.9`).
+2. Resolve the version: `QBIT_VAULT_VERSION` if set, else the newest release **including pre-releases** (GitHub's `releases/latest` skips them): the one with the latest publish date among the last 100, because the releases API orders by tag text (`v1.0.10` sorts before `v1.0.9`).
 3. Download the archive and `checksums.txt` over HTTPS and compare the SHA-256. On a mismatch, or an archive not listed, they stop with `checksum mismatch for <archive>: nothing was installed` (or `<archive> is not listed in checksums.txt`) and install nothing.
 4. Choose the directory: `QBIT_VAULT_INSTALL_DIR` if set; else the directory of the `qbit-vault` already first on your `PATH`, when you can write to it (an upgrade in place, see below); else `~/.local/bin` (Linux, macOS) or `%LOCALAPPDATA%\Programs\qbit-vault` (Windows).
 5. Replace the binary atomically: the new file is written beside the old one and renamed over it, so a failed download or a full disk never leaves a half-written `qbit-vault`. On Windows a running `qbit-vault.exe` (an agent's MCP server) is renamed aside to `qbit-vault.exe.old-<id>` first, which Windows allows, so the upgrade works with your agents open; if the copy fails the old binary is put back. The aside file stays while that process runs and the next install removes it. On Windows the directory is added to your **user** `PATH` (open a new terminal); on Linux and macOS the script tells you if the directory is not on `PATH`.
@@ -33,15 +33,15 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 
 | Variable | Effect |
 | --- | --- |
-| `QBIT_VAULT_VERSION` | Tag to install, for example `v0.1.0-beta.2` |
+| `QBIT_VAULT_VERSION` | Tag to install, for example `v1.0.0` |
 | `QBIT_VAULT_RELEASES_API` | Release list to choose the newest from (default: the GitHub releases API; the tests use a local file) |
 | `QBIT_VAULT_INSTALL_DIR` | Target directory |
 | `QBIT_VAULT_NO_PATH=1` | Windows only: leave the user `PATH` unchanged |
 | `QBIT_VAULT_NO_SYNC=1` | Do not run `qbit-vault sync` after installing over a set-up vault |
 
-Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v0.1.0-beta.2 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v0.1.0-beta.2'; irm …/install.ps1 | iex`.
+Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v1.0.0 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v1.0.0'; irm …/install.ps1 | iex`.
 
-**Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo qbitdevz/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. Minisign-signed checksums are still planned (Phase 5).
+**Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo qbitdevz/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. Minisign-signed checksums are not built; the SHA-256 `checksums.txt` and the provenance attestation are what exist.
 
 ## With Go
 
@@ -51,7 +51,7 @@ Requires Go 1.26 or newer (`go version`). No C compiler is needed.
 go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest
 ```
 
-`@latest` is the newest release tag (pre-release tags are used only while no stable tag exists); pin one with `@v0.1.0-beta.2`. `qbit-vault version` reports the module version for a `go install` build and the commit for a checkout build.
+`@latest` is the newest release tag (pre-release tags are used only while no stable tag exists); pin one with `@v1.0.0`. `qbit-vault version` reports the module version for a `go install` build and the commit for a checkout build.
 
 From a checkout:
 
@@ -110,7 +110,7 @@ Re-run the one-line install. It is safe on a machine that already has QBit Vault
 
 Your vault, keys, grants, backups and audit log live in `$QBIT_VAULT_HOME` and are never touched by the install. Restart your agents afterwards: an agent that was open during the update keeps running the old MCP server until it restarts.
 
-With Go, re-run `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` (or `git pull` then `go install ./cmd/qbit-vault`), then `qbit-vault sync` yourself; on Windows close your agents first, because `go install` cannot replace a running `.exe`. `qbit-vault update` does not exist yet (Phase 5).
+With Go, re-run `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` (or `git pull` then `go install ./cmd/qbit-vault`), then `qbit-vault sync` yourself; on Windows close your agents first, because `go install` cannot replace a running `.exe`. There is no `qbit-vault update` command.
 
 ## Uninstall
 
@@ -134,14 +134,14 @@ Remove the Windows `PATH` entry in PowerShell (open a new terminal afterwards):
 
 Details of what `uninstall` restores, and the `--purge` refusal while the vault syncs, are in § `uninstall` below.
 
-### Planned for Phase 5 (not built)
+### Not built: npm and Homebrew
 
 ```bash
-npx qbit-vault@latest init                                    # planned
-brew install <tap>/qbit-vault && qbit-vault init             # planned
+npx qbit-vault@latest init                                    # not built
+brew install <tap>/qbit-vault && qbit-vault init             # not built
 ```
 
-## npm launcher design (planned, Phase 5)
+## npm launcher design (not built)
 
 There is no `packages/` directory yet. The design is a tiny JS launcher with no `postinstall`:
 
@@ -150,11 +150,11 @@ There is no `packages/` directory yet. The design is a tiny JS launcher with no 
   "name": "qbit-vault",
   "bin": { "qbit-vault": "bin/qbit-vault.mjs" },
   "optionalDependencies": {
-    "@qbit-vault/cli-darwin-arm64": "0.1.0",
-    "@qbit-vault/cli-darwin-x64": "0.1.0",
-    "@qbit-vault/cli-linux-x64": "0.1.0",
-    "@qbit-vault/cli-linux-arm64": "0.1.0",
-    "@qbit-vault/cli-win32-x64": "0.1.0"
+    "@qbit-vault/cli-darwin-arm64": "1.0.0",
+    "@qbit-vault/cli-darwin-x64": "1.0.0",
+    "@qbit-vault/cli-linux-x64": "1.0.0",
+    "@qbit-vault/cli-linux-arm64": "1.0.0",
+    "@qbit-vault/cli-win32-x64": "1.0.0"
   },
   "scripts": {}
 }
@@ -164,7 +164,7 @@ There is no `packages/` directory yet. The design is a tiny JS launcher with no 
 - `bin/qbit-vault.mjs` resolves the platform package, verifies the binary's SHA-256 against the checksum **embedded in the launcher at release time**, then `execFileSync`s it with all arguments. No download at runtime, no `postinstall`, no network beyond npm itself.
 - If the platform package is missing (unsupported platform or `--no-optional`), the launcher prints the `go install` alternative and exits 2.
 
-The release archives are already produced by GoReleaser with `checksums.txt` and GitHub build provenance; Minisign signatures are planned.
+The release archives are already produced by GoReleaser with `checksums.txt` and GitHub build provenance; Minisign signatures are not built.
 
 ## `init` step by step
 
@@ -177,10 +177,10 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 3 | Empty vault | Write `vault.enc` with an empty body. **Never** reads `process.env` or any `.env` | no |
 | 4 | Detect hosts | `claude-code` (`~/.claude/` or a `claude` binary on `PATH`), `codex` (`~/.codex/` or `codex`), `pi` (the Pi agent directory, `~/.pi/`, or a `pi` or `gentle-shell` binary); `--agents` names hosts explicitly. There is no OpenCode adapter (dropped, `ROADMAP.md`) | no |
 | 5 | Register hosts | Per `AGENT_INTEGRATIONS.md`, receipts to `state.json`. Claude Code: `mcpServers.qbit-vault` in `~/.claude.json`, four hooks and the `Read`/`Edit` deny rules for the vault home in `~/.claude/settings.json`. Codex: the `[mcp_servers.qbit-vault]` table in `~/.codex/config.toml`. Pi / Gentle Shell: `mcpServers.qbit-vault` in `<Pi agent dir>/mcp.json` (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`). Every host also gets the `qbit-vault` agent skill: `~/.claude/skills/qbit-vault/SKILL.md` for Claude Code, one shared `~/.agents/skills/qbit-vault/SKILL.md` for Codex and Pi (`AGENT_INTEGRATIONS.md` § Agent skill) | no |
-| 6 | Extension | Pi: the extension is not published yet (Phase 4), so `init` prints no install command for it and never runs one (installing needs the network, AGENTS.md invariant 8); until it is published, Pi uses the MCP entry from step 5 | no |
+| 6 | Extension | Pi: the extension does not exist (Phase 4, not built), so `init` prints no install command for it and never runs one (installing needs the network, AGENTS.md invariant 8); Pi uses the MCP entry from step 5 | no |
 | 7 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 
-Total questions on a machine with a keychain: **zero**. Not built: verifying a binary signature, a separate check that other tools' deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`), and a "restart your agent" next-steps message.
+Total questions on a machine with a keychain: **zero**. Not built: verifying a binary signature, and a separate check that other tools' deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`).
 
 ## Example output
 
@@ -266,9 +266,9 @@ From then on every change syncs by itself, and machines that were offline catch 
 `uninstall` is a user command: it asks in the prompt backend and the agent's shell cannot run it.
 
 1. For each host recorded in `state.json`, in reverse step order: if the file is still exactly what qbit-vault wrote, restore the snapshot taken at registration byte for byte (or delete a file qbit-vault created); if the user changed it since, remove only the entries qbit-vault added and keep everything else. The host is forgotten in `state.json` only when this succeeded; otherwise it stays, the command exits 1 and you can run it again.
-2. The Pi extension is not published yet (Phase 4); once it is, you install and remove it yourself. `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from where it was installed (see Uninstall above; for a `go install` copy, your `go/bin` directory).
+2. There is no Pi extension (Phase 4, not built); if one ships, you will install and remove it yourself. `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from where it was installed (see Uninstall above; for a `go install` copy, your `go/bin` directory).
 3. Leave `~/.qbit-vault/` intact. With `--purge` you type the literal word `purge` instead of confirming; after every host reverted it deletes the keychain item and the directory, and nothing else. `uninstall` never touches the sync server, so `--purge` refuses while this vault syncs: run `qbit-vault remote logout` (or revoke the device from another machine) first.
 
-## Self-update (planned)
+## Self-update (not built)
 
-Not built (Phase 5): `qbit-vault update` downloads the release, verifies Minisign + checksums and swaps the binary atomically. A background check at most once per 24 h would print a one-line notice and be opt-out (`QBIT_VAULT_NO_UPDATE_CHECK=1`); it is the optional update check AGENTS.md invariant 8 allows.
+Not built: there is no `qbit-vault update`. The design: it downloads the release, verifies Minisign + checksums and swaps the binary atomically. A background check at most once per 24 h would print a one-line notice and be opt-out (`QBIT_VAULT_NO_UPDATE_CHECK=1`); it is the optional update check AGENTS.md invariant 8 allows.

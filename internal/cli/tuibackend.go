@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/grants"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
-	"github.com/QuBiit0/qbit-vault/internal/tui"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/grants"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/tui"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // tuiListed, when set, receives the entries a TUI listing has already wiped.

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
 )
 
 // Conflicts and their resolution (REMOTE_SYNC § 7.4).

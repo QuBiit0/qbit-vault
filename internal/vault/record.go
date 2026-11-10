@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // Record is one stored secret and its metadata (PRD R-VAULT-06).

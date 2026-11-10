@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/filemerge"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/filemerge"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // Typed errors; match them with errors.Is.

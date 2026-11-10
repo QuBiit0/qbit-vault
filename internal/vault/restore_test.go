@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // backupsOf lists the snapshot ids, oldest first.

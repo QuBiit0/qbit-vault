@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/merge"
-	"github.com/QuBiit0/qbit-vault/internal/remote"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/merge"
+	"github.com/qbitdevz/qbit-vault/internal/remote"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // orphanedDevice registers a world and leaves on its server a device that is

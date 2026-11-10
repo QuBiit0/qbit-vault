@@ -8,13 +8,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/broker"
-	"github.com/QuBiit0/qbit-vault/internal/grants"
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/broker"
+	"github.com/qbitdevz/qbit-vault/internal/grants"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // coolingDown reports whether name is in its per-session cooldown.

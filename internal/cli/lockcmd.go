@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 type lockBody struct {

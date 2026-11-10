@@ -10,12 +10,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/grants"
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
-	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/grants"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // Phase 2S hardening (odd/tasks/remote-sync-hardening.md, H1).

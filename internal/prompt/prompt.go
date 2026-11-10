@@ -20,7 +20,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // EnvBackend is the environment variable that forces a prompt backend.

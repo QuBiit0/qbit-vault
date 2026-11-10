@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // S7.2: the question names who asks, then the reason on its own line; an

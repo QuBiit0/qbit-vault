@@ -12,13 +12,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/broker"
-	"github.com/QuBiit0/qbit-vault/internal/grants"
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
-	"github.com/QuBiit0/qbit-vault/internal/runner"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/broker"
+	"github.com/qbitdevz/qbit-vault/internal/grants"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/runner"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // newBrokerCmd is the raw contract call of docs/CLI.md § Host plumbing: one

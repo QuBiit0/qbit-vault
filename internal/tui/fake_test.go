@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/QuBiit0/qbit-vault/internal/tui"
+	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
 // fakeAction is the Action of the fake backend: it records that it ran.

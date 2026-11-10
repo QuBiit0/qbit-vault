@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
 )
 
 // maxTail bounds how far back from the end Append looks for the last line. A

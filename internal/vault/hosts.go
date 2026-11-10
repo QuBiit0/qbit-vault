@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/QuBiit0/qbit-vault/internal/filemerge"
+	"github.com/qbitdevz/qbit-vault/internal/filemerge"
 )
 
 // Host registrations on the vault side (docs/STORAGE.md § state.json): the

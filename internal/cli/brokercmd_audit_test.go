@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
 )
 
 // D4 (dogfood 1): a refusal answered over the broker or MCP is audited like a

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/grants"
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/grants"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
 )
 
 func TestSetGrantNeedsPromptToken(t *testing.T) {

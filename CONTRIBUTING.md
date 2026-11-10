@@ -15,7 +15,7 @@ Security problems go through [SECURITY.md](SECURITY.md), never a public issue.
 Requirements: Go (the version in `go.mod` or newer), git, and Docker for the end-to-end batteries.
 
 ```sh
-git clone https://github.com/QuBiit0/qbit-vault.git
+git clone https://github.com/qbitdevz/qbit-vault.git
 cd qbit-vault
 go build ./...
 go vet ./...

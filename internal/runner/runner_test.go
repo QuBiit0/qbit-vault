@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/redact"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/redact"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 func TestMain(m *testing.M) {

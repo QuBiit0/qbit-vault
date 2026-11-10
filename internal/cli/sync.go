@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/doctor"
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/doctor"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // Host statuses of the sync and uninstall reports (the `status` of --json).

@@ -3,7 +3,7 @@ package vault
 import (
 	"fmt"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
 )
 
 // secureDir and secureFile make a path owner-only (R-VAULT-03, docs/STORAGE.md

@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/filemerge"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/hosts/codex"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/filemerge"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/codex"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")

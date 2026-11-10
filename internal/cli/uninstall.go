@@ -9,12 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // purgeWord is what the user types to confirm --purge (PRD R-INS-09).

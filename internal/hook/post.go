@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/QuBiit0/qbit-vault/internal/redact"
+	"github.com/qbitdevz/qbit-vault/internal/redact"
 )
 
 const (

@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // A rekey stores the new master key durably before any file is re-sealed with

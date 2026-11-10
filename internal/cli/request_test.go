@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/grants"
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
-	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/grants"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
 )
 
 const reqReason = "create the github release for v1.2.0"

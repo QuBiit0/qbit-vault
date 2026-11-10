@@ -12,8 +12,8 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 const (

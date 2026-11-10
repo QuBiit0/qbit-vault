@@ -9,13 +9,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
-	"github.com/QuBiit0/qbit-vault/internal/merge"
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
-	"github.com/QuBiit0/qbit-vault/internal/remote"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/merge"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/remote"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // errRecoveryStale: the account key changed since this device last synced

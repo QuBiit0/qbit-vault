@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // Sync rounds inside the ordinary commands (docs/REMOTE_SYNC.md § 7.1). The

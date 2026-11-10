@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
 )
 
 func TestDoctorStaysQuietAboutAuditAndGrantsWhenTheyAreFine(t *testing.T) {

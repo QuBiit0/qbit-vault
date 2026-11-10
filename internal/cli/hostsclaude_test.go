@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/hosts/claude"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/claude"
 )
 
 // releaseHostRegistry is the registry of a release build, captured before

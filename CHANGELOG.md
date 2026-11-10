@@ -21,6 +21,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 - `import` refuses names that change how a child starts (`LD_PRELOAD`, `PATH`, …), with the same message as `set` and `exec`.
 - The dump guard inspects the script of `pwsh -c`, `-co`, `-com`, … (any prefix of `-Command`).
 
+### Changed
+
+- The project moved to `github.com/qbitdevz/qbit-vault` (the Go module path, the installers, the release links and the server image `ghcr.io/qbitdevz/qbit-vault-server` follow). Old links redirect; images up to 0.1.0-beta.17 stay at `ghcr.io/qubiit0/qbit-vault-server`.
+
 ## [0.1.0-beta.17] - 2026-11-07
 
 This release also carries the build provenance attestation and the `ghcr.io/qubiit0/qbit-vault-server` image that 0.1.0-beta.16 lacks: its attestation step failed on a transient error of the Sigstore transparency log after the release was published, so its server-image job did not run. The beta.16 binaries and checksums are unaffected.

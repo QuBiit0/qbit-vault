@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"unicode/utf8"
 
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
 )
 
 // invisible are characters a value almost never means to hold but a copy from

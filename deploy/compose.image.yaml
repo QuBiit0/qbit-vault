@@ -8,7 +8,7 @@
 # deploy/compose.yaml is the same service built from this repository.
 services:
   server:
-    image: ghcr.io/qubiit0/qbit-vault-server:latest
+    image: ghcr.io/qbitdevz/qbit-vault-server:latest
     environment:
       QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
       # How many proxies are in front of the server (the client IP for rate

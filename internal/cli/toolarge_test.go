@@ -3,9 +3,9 @@ package cli
 import (
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
-	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
 )
 
 // An oversized interactive value is refused with the same message as

@@ -9,7 +9,7 @@ import (
 func TestUpdateIsAStaticPlannedScreenWithTheManualWayToUpdate(t *testing.T) {
 	m := pressAll(newModel(newReady(), false), digit('7'))
 	wantView(t, m, "update", "Re-run the install command to upgrade",
-		"go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest", "No network call")
+		"go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest", "No network call")
 	for _, gone := range []string{"planned", "phase 5", "not available yet"} {
 		if strings.Contains(strings.ToLower(m.View()), gone) {
 			t.Errorf("the Update screen still says %q", gone)

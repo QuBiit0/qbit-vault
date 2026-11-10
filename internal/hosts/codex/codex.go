@@ -23,9 +23,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/QuBiit0/qbit-vault/internal/filemerge"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/hosts/skill"
+	"github.com/qbitdevz/qbit-vault/internal/filemerge"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/skill"
 )
 
 // Name is the host name used by --agents, state.json and doctor.

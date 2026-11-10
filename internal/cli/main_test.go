@@ -7,8 +7,8 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // hostDirVars relocate a host's config dir away from the user home.

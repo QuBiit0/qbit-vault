@@ -7,7 +7,7 @@ import (
 )
 
 // statusDocsURL is where the status page sends people who found the server.
-const statusDocsURL = "https://github.com/QuBiit0/qbit-vault"
+const statusDocsURL = "https://github.com/qbitdevz/qbit-vault"
 
 // statusPage is the page GET / answers: the brand, the versions and one
 // sentence on what the server is. It is static apart from the version, shows

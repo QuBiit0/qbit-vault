@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/QuBiit0/qbit-vault/internal/cli"
+	"github.com/qbitdevz/qbit-vault/internal/cli"
 )
 
 func main() {

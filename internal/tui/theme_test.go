@@ -7,7 +7,7 @@ import (
 
 	"github.com/muesli/termenv"
 
-	"github.com/QuBiit0/qbit-vault/internal/tui"
+	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
 // F1 (odd/tasks/tui.md L6): without truecolor the selected row falls back to

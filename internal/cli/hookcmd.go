@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/grants"
-	"github.com/QuBiit0/qbit-vault/internal/hook"
-	"github.com/QuBiit0/qbit-vault/internal/redact"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/grants"
+	"github.com/qbitdevz/qbit-vault/internal/hook"
+	"github.com/qbitdevz/qbit-vault/internal/redact"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // newHookCmd is the parent of the host hook commands (docs/CLI.md § Host

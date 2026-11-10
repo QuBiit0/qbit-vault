@@ -5,10 +5,10 @@ Files to build and run `qbit-vault-server`, the optional self-hosted server for 
 | File | What it is |
 | --- | --- |
 | `Dockerfile` | Builds a static `qbit-vault-server` and runs it on distroless as a non-root user (65532). Build context is the repository root |
-| `compose.image.yaml` | The same service, hardened the same way, running the published image `ghcr.io/qubiit0/qbit-vault-server` (no build, no clone needed: copy this one file) |
+| `compose.image.yaml` | The same service, hardened the same way, running the published image `ghcr.io/qbitdevz/qbit-vault-server` (no build, no clone needed: copy this one file) |
 | `compose.yaml` | One `server` service built from this repository (used by the Dokploy deployment): read-only root filesystem, all capabilities dropped, a `vault-data` volume on `/data`, a health check. Written for a reverse proxy that terminates TLS (Dokploy / Traefik) |
 
-Every release publishes `ghcr.io/qubiit0/qbit-vault-server` for linux/amd64 and linux/arm64, tagged with the release version (for example `v0.1.0-beta.14`) and `latest`, built from `Dockerfile` with the version baked in (`QBV_SERVER_VERSION`, shown by `/v1/info` and the status page).
+Every release publishes `ghcr.io/qbitdevz/qbit-vault-server` for linux/amd64 and linux/arm64, tagged with the release version (for example `v0.1.0-beta.14`) and `latest`, built from `Dockerfile` with the version baked in (`QBV_SERVER_VERSION`, shown by `/v1/info` and the status page).
 
 ## Run it
 

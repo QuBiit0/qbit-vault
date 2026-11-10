@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // The unlock cache lives only in a memory-backed runtime directory

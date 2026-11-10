@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
 )
 
 func capture(name string) Record {

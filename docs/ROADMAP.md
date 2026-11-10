@@ -18,8 +18,8 @@ Sliced so every PR stays ≤ 400 changed lines (the review budget), each with co
 ## Phase 0 — alignment (no code)
 
 - [x] Original proposal written (`docs/PROPOSAL.md`, historical: the product was then called gentle-vault).
-- [x] Repo location decided: its own repository, `github.com/QuBiit0/qbit-vault`. The product was renamed to QBit Vault and is independent of the hosts it integrates with (`odd/tasks/rename-qbit.md`, a78c03d).
-- [ ] Reserve names: npm `qbit-vault`, `qbit-vault-pi`, `@qbit-vault/cli-*` (Phase 5). The Go module path is `github.com/QuBiit0/qbit-vault`.
+- [x] Repo location decided: its own repository, `github.com/qbitdevz/qbit-vault`. The product was renamed to QBit Vault and is independent of the hosts it integrates with (`odd/tasks/rename-qbit.md`, a78c03d).
+- [ ] Reserve names: npm `qbit-vault`, `qbit-vault-pi`, `@qbit-vault/cli-*` (Phase 5). The Go module path is `github.com/qbitdevz/qbit-vault`.
 
 ## Phase 1 — core vault (CLI only, no hosts) — done
 

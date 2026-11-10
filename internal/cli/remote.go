@@ -14,12 +14,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/prompt"
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
-	"github.com/QuBiit0/qbit-vault/internal/remote"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/remote"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // The `remote` commands (docs/CLI.md § Remote sync, docs/REMOTE_SYNC.md § 4).

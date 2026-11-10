@@ -81,7 +81,7 @@ func TestReportsOffsetAndEncoding(t *testing.T) {
 
 func TestCleanInput(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.log", []byte("PASS\nok  github.com/QuBiit0/qbit-vault 0.1s\n"))
+	writeFile(t, dir, "a.log", []byte("PASS\nok  github.com/qbitdevz/qbit-vault 0.1s\n"))
 	writeFile(t, dir, "sub/b.log", []byte("TESTSECRET without underscore, and a 40 byte base64 free text"))
 	code, out, errs := runMain(dir)
 	if code != 0 || out != "" || errs != "" {

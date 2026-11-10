@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/QuBiit0/qbit-vault/internal/filemerge"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/filemerge"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
 )
 
 // Adapter is a fake host whose "installation" is the existence of Dir.

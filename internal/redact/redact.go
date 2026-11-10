@@ -32,7 +32,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // ShortLen is the length below which a value is reported by Warnings.

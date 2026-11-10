@@ -13,8 +13,8 @@ import (
 	"testing"
 	"unicode/utf16"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
 )
 
 const (

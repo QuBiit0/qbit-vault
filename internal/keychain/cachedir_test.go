@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // A relative XDG_RUNTIME_DIR is not trusted as memory-backed storage: no cache

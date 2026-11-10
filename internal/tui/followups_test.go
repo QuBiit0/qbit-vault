@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/QuBiit0/qbit-vault/internal/tui"
+	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
 // F4: the edit form shows the description on one line, so saving it back

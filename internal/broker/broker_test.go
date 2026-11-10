@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
 )
 
 // fake records what the broker handed it and answers from fields.

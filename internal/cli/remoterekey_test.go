@@ -13,12 +13,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/merge"
-	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/qbit-vault/internal/remote"
-	"github.com/QuBiit0/qbit-vault/internal/secret"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/merge"
+	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
+	"github.com/qbitdevz/qbit-vault/internal/remote"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // Master-key rotation and device revocation (REMOTE_SYNC § 4.5,

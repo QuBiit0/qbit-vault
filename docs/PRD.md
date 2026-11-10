@@ -14,7 +14,7 @@ Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants
 
 Also built, outside the numbered requirements of this document: the interactive TUI (`qbit-vault tui`, and `qbit-vault` with no arguments on a terminal; `CLI.md` § TUI, `ROADMAP.md`). It is a front end over the existing commands and keeps their invariants (no value shown, values typed only in the prompt backend, grants revoke-only). Not exercised: its suspend and resume around the masked prompt on a real terminal.
 
-Public beta: published releases run from `v0.1.0-beta.2`, the newest is listed in `CHANGELOG.md`. Install with the `install.sh` / `install.ps1` one-liners (release archive, SHA-256 verified), `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest`, or from source (`INSTALL.md`).
+Public beta: published releases run from `v0.1.0-beta.2`, the newest is listed in `CHANGELOG.md`. Install with the `install.sh` / `install.ps1` one-liners (release archive, SHA-256 verified), `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest`, or from source (`INSTALL.md`).
 
 ## 1. Problem statement
 

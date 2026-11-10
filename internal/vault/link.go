@@ -3,7 +3,7 @@ package vault
 import (
 	"errors"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // ErrAmbiguous means several unlinked project layers share the label asked

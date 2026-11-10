@@ -15,9 +15,10 @@ The `UserPromptSubmit` hook blocks a whole message that carries a stored value o
 
 | ID | Specs | Route | Commit | Status |
 |----|-------|-------|--------|--------|
-| T1 | S2-S6 | worker | | in progress |
+| T1 | S2-S6 | worker | | done (uncommitted) |
 | T2 | review, PR, CI, merge, reply on #45, release 1.2.0 | parent | | pending |
 
 ## Log
 
 - L1. Issue #45, "UserPromptSubmit hook blocks harness-generated notifications, so the agent never receives the event" (QuBiit0, 2026-11-10). Owner: "corrige el bug o issue reportado tambien", then "haz todo hasta finalizar ... te autorizo a todo".
+- L2. T1 done, uncommitted: user-prompt reasons name the stored entries (derived from the redacted output, token count above the input's) or the shape kind, both ending in the S4 advice (`BlockAdvice`); `BlockStoredReason`/`BlockShapeReason` replaced by `storedReason`/`shapeReason`; skill section "Background jobs, scripts and subagents"; AGENT_INTEGRATIONS, CLI, CHANGELOG updated; THREAT_MODEL L34 wording unchanged (still accurate).

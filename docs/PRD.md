@@ -8,9 +8,9 @@ Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants
 
 - the Pi extension `qbit-vault-pi` (Phase 4): R-HOST-01, the Pi parts of R-CAP-01 and R-CAP-06, R-RED-04 and R-EXEC-02 on Pi; `set --stdin --fields` and `prompt --field` (R-CAP-08 is met by the broker for MCP hosts);
 - the Claude Code `PreToolUse` rewrite of secret references into `exec` (R-EXEC-02) and its `grant_required` / `dump_command` denials; today `pre-bash` only keeps user-only commands out of the agent's shell;
-- the npm launcher, Minisign-signed checksums, Homebrew and `qbit-vault update` (Phase 5, not built): R-INS-01 as worded, R-INS-02, R-NFR-03 (releases do carry SHA-256 `checksums.txt` and a build-provenance attestation), the binary-signature part of R-INS-07;
+- the npm launcher, Minisign-signed checksums and Homebrew (Phase 5, not built): R-INS-01 as worded, R-INS-02, R-NFR-03 (releases do carry SHA-256 `checksums.txt` and a build-provenance attestation), the binary-signature part of R-INS-07;
 - OpenCode (R-HOST-04): dropped by a recorded decision (`odd/tasks/hosts.md` S8);
-- self-update, in the TUI or as `qbit-vault update` (Phase 5): the TUI's Update section is a static screen that says to re-run the install command.
+- self-update inside the TUI: `qbit-vault update` is built (user-only, out-of-band confirm, SHA-256 of `checksums.txt` over HTTPS; Minisign comes later), but the TUI's Update section is still a static screen that says to re-run the install command.
 
 Also built, outside the numbered requirements of this document: the interactive TUI (`qbit-vault tui`, and `qbit-vault` with no arguments on a terminal; `CLI.md` § TUI, `ROADMAP.md`). It is a front end over the existing commands and keeps their invariants (no value shown, values typed only in the prompt backend, grants revoke-only). Not exercised: its suspend and resume around the masked prompt on a real terminal.
 

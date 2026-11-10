@@ -12,7 +12,8 @@ import (
 
 // rootHelpBeforeTUI is `qbit-vault --help` as captured before the tui command
 // existed. The no-args behavior outside a terminal must stay byte-identical to
-// it, except for the one new line in "Available Commands".
+// it, except for the one new line in "Available Commands". (The `update` line
+// was added to the baseline when that command was built.)
 const rootHelpBeforeTUI = `Local secrets broker for coding agents
 
 Usage:
@@ -48,6 +49,7 @@ Available Commands:
   sync        Re-apply the recorded host registrations (not vault sync: see 'remote')
   uninstall   Revert the host registrations; with --purge also delete the vault
   unlock      Passphrase mode: ask the passphrase and refresh the cached master key
+  update      Update qbit-vault to the latest release (user-only)
   version     Print version information
 
 Flags:

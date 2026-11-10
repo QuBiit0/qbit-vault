@@ -2,7 +2,7 @@
 
 Sliced so every PR stays ≤ 400 changed lines (the review budget), each with code + tests + docs. Phases are sequential; slices within a phase are mostly parallelizable. IDs refer to `docs/PRD.md`.
 
-**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *not built* = not implemented. Releases are published from the `v*` tags (`CHANGELOG.md`): archives for Linux, macOS and Windows, `checksums.txt`, the two installers, a build-provenance attestation and the server image `ghcr.io/qbitdevz/qbit-vault-server`. 1.0.0 is the first stable release. **Not built:** the npm package, the Homebrew formula, the Pi / Gentle Shell native extension, Minisign-signed checksums and `qbit-vault update`; Pi and Gentle Shell work through MCP in the meantime.
+**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *not built* = not implemented. Releases are published from the `v*` tags (`CHANGELOG.md`): archives for Linux, macOS and Windows, `checksums.txt`, the two installers, a build-provenance attestation and the server image `ghcr.io/qbitdevz/qbit-vault-server`. 1.0.0 is the first stable release. **Not built:** the npm package, the Homebrew formula, the Pi / Gentle Shell native extension, and Minisign-signed checksums; `qbit-vault update` is built (CLI); Pi and Gentle Shell work through MCP in the meantime.
 
 | Phase | Status |
 | --- | --- |
@@ -12,7 +12,7 @@ Sliced so every PR stays ≤ 400 changed lines (the review budget), each with co
 | 2S remote sync | done |
 | 3 hosts | done as scoped: Claude Code, Codex, Pi / Gentle Shell through MCP; OpenCode dropped; packaging moved to Phase 5 |
 | 4 Gentle Shell / Pi extension | not built (Pi uses its MCP entry) |
-| 5 hardening and release 1.0.0 | 1.0.0 is the first stable release: archives, installers, provenance and the server image are done; npm, Homebrew, Minisign and `qbit-vault update` are not built |
+| 5 hardening and release 1.0.0 | 1.0.0 is the first stable release: archives, installers, provenance and the server image are done; npm, Homebrew and Minisign are not built; `qbit-vault update` is built after 1.0.0 (`odd/tasks/self-update.md`) |
 | TUI | done (`odd/tasks/tui.md`); a static Update screen (no self-update) |
 
 ## Phase 0 — alignment (no code)
@@ -117,7 +117,7 @@ Not built (stated plainly, nothing here is promised for a date):
 
 - The npm launcher and platform packages (`npx qbit-vault init`), the Homebrew formula, and reserving the npm names.
 - Minisign-signed checksums (the SHA-256 `checksums.txt` and the provenance attestation exist).
-- `qbit-vault update` and the opt-out update check (upgrade by running the installer again).
+- The opt-out update check at TUI open and the TUI update notice (`odd/tasks/self-update.md`, T2). `qbit-vault update` itself is built: it verifies the release's SHA-256 over HTTPS and swaps the binary; Minisign verification is added later without changing the command.
 - A cross-agent battery (Tier 3 in `TESTING.md`) and Docker batteries for macOS and Windows.
 
 ## TUI — done

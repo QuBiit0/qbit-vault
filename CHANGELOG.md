@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- `qbit-vault update` and `qbit-vault update --check`: bring the installed binary to the latest stable release. It confirms through the out-of-band prompt (user-only; `not_model_callable` without one), downloads the archive for your system and `checksums.txt` over HTTPS, verifies the SHA-256, and swaps the binary atomically (on Windows the running `.exe` is renamed to `.old-<id>` and cleaned on a later run). Any failure leaves the installed binary untouched. It then runs `sync` of the new binary when the vault is set up (`QBIT_VAULT_NO_SYNC=1` skips it). `--check` only reports; `--json` is supported for both. A build that is not a release refuses to update itself. The vault, grants, audit log and sync state are never opened or written.
+
 ## [1.0.0] - 2026-11-10
 
 The first stable release. QBit Vault now lives at `github.com/qbitdevz/qbit-vault`. Everything below is on top of 0.1.0-beta.17.

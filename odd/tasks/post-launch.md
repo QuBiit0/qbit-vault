@@ -27,19 +27,21 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 - S6. Documentation pass: every file under `docs/`, `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `deploy/README.md`, `design/README.md`, `assets/brand/README.md`, `contracts/.../CONTRACT.md` and `odd/README.md` is checked against the code at the end of S3-S5: no "planned"/"pending"/"not published" text for things that exist, no description of behavior the code no longer has, commands and messages quoted exactly as the binary prints them, links valid. ROADMAP status table reflects reality. Attribution as in S2.
 - S7. Repository cleanup: no merged or stale branches on GitHub, no stray or generated files tracked, `.gitignore` covers local tool folders, `CHANGELOG.md` `[Unreleased]` tidy, `odd/README.md` indexes the work logs.
 - S9. User (verbatim, 2026-11-10): "necesito que hoy hagamos todo lo posible para dejar nuestra primer version estable 100% funcional. y quiero transferir el repo a mi otra cuenta de github que se llama qbitdevz y quedar con esta cuenta como contribuidor"; "el nombre del repo debe ser qbit-vault como ahora". The repository moves to `qbitdevz/qbit-vault` (QuBiit0 stays as collaborator, which GitHub does automatically); module path, installers, image and links follow; the first stable release 0.1.0 is cut from the new home (it also restores `releases/latest/download` after the move).
-- S8. Released as 0.1.0 (stable; was beta.18) (also the first real run of the bumped goreleaser-action v7 and attest v4); attestation verified, image pulled, this machine and the WSL Ubuntu upgraded and synced.
+- S10. User (verbatim, 2026-11-10): "revisa que toda la documentacion esta actualizada y alineada. tambien el readme que este bonito y hacer la realease 1.0 impecable." and "podrias agregar imagen de la TUI para que se visualice lo bonito que esta. tambien algun gif mostrando su funcionamiento. quiero que la rompamos y generemos impacto". Demo assets are recorded from the real binary with VHS (charmbracelet/vhs in Docker) from committed `.tape` scripts, on a throwaway demo vault with fake values (never a real secret): `assets/screenshots/tui-home.png` (the TUI home), `assets/demo/tui.gif` (a short TUI tour), `assets/demo/cli.gif` (a terminal flow: list, exec with the output redacted). One command regenerates them. The README leads with them.
+- S8. Released as 1.0.0, the first stable release (owner: "la realease 1.0"; was 0.1.0) (also the first real run of the bumped goreleaser-action v7 and attest v4); attestation verified, image pulled, this machine and the WSL Ubuntu upgraded and synced.
 
 ## Tasks
 
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
-| T1 | S3.1-S3.5 | worker | | done (uncommitted) |
-| T2 | S3.6 | worker | | done (uncommitted) |
+| T1 | S3.1-S3.5 | worker | 1fbb206, f76723a, PR #36 | done |
+| T2 | S3.6 | worker | b6b5aac, e8be089, PR #37 | done |
 | T3 | S4.1-S4.4 | worker | 4071677, PR #38 | done |
 | T4 | S5 | parent (Dokploy API) | | pending |
-| T5 | S6 + S2 attribution + odd/README | worker(s) | | pending |
+| T5 | S6 + S2 attribution + odd/README + S10 README | worker | | in progress |
 | T6 | S7 | parent | | pending |
-| T8 | S9 | parent | chore/move-to-qbitdevz | in progress |
+| T8 | S9 | parent | 26809e9, PR #39 | done |
+| T9 | S10 demo assets | worker | | in progress |
 | T7 | S8 | parent | | pending |
 
 ## Log
@@ -51,3 +53,4 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 - T3 (worker, uncommitted): S4.1 `remote join` mints a new device id when its own roster marks the id revoked or the server answers `device_revoked` to it (probe by login challenge), and `vault.ChangeDeviceID` moves state.json and the project roots in one write as the first local change of `finish` (a refused join changes nothing); S4.2 `SecretRequest.Heading` gives the confirmation code its own prompt (tty, PowerShell, osascript, zenity, kdialog reuse the passphrase dialog layout); S4.3 `remote devices` asks `/v1/devices` best effort and shows `last seen` (JSON `last_seen`), `last sync` only when known; S4.4 tty and native `Passphrase` ask again up to 3 times (maxPassphraseTries), the retry dialog starts with `Passphrases do not match. Try again.`; R3-conflict-name `vault.ExistsError` carries the name PutMissing found. The CHANGELOG [Unreleased] never held the known-limitation text (only the beta.16 history entry, kept).
 - L5. Paused (owner at the weekly usage limit). State: T1 merged (PR #36). T2 committed b6b5aac, e8be089, review approved, PR #37 auto-merging after CI. T3 done by worker, full suite green, committed on branch fix/post-launch-sync and pushed; NOT yet natively reviewed, no PR. Resume: native review of fix/post-launch-sync against origin/main (lenses risk, reliability), re-render the touched Windows dialogs (joiner confirmation code, passphrase retry text) and check screenshots, PR, merge; then T4-T7.
 - L6. Resumed 2026-11-10. T3 reviewed (risk, reliability; approved, advisory R3-001 remotesync.go:600) and merged as PR #38. Transfer QuBiit0/qbit-vault -> qbitdevz/qbit-vault requested via API (pending the owner's acceptance on qbitdevz). Rename prepared on chore/move-to-qbitdevz: every QuBiit0/qbit-vault and ghcr.io/qubiit0 reference outside odd/tasks and CHANGELOG history (221 files); build, vet, focused release/docs tests, install_test.sh and install_test.ps1 green. Not merged until the transfer is accepted (the new module path must resolve).
+- L7. Transfer accepted: qbitdevz/qbit-vault, QuBiit0 has write. PR #39 (rename) merged. Dokploy still deploys from the QuBiit0 GitHub app, which cannot see the moved repo: T4 switches it to a raw compose with the published image after the release (same appName, so the same vault-data volume). Release version is 1.0.0 (owner). T5 docs pass and T9 demo assets run in parallel on docs/v1-launch with disjoint edit surfaces.

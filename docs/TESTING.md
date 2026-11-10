@@ -1,6 +1,6 @@
 # Testing
 
-Three tiers plus a leak battery that runs on every tier. **Built today:** Tier 1 (`go test ./...`, run in CI on Linux, macOS and Windows with `tools/leakgrep` over the verbose output; see § CI below), the Docker sync battery (`e2e/docker-test.sh`) and the Docker hosts battery (`e2e/hosts-test.sh`), the Docker install-from-scratch battery (`e2e/install-test.sh`), the leak battery and the conformance harness. **Planned:** the rest of Tier 2 as separate images (items marked *planned* below), Tier 3, `qbit-vault-pi` tests (Phase 4) and a Windows/macOS e2e job. Package names below are the directories under `internal/`.
+Three tiers plus a leak battery that runs on every tier. **Built today:** Tier 1 (`go test ./...`, run in CI on Linux, macOS and Windows with `tools/leakgrep` over the verbose output; see § CI below), the Docker sync battery (`e2e/docker-test.sh`) and the Docker hosts battery (`e2e/hosts-test.sh`), the Docker install-from-scratch battery (`e2e/install-test.sh`), the leak battery and the conformance harness. **Planned:** the rest of Tier 2 as separate images (items marked *planned* below), Tier 3, `qbit-vault-pi` tests (Phase 4) and macOS/Windows e2e batteries. Package names below are the directories under `internal/`.
 
 ## Tier 1 — unit (`go test ./...`, `pnpm test` in packages)
 
@@ -27,7 +27,7 @@ Fixture values all start with `TESTSECRET_` and end with a 24-char random suffix
 
 ## Tier 2 — E2E in Docker (`bash e2e/docker-test.sh` for the sync battery, `bash e2e/hosts-test.sh` for host registration, `bash e2e/install-test.sh` for install from scratch)
 
-Built: three Linux batteries, items 7, 9 and 10 below (items 3, 4 and 6 of this list are exercised inside item 9; item 1 in part by item 10). *Planned:* isolated images for Ubuntu (with and without Secret Service) and Alpine (passphrase mode), and a Windows job in CI (native runner; CI today runs only the unit suite there). Each of those would run:
+Built: three Linux batteries, items 7, 9 and 10 below (items 3, 4 and 6 of this list are exercised inside item 9; item 1 in part by item 10). *Planned:* isolated images for Ubuntu (with and without Secret Service) and Alpine (passphrase mode), and Docker batteries for macOS and Windows (CI on those systems runs the unit suite and the install-script test, `scripts/install_test.sh` / `install_test.ps1`). Each of those would run:
 
 1. *Planned (Phase 5, needs the npm package):* `npx qbit-vault init` from the packed npm tarball; assert zero prompts with keychain, exactly one without.
 2. `set` via stdin, `list`, `describe`, `exec` with a script that prints `$NAME` in every encoding the redactor knows and several it does not (hex, reversed) — the latter are expected leaks and are reported, not failed, to track R2.

@@ -24,6 +24,7 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 ### Changed
 
 - The project moved to `github.com/qbitdevz/qbit-vault` (the Go module path, the installers, the release links and the server image `ghcr.io/qbitdevz/qbit-vault-server` follow). Old links redirect; images up to 0.1.0-beta.17 stay at `ghcr.io/qubiit0/qbit-vault-server`.
+- The README is rewritten for the first stable release, with a terminal GIF, a TUI screenshot and a TUI tour (`assets/demo/`, recorded from the real binary on a throwaway demo vault; `bash assets/demo/make.sh` regenerates them). Every document was checked against the binary's `--help` and behavior: text that called finished things planned, pending or unpublished (the server image, the installers, build provenance) is gone, and what is still not built (npm package, Homebrew formula, Pi extension, Minisign signatures, `qbit-vault update`) is stated plainly in `docs/ROADMAP.md`.
 
 ## [0.1.0-beta.17] - 2026-11-07
 

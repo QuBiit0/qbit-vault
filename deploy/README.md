@@ -8,7 +8,7 @@ Files to build and run `qbit-vault-server`, the optional self-hosted server for 
 | `compose.image.yaml` | The same service, hardened the same way, running the published image `ghcr.io/qbitdevz/qbit-vault-server` (no build, no clone needed: copy this one file) |
 | `compose.yaml` | One `server` service built from this repository (used by the Dokploy deployment): read-only root filesystem, all capabilities dropped, a `vault-data` volume on `/data`, a health check. Written for a reverse proxy that terminates TLS (Dokploy / Traefik) |
 
-Every release publishes `ghcr.io/qbitdevz/qbit-vault-server` for linux/amd64 and linux/arm64, tagged with the release version (for example `v0.1.0-beta.14`) and `latest`, built from `Dockerfile` with the version baked in (`QBV_SERVER_VERSION`, shown by `/v1/info` and the status page).
+Every release publishes `ghcr.io/qbitdevz/qbit-vault-server` for linux/amd64 and linux/arm64, tagged with the release version (for example `v1.0.0`) and `latest`, built from `Dockerfile` with the version baked in (`QBV_SERVER_VERSION`, shown by `/v1/info` and the status page).
 
 ## Run it
 
@@ -22,7 +22,7 @@ docker compose -f compose.image.yaml exec server /qbit-vault-server invite --ttl
 
 Open `https://vault.example.com/` in a browser: the server answers a small status page with the QBit Vault branding, its version and API version. It shows nothing about accounts, devices or usage and has no script; secrets are never managed on the web (the server cannot read them).
 
-To pin a release, change `:latest` in `compose.image.yaml` to a version tag. To build from this repository instead:
+To pin a release, change `:latest` in `compose.image.yaml` to a version tag such as `:v1.0.0`. To build from this repository instead:
 
 ```bash
 docker compose -f deploy/compose.yaml up -d --build

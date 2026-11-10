@@ -4,11 +4,11 @@
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│  qbit-vault  (Go binary, installed with `go install`; npm launcher: Phase 5)  │
+│  qbit-vault  (Go binary: release archives, one-line installers, go install)   │
 │                                                                               │
 │  cmd/qbit-vault ── cobra CLI ──┬── init / sync / doctor / uninstall           │
 │                                  ├── set / rm / mv / edit / list / describe   │
-│                                  │   import / relink / restore / rekey        │
+│                                  │   import / export / relink / restore/rekey │
 │                                  │   lock / unlock / audit                    │
 │                                  ├── grant / revoke / grants                  │
 │                                  ├── exec                                     │
@@ -39,7 +39,7 @@
 │  internal/merge       pure three-way per-record merge (hlc, tombstones)       │
 │  internal/remote      sync client: keys, pairing, envelopes, rounds, anchors  │
 │  (also: envelope, secret, refusal, exitcode, perm, lockfile, dotenv,          │
-│   conformance)                                                                │
+│   exportfile, server, conformance)                                            │
 └───────────────────────────────────────────────────────────────────────────────┘
           ▲ MCP stdio                          ▲ CLI (--json) — planned
           │                                    │
@@ -51,7 +51,7 @@
 └─────────────────────────────────────────┘   └─────────────────────────────────┘
 ```
 
-Built today: the Go binary, the MCP server, the Claude Code hooks and the registration of Claude Code, Codex and Pi / Gentle Shell (Pi through its MCP entry). Not built: the Pi extension (Phase 4), the npm launcher and the signed releases (Phase 5), OpenCode (dropped).
+Built today: the Go binary, the MCP server, the Claude Code hooks and the registration of Claude Code, Codex and Pi / Gentle Shell (Pi through its MCP entry). Releases are published (archives, SHA-256 `checksums.txt`, build provenance, the server image). Not built: the Pi extension (Phase 4), the npm launcher, the Homebrew formula and Minisign-signed checksums (see `ROADMAP.md`); OpenCode was dropped.
 
 With sync enabled, `internal/remote` talks HTTPS to **`qbit-vault-server`** (`cmd/qbit-vault-server`, `internal/server`): a self-hosted, zero-knowledge store of sealed vault versions, key envelopes, device public keys and audit anchors (`REMOTE_SYNC.md`). It is a separate deployment; the client stays daemon-free.
 
@@ -247,6 +247,7 @@ vault.enc        AEAD envelope (see STORAGE.md)
 key.enc          only in passphrase mode
 grants.enc       grant metadata, AEAD-encrypted with the master key
 audit.jsonl      hash-chained
+audit.head       hash of the newest audit record (a missing head next to 2+ records is reported by `audit --verify`)
 bindings.yaml    planned: implicit bindings (user-editable; not created or read yet)
 dumpguard.yaml   optional: extra refused command patterns (the defaults are compiled in; never created)
 config.yaml      planned: ttl defaults, prompt backend override, update check opt-out (no loader yet; not created)

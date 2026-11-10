@@ -6,7 +6,7 @@ Files to build and run `qbit-vault-server`, the optional self-hosted server for 
 | --- | --- |
 | `Dockerfile` | Builds a static `qbit-vault-server` and runs it on distroless as a non-root user (65532). Build context is the repository root |
 | `compose.image.yaml` | The same service, hardened the same way, running the published image `ghcr.io/qbitdevz/qbit-vault-server` (no build, no clone needed: copy this one file) |
-| `compose.yaml` | One `server` service built from this repository (used by the Dokploy deployment): read-only root filesystem, all capabilities dropped, a `vault-data` volume on `/data`, a health check. Written for a reverse proxy that terminates TLS (Dokploy / Traefik) |
+| `compose.yaml` | One `server` service built from this repository: read-only root filesystem, all capabilities dropped, a `vault-data` volume on `/data`, a health check. Written for a reverse proxy that terminates TLS (Dokploy / Traefik) |
 
 Every release publishes `ghcr.io/qbitdevz/qbit-vault-server` for linux/amd64 and linux/arm64, tagged with the release version (for example `v1.0.0`) and `latest`, built from `Dockerfile` with the version baked in (`QBV_SERVER_VERSION`, shown by `/v1/info` and the status page).
 
@@ -34,6 +34,12 @@ No shell on the host? Set `QBV_SERVER_BOOTSTRAP_INVITE` (a code of your own: at 
 Then, on the first machine: `qbit-vault remote register --server https://vault.example.com`. The invite is an operator credential, not a vault secret.
 
 Without compose: `docker build -f deploy/Dockerfile .` from the repository root.
+
+## Dokploy
+
+Create a **Compose** service whose source is **Raw** and paste `compose.image.yaml` into it (no Git provider needed). Set `QBV_SERVER_PUBLIC_URL` in its environment, add a domain for service `server`, port `8080`, with HTTPS, and deploy. `pull_policy: always` makes every **Redeploy** pull the newest published release, so upgrading the server after a release is one click; pin a version tag instead of `:latest` to stay on one release.
+
+Moving an existing Dokploy service from the Git source (`compose.yaml`) to the image keeps its data when the volume name stays the same: Docker Compose names it `<app name>_vault-data`. Name it explicitly under `volumes:` in the pasted file (`vault-data: {name: <app name>_vault-data}`), and set the compose path to `./docker-compose.yml`, where Dokploy writes a raw compose (the old `./deploy/compose.yaml` path makes the deploy fail looking for `deploy/.env`). Check with `qbit-vault remote sync` afterwards: `up to date` means the server still holds the account.
 
 ## Settings
 

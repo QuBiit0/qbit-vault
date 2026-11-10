@@ -16,7 +16,7 @@ qbit-vault is the user's local secrets broker. You can run commands that need a 
 
 ## How to use it
 
-1. `secret_list` first. It returns the names visible from this directory (global ones and this project's), their metadata and the rules you must follow. It never returns values.
+1. `secret_list` first. It returns the names visible from this directory (global ones and this project's), their metadata and the rules you must follow. It never returns values. A secret's `grant` is what `secret_exec` will accept from this directory; `null` means it will refuse. When `grant_note` is present a grant exists but does not apply here (another directory, or an earlier value): call `secret_request`.
 2. Missing a name, or need permission for one: `secret_request` with every name the task needs in one call (up to 8 fields) and a concrete reason ("run `gh release create` for v1.2", not "needed"). The user types new values or approves existing ones in a dialog outside the chat. You get references and a grant, never the value.
 3. Run the command with `secret_exec`: the command plus `secrets: [{name}]`; each secret becomes an environment variable of that one process. Reference it the way the shell expects (`$GITHUB_TOKEN`, `%GITHUB_TOKEN%`, `$env:GITHUB_TOKEN`).
 4. Read the redacted output. `[REDACTED:NAME]` in it is expected; never try to recover what is behind it.
@@ -42,13 +42,21 @@ An `exec` that runs but gets `401`, `403`, "invalid token" or "authentication fa
 
 | Refusal | What to do |
 | --- | --- |
-| `grant_required` | Call `secret_request` for that name (the user approves it), then retry `secret_exec` once. |
+| `grant_required` | Call `secret_request` for that name (the user approves it), then retry `secret_exec` once. The message may say the grant is for another directory or an earlier value: the same answer, and run the command from the directory the grant was approved in if you can. |
 | `unknown_secret` | The name does not exist here: call `secret_request` so the user can store it. |
 | `user_declined` | Stop asking for it; tell the user what could not be done. Do not re-ask during the cooldown. |
 | `reason_too_vague` | Rephrase the reason: what command, what for. |
 | `dump_command` | The command would print a secret or the environment. Rewrite it so it does not. |
 | `scope_binary` | The secret is limited to other programs. Tell the user; they can change its allowlist. |
 | `scope_not_allowed` | The secret is sensitive: only a one-time (`once`) grant is possible. |
-| `vault_locked` | Ask the user to run `qbit-vault unlock` in their terminal. |
+| `rate_limited` | You asked again too soon after a decline. Back off; do not retry now, tell the user what is blocked. |
+| `invalid_name` | The name is not valid (capital letters, digits and `_`, starting with a letter) or appears twice. Fix it and call again. |
+| `no_project` | You asked for the project layer outside a repository. Use the global layer, or work from the repository. |
+| `not_model_callable` | That operation is not yours to call. Stop and tell the user; do not try another route to the same effect. |
+| `vault_locked` | `secret_request` and `secret_manage` ask the user for the passphrase in a dialog that names you and the secret, so a locked vault is not a reason to stop. `secret_exec` and `secret_list` never ask: when one answers this, call `secret_request` for the name (it unlocks, then asks for the permission as usual) and retry. A wrong passphrase also answers this; calling again asks again. Only when `secret_request` itself answers this (no dialog is possible here, or the user turned it off) ask the user to run `qbit-vault unlock` in their terminal. |
+| `vault_corrupt` | The vault failed its integrity check. Stop; tell the user to run `qbit-vault restore`. |
+| `timeout` | The command ran past `timeout_ms` and was killed; the redacted output so far is in `partial`. Raise `timeout_ms` or run something shorter. |
+| `contract_mismatch` | This server and the tools disagree on the contract version. Tell the user to run `qbit-vault sync` and restart the agent. |
+| `internal` | A malformed argument, a missing prompt, or a call cancelled before the user answered (the message says which). Fix the arguments and retry once; otherwise tell the user. Nothing was stored or granted. |
 
 If the qbit-vault tools are not available in this session, tell the user to run `qbit-vault doctor` and restart the agent; do not fall back to asking for the value.

@@ -115,7 +115,17 @@ type SecretMeta struct {
 	CreatedAt       string     `json:"created_at"`
 	UpdatedAt       string     `json:"updated_at"`
 	Grant           *GrantInfo `json:"grant"`
+	// GrantNote says why Grant is null although a grant of this secret exists
+	// (it does not apply from this directory, or belongs to an earlier value).
+	// Optional and additive: absent when there is nothing to say.
+	GrantNote string `json:"grant_note,omitempty"`
 }
+
+// Notes for SecretMeta.GrantNote. Fixed text: no path, no value.
+const (
+	NoteOtherDirectory = "a project grant exists for another directory; call secret_request"
+	NoteOtherRecord    = "the grant is for an earlier value of this secret; call secret_request"
+)
 
 // Cooldown is a name the agent may not ask for again until Until.
 type Cooldown struct {

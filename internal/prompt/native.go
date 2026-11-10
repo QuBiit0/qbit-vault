@@ -151,6 +151,15 @@ func nativeFor(e Env) (tool, string) {
 		}
 		return look(osascriptTool{})
 	case "linux":
+		// Under WSL the dialog is the Windows one, whatever the Linux side
+		// has: the user sits at the Windows desktop (S4.1). The Windows
+		// session check does not apply: powershell.exe starts in the
+		// interactive session of the user who runs WSL.
+		if isWSL(e) {
+			if t, p := look(powershellTool{}); t != nil {
+				return t, p
+			}
+		}
 		if e.Getenv("DISPLAY") == "" && e.Getenv("WAYLAND_DISPLAY") == "" {
 			return nil, ""
 		}
@@ -162,10 +171,23 @@ func nativeFor(e Env) (tool, string) {
 	return nil, ""
 }
 
+// isWSL reports whether this Linux process runs under WSL: the distribution
+// name is exported, or Windows interop is registered.
+func isWSL(e Env) bool {
+	if e.Getenv("WSL_DISTRO_NAME") != "" {
+		return true
+	}
+	if e.Exists != nil {
+		return e.Exists(wslInteropPath)
+	}
+	_, err := os.Stat(wslInteropPath)
+	return err == nil
+}
+
 // forced resolves a backend named by QBIT_VAULT_PROMPT. A named backend
 // that cannot run is an error, never a quiet fall back to the terminal.
 func forced(e Env, t tool) (string, error) {
-	if t.name() == "powershell" && e.Interactive != nil && !e.Interactive() {
+	if t.name() == "powershell" && e.GOOS == "windows" && e.Interactive != nil && !e.Interactive() {
 		return "", unavailableError{"prompt backend powershell is unavailable: this is not an interactive desktop session"}
 	}
 	p, err := locate(e, t)
@@ -185,6 +207,9 @@ const (
 	winPowerShell = `\System32\WindowsPowerShell\v1.0\powershell.exe`
 	wslPowerShell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
 	osascriptPath = "/usr/bin/osascript"
+	// wslInteropPath exists when Windows interop is registered, which is how a
+	// Linux process knows it runs under WSL.
+	wslInteropPath = "/proc/sys/fs/binfmt_misc/WSLInterop"
 )
 
 // linuxHelperDirs are the only places zenity and kdialog are looked up, in
@@ -246,6 +271,14 @@ type native struct {
 	run     runner
 	timeout time.Duration
 	open    func() (Terminal, error) // the terminal, for what a helper cannot show
+	ctx     context.Context          // ends every dialog with it; nil is never
+}
+
+// WithContext implements Contexter.
+func (n *native) WithContext(ctx context.Context) Backend {
+	c := *n
+	c.ctx = ctx
+	return &c
 }
 
 func (n *native) Name() string { return n.t.name() }
@@ -262,13 +295,16 @@ func (n *native) ask(d dialog) (result, status, error) {
 
 // askWith runs a built helper command for dialog d.
 func (n *native) askWith(c command, d dialog) (result, status, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), n.timeout)
+	ctx, cancel := context.WithTimeout(base(n.ctx), n.timeout)
 	defer cancel()
 	r, err := n.run(ctx, c)
 	if err != nil {
 		clear(r.Stdout)
 		if errors.Is(err, context.DeadlineExceeded) {
 			return result{}, statusFail, ErrTimeout
+		}
+		if errors.Is(err, context.Canceled) {
+			return result{}, statusFail, ErrCancelled
 		}
 		if errors.Is(err, ErrTooLarge) {
 			return result{}, statusFail, ErrTooLarge

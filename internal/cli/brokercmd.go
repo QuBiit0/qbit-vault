@@ -153,9 +153,10 @@ func (b *cliBackend) Info() broker.Info {
 
 func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResult, error) {
 	g := b.bound(e)
+	g.unlock.never = true // list never opens a dialog
 	s, err := g.openSession()
 	if err != nil {
-		return broker.ListResult{}, asRefusal(err)
+		return broker.ListResult{}, asRefusal(lockedHint(err))
 	}
 	defer s.close()
 	entries, err := s.v.List(e.Cwd)
@@ -179,6 +180,7 @@ func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResu
 		res.Unlinked = &broker.UnlinkedMatch{Label: label}
 	}
 	now := clock()
+	listCwd, _ := grantCwdOf(e.Cwd)
 	for _, c := range grants.Cooldowns(st, e.Session, now) {
 		res.Cooldowns = append(res.Cooldowns, broker.Cooldown{Name: c.Name, Until: c.Until.UTC().Format(time.RFC3339)})
 	}
@@ -189,34 +191,32 @@ func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResu
 			Binaries: nonNil(en.Record.Binaries), Hosts: nonNil(en.Record.Hosts),
 			CreatedAt: en.Record.CreatedAt, UpdatedAt: en.Record.UpdatedAt,
 		}
-		meta.Grant = applicableGrant(grants.ForRecord(st, en.Name, en.Layer.Key(), en.Record.ID, now), e.Session)
+		meta.Grant, meta.GrantNote = listedGrant(st, en, e.Session, listCwd, now)
 		res.Secrets = append(res.Secrets, meta)
 	}
 	return res, nil
 }
 
-// applicableGrant is the grant this session can use: project, else session,
-// else an unused once grant (L5).
-func applicableGrant(gs []grants.Grant, session string) *broker.GrantInfo {
-	rank := map[grants.Scope]int{grants.ScopeProject: 3, grants.ScopeSession: 2, grants.ScopeOnce: 1}
-	var best *grants.Grant
-	for i := range gs {
-		gr := &gs[i]
-		if gr.Scope != grants.ScopeProject && (gr.Session != session || gr.Consumed) {
-			continue
-		}
-		if best == nil || rank[gr.Scope] > rank[best.Scope] {
-			best = gr
-		}
+// listedGrant is the grant exec would accept for this record from here
+// (grants.Lookup: the predicate of grants.Check, without consuming), and, when
+// a grant exists but does not apply, a note the agent can act on (issue #42).
+func listedGrant(st *grants.Store, en vault.Entry, session, cwd string, now time.Time) (*broker.GrantInfo, string) {
+	gr, why := grants.Lookup(st, en.Name, en.Layer.Key(), en.Record.ID, en.Record.Sensitive, session, cwd, now)
+	if gr != nil {
+		return &broker.GrantInfo{Scope: string(gr.Scope), ExpiresAt: expiryText(gr.ExpiresAt)}, ""
 	}
-	if best == nil {
-		return nil
+	switch why {
+	case grants.WhyOtherDirectory:
+		return nil, broker.NoteOtherDirectory
+	case grants.WhyOtherRecord:
+		return nil, broker.NoteOtherRecord
 	}
-	return &broker.GrantInfo{Scope: string(best.Scope), ExpiresAt: expiryText(best.ExpiresAt)}
+	return nil, ""
 }
 
 func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecRequest) (broker.ExecResponse, error) {
 	g := b.hot(e)
+	g.unlock.never = true // exec never opens a dialog: the user already said yes
 	p := execPlan{command: r.Command, timeout: time.Duration(r.TimeoutMS) * time.Millisecond, shell: runner.Shell(r.Shell)}
 	seen := map[string]bool{}
 	for _, sc := range r.Secrets {
@@ -247,7 +247,7 @@ func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecR
 	if err := g.runExec(cmd, p, false); err != nil {
 		var xe exitError
 		if !errors.As(err, &xe) {
-			return broker.ExecResponse{}, asRefusal(err)
+			return broker.ExecResponse{}, asRefusal(lockedHint(err))
 		}
 	}
 	var res broker.ExecResponse
@@ -257,8 +257,10 @@ func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecR
 	return res, nil
 }
 
-func (b *cliBackend) Grant(_ context.Context, e broker.Envelope, r broker.GrantRequest) (broker.GrantResponse, error) {
+func (b *cliBackend) Grant(ctx context.Context, e broker.Envelope, r broker.GrantRequest) (broker.GrantResponse, error) {
 	g := b.hot(e)
+	g.ctx = ctx
+	g.unlock = agentUnlock{names: []string{r.Name}, layer: r.Layer}
 	s, err := g.openSession()
 	if err != nil {
 		return broker.GrantResponse{}, asRefusal(err)
@@ -291,8 +293,12 @@ func (b *cliBackend) Grant(_ context.Context, e broker.Envelope, r broker.GrantR
 	return broker.GrantResponse{OK: true, Grant: broker.GrantInfo{Scope: string(gr.Scope), ExpiresAt: expiryText(gr.ExpiresAt)}}, nil
 }
 
-func (b *cliBackend) Revoke(_ context.Context, e broker.Envelope, r broker.RevokeRequest) (broker.RevokeResponse, error) {
+func (b *cliBackend) Revoke(ctx context.Context, e broker.Envelope, r broker.RevokeRequest) (broker.RevokeResponse, error) {
 	g := b.hot(e)
+	g.ctx = ctx
+	if r.Name != "" {
+		g.unlock.names = []string{r.Name}
+	}
 	s, err := g.openSession()
 	if err != nil {
 		return broker.RevokeResponse{}, asRefusal(err)

@@ -46,8 +46,13 @@ type asked struct {
 // value existed, so the model cannot enumerate the vault. A decline or
 // cancel starts the cooldown of every name in the request, for the session
 // and, briefly, for every session in the layers it could live in.
-func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.RequestRequest) (broker.RequestResponse, error) {
+func (b *cliBackend) Request(ctx context.Context, e broker.Envelope, r broker.RequestRequest) (broker.RequestResponse, error) {
 	g := b.bound(e)
+	g.ctx = ctx
+	g.unlock = agentUnlock{layer: r.SuggestedLayer}
+	for _, f := range r.Fields {
+		g.unlock.names = append(g.unlock.names, f.Name)
+	}
 	s, err := g.openSession()
 	if err != nil {
 		return broker.RequestResponse{}, asRefusal(err)
@@ -103,6 +108,13 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	if err != nil {
 		return broker.RequestResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
 	}
+	// One dialog at a time across the calls of this server. No vault or
+	// grants lock is held here: each mutation below takes its own.
+	release, err := g.takeDialogTurn()
+	if err != nil {
+		return broker.RequestResponse{}, err
+	}
+	defer release()
 	declined := func(outcome string) error {
 		for _, a := range fields {
 			g.coolDownIn(s, a.f.Name, a.layers)
@@ -112,6 +124,8 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	}
 	fail := func(err error) error {
 		switch {
+		case g.callGone():
+			return errCallCancelled()
 		case gaveUp(err):
 			return declined("cancelled")
 		case errors.Is(err, prompt.ErrUnavailable):
@@ -217,6 +231,10 @@ func (b *cliBackend) Request(_ context.Context, e broker.Envelope, r broker.Requ
 	i, err := ask.Choose(allowQuestion(prompt.Requester(hostOf(e.Session), ""), who, r.Reason), append(opts, denyOption), def)
 	if err != nil {
 		return broker.RequestResponse{}, fail(err)
+	}
+	if g.callGone() {
+		// The client cancelled as the user answered: nothing is stored or granted.
+		return broker.RequestResponse{}, errCallCancelled()
 	}
 	if i >= len(scopes) {
 		return broker.RequestResponse{}, declined("denied")

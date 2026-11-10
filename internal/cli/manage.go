@@ -68,8 +68,10 @@ func (g *globals) coolDownIn(s *session, name string, layers []string) {
 // for how long the new value may be used, or replace only): a replaced value
 // drops its old grants, and asking for a new one right after would be a
 // second dialog for the same intent.
-func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.ManageRequest) (broker.ManageResponse, error) {
+func (b *cliBackend) Manage(ctx context.Context, e broker.Envelope, r broker.ManageRequest) (broker.ManageResponse, error) {
 	g := b.hot(e)
+	g.ctx = ctx
+	g.unlock = agentUnlock{names: []string{r.Name}, layer: r.Layer}
 	s, err := g.openSession()
 	if err != nil {
 		return broker.ManageResponse{}, asRefusal(err)
@@ -107,6 +109,11 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 	if err != nil {
 		return broker.ManageResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
 	}
+	release, err := g.takeDialogTurn()
+	if err != nil {
+		return broker.ManageResponse{}, err
+	}
+	defer release()
 	audited := func(outcome string) {
 		g.record(io.Discard, audit.Record{Event: audit.EventManage, Names: []string{r.Name}, Layer: auditLayer(en.Layer),
 			By: "agent", Reason: r.Reason, Detail: r.Action, Outcome: outcome})
@@ -139,6 +146,8 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 		ok, err = ask.Confirm(q)
 	}
 	switch {
+	case g.callGone():
+		return broker.ManageResponse{}, errCallCancelled()
 	case errors.Is(err, prompt.ErrUnavailable):
 		return broker.ManageResponse{}, refusal.New(refusal.Internal, "").WithMessage(msgNoPrompt)
 	case err != nil && !gaveUp(err):
@@ -161,6 +170,9 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 	case "replace":
 		sec, aerr := ask.Secret(prompt.SecretRequest{Name: r.Name, Reason: r.Reason, Host: hostOf(e.Session),
 			Session: e.Session, Project: layerRequest(en.Layer), Existing: true})
+		if g.callGone() {
+			return broker.ManageResponse{}, errCallCancelled()
+		}
 		if aerr != nil {
 			if gaveUp(aerr) {
 				return broker.ManageResponse{}, declined()
@@ -175,6 +187,9 @@ func (b *cliBackend) Manage(_ context.Context, e broker.Envelope, r broker.Manag
 			return broker.ManageResponse{}, refusal.New(refusal.Internal, "").WithMessage("empty or too large value")
 		}
 		reviewed, rerr := reviewValue(ask, r.Name, v)
+		if g.callGone() {
+			return broker.ManageResponse{}, errCallCancelled()
+		}
 		if rerr != nil {
 			if gaveUp(rerr) {
 				return broker.ManageResponse{}, declined()

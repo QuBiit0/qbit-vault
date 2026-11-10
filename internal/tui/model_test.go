@@ -175,10 +175,10 @@ func TestSectionSwitching(t *testing.T) {
 	}{
 		{"jump to Grants", []tea.KeyMsg{digit('2')}, "Grants", []string{"Active grants"}},
 		{"jump to Hosts", []tea.KeyMsg{digit('3')}, "Hosts", []string{"HOST", "claude-code", "STEPS"}},
-		{"jump to Update", []tea.KeyMsg{digit('7')}, "Update", []string{"Re-run the install command to upgrade", "Install command"}},
+		{"jump to Update", []tea.KeyMsg{digit('7')}, "Update", []string{"checking for updates", "How to update"}},
 		{"down twice", []tea.KeyMsg{keyDown, keyDown}, "Hosts", []string{"HOST"}},
 		{"up stops at the first section", []tea.KeyMsg{keyUp}, "Secrets", []string{"GITHUB_TOKEN"}},
-		{"down stops at the last section", []tea.KeyMsg{digit('7'), keyDown}, "Update", []string{"Re-run the install command to upgrade"}},
+		{"down stops at the last section", []tea.KeyMsg{digit('7'), keyDown}, "Update", []string{"checking for updates"}},
 		{"digit 8 is not a section", []tea.KeyMsg{digit('8')}, "Secrets", []string{"GITHUB_TOKEN"}},
 		{"jump works from another pane", []tea.KeyMsg{keyTab, digit('5')}, "Sync", []string{"does not sync"}},
 	}

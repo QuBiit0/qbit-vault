@@ -67,7 +67,7 @@ go install ./cmd/qbit-vault
 | --- | --- |
 | macOS, Linux (including WSL2) or Windows 10+, amd64 or arm64 | The unit suite, the install-script tests and the leak grep run on all three in CI; the Docker batteries (`e2e/`) run on Linux. |
 | `curl` or `wget`, `tar` and `sha256sum` or `shasum` (Linux, macOS) | Used by `install.sh`; present on stock systems. |
-| An OS keychain, or a passphrase | Without a keychain (WSL, a headless Linux box without Secret Service) `init` asks for a passphrase instead (below). |
+| An OS keychain, or a passphrase | Without a keychain (WSL, a headless Linux box without Secret Service) `init` asks for a passphrase instead (below). Under WSL the dialogs (passphrase, secrets, permissions) are the Windows ones, through `powershell.exe` at its fixed `/mnt/c/Windows/…` path; no `zenity` or `kdialog` is needed, and `qbit-vault doctor` shows `prompt: powershell (WSL)`. |
 
 ## Where `go install` puts the binary
 
@@ -110,7 +110,7 @@ Re-run the one-line install. It is safe on a machine that already has QBit Vault
 
 Your vault, keys, grants, backups and audit log live in `$QBIT_VAULT_HOME` and are never touched by the install. Restart your agents afterwards: an agent that was open during the update keeps running the old MCP server until it restarts.
 
-With Go, re-run `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` (or `git pull` then `go install ./cmd/qbit-vault`), then `qbit-vault sync` yourself; on Windows close your agents first, because `go install` cannot replace a running `.exe`. There is no `qbit-vault update` command.
+With Go, re-run `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` (or `git pull` then `go install ./cmd/qbit-vault`), then `qbit-vault sync` yourself; on Windows close your agents first, because `go install` cannot replace a running `.exe`. The simplest way is `qbit-vault update` (§ Self-update below).
 
 ## Uninstall
 
@@ -269,6 +269,19 @@ From then on every change syncs by itself, and machines that were offline catch 
 2. There is no Pi extension (Phase 4, not built); if one ships, you will install and remove it yourself. `uninstall` only reverts the MCP entry. `uninstall` does not remove the binary: delete it from where it was installed (see Uninstall above; for a `go install` copy, your `go/bin` directory).
 3. Leave `~/.qbit-vault/` intact. With `--purge` you type the literal word `purge` instead of confirming; after every host reverted it deletes the keychain item and the directory, and nothing else. `uninstall` never touches the sync server, so `--purge` refuses while this vault syncs: run `qbit-vault remote logout` (or revoke the device from another machine) first.
 
-## Self-update (not built)
+## Self-update
 
-Not built: there is no `qbit-vault update`. The design: it downloads the release, verifies Minisign + checksums and swaps the binary atomically. A background check at most once per 24 h would print a one-line notice and be opt-out (`QBIT_VAULT_NO_UPDATE_CHECK=1`); it is the optional update check AGENTS.md invariant 8 allows.
+`qbit-vault update` brings an installed binary to the latest stable release; `qbit-vault update --check` only reports (`update available: v1.0.0 -> v1.1.0` or `qbit-vault v1.1.0 is up to date`). It is a user-only command: the confirmation `Update QBit Vault <current> to <latest>?` (default No) comes from the out-of-band prompt, so an agent cannot swap the binary (the pre-bash hook also denies it, and without a prompt backend it is `not_model_callable`).
+
+What it does, in order:
+
+1. Refuses a build that is not a release (`dev`, `+dirty`, a pseudo-version) with the one-line installer / `go install` hint; `--check` still reports.
+2. Asks `https://api.github.com/repos/qbitdevz/qbit-vault/releases/latest` (or `QBIT_VAULT_RELEASES_API`, as the installers) and compares semantic versions. A draft or pre-release is never chosen.
+3. Checks that the directory of the running binary is writable (`cannot replace <path>: re-run the install command` otherwise), then asks you.
+4. Downloads `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows) and `checksums.txt` over HTTPS (redirects to GitHub's asset hosts are followed; size caps and timeouts apply), checks the archive's SHA-256 against `checksums.txt` and extracts the binary to a temp file beside the installed one. Any failure there leaves the installed binary byte-identical and removes the temp file.
+5. Swaps it in atomically (the same rename the installers do; on Windows the running `qbit-vault.exe` is renamed to `qbit-vault.exe.old-<8 hex>` and a later `update` removes the old copies).
+6. When the vault is set up, runs `sync` of the new binary (skip with `QBIT_VAULT_NO_SYNC=1`) and prints `updated qbit-vault <current> -> <latest>; restart your agents so they load the new version`.
+
+The TUI does the same from its Update section: each time it opens it checks for a newer release in the background (5 s timeout; the screen never waits and a failure only shows `could not check for updates`), shows `update available <latest>` in the header, and `u` runs this update with the TUI suspended for the confirmation. `QBIT_VAULT_NO_UPDATE_CHECK=1` turns the open-time check off (the section then offers `c check now`).
+
+It never opens the vault, grants, audit log or sync state, reads no secret, and contacts only the GitHub API and the release assets. The trust anchor is the same as the installers': a SHA-256 `checksums.txt` served over HTTPS from the repository's releases. Minisign-signed checksums are not built yet; when they are, the command verifies them without changing its interface (THREAT_MODEL L12).

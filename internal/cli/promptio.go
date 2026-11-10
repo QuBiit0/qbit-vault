@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"context"
 	"errors"
 
 	"github.com/qbitdevz/qbit-vault/internal/exitcode"
 	"github.com/qbitdevz/qbit-vault/internal/keychain"
 	"github.com/qbitdevz/qbit-vault/internal/prompt"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
 	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
@@ -15,7 +17,39 @@ import (
 // the process stdin (L3).
 var newPrompt = func(g *globals) (prompt.Backend, error) { return prompt.Select(g.getenv) }
 
-func (g *globals) backend() (prompt.Backend, error) { return newPrompt(g) }
+func (g *globals) backend() (prompt.Backend, error) {
+	b, err := newPrompt(g)
+	if err == nil && g.ctx != nil {
+		b = prompt.Bind(g.ctx, b)
+	}
+	return b, err
+}
+
+// errCallCancelled is what a call answers when its client cancelled it (or
+// gave up waiting for its turn at the dialog): nothing was stored, granted or
+// audited as a capture or grant, and asking again is fine. It is not a
+// decline, so it starts no cooldown.
+func errCallCancelled() error {
+	return refusal.New(refusal.Internal, "").WithMessage("the request was cancelled before the user answered; nothing was changed").WithRetryable(true)
+}
+
+// callGone reports whether the client ended the call this command serves.
+func (g *globals) callGone() bool { return g.ctx != nil && g.ctx.Err() != nil }
+
+// takeDialogTurn waits for the process-wide turn to show a dialog, so two
+// tool calls never open two at once. It must be called with no vault or
+// grants lock held. release is nil-safe to call on success only.
+func (g *globals) takeDialogTurn() (release func(), err error) {
+	ctx := g.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	release, err = prompt.AcquireDialog(ctx)
+	if err != nil {
+		return nil, errCallCancelled()
+	}
+	return release, nil
+}
 
 // errCancelled is what a command reports when the user gave up at a prompt
 // (Ctrl-C, end of input, or a "no" to a confirmation). Nothing was written.

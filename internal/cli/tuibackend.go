@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/qbitdevz/qbit-vault/internal/grants"
 	"github.com/qbitdevz/qbit-vault/internal/hosts"
 	"github.com/qbitdevz/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/selfupdate"
 	"github.com/qbitdevz/qbit-vault/internal/tui"
 	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
@@ -297,6 +299,37 @@ func (b *tuiBackend) revoke(name, layerKey string, all bool) (int, error) {
 		return 0, tuiError(err.Error(), exitcode.Failure)
 	}
 	return n, nil
+}
+
+// ---- update ----
+
+// tuiCheckTimeout bounds the open-time release check (S4.1); tests shorten it.
+var tuiCheckTimeout = 5 * time.Second
+
+// CheckUpdate asks the releases API for the latest release, like
+// `update --check`. Only versions and the release notes link leave this
+// function; the error is a fixed line, so no URL or response text is shown.
+func (b *tuiBackend) CheckUpdate() (tui.UpdateInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), tuiCheckTimeout)
+	defer cancel()
+	rel, err := selfupdate.NewClient(Version, updateAPI(b.g.getenv)).Latest(ctx)
+	if err != nil {
+		return tui.UpdateInfo{}, errors.New("could not check for updates")
+	}
+	newer, err := selfupdate.Newer(Version, rel.Tag)
+	if err != nil {
+		// Latest only returns release tags, so the comparison fails only when
+		// the running build is not a release. As in `update --check`, such a
+		// build counts as older than any release.
+		newer = true
+	}
+	return tui.UpdateInfo{Current: Version, Latest: rel.Tag, URL: rel.URL, Available: newer}, nil
+}
+
+// Update is `update`: it confirms in the prompt backend, so it runs under
+// tea.Exec. It reads no secret and creates no grant.
+func (b *tuiBackend) Update() tui.Action {
+	return tuiAction{func() error { return b.g.runCommand("update") }}
 }
 
 // ---- running the commands ----

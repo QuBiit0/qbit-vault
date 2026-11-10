@@ -66,6 +66,12 @@ type Options struct {
 	// Exec runs an Action with the TUI suspended; nil means tea.Exec. Tests
 	// replace it, since a program is needed to suspend anything.
 	Exec func(Action, tea.ExecCallback) tea.Cmd
+	// NoUpdateCheck turns the open-time release check off
+	// (QBIT_VAULT_NO_UPDATE_CHECK=1); the Update section offers "c check now".
+	NoUpdateCheck bool
+	// NotRelease marks a build that cannot update itself (dev, a pseudo-version):
+	// no check runs and u is not offered.
+	NotRelease bool
 }
 
 const defaultWidth = 100
@@ -89,6 +95,7 @@ type Model struct {
 	au     auditPane
 	sy     syncPane
 	dr     doctorPane
+	up     updatePane
 	form   *form         // the add or edit form, while open
 	ask    *confirmation // a destructive key waiting for "y"
 	notice notice        // the result of the last action
@@ -99,6 +106,9 @@ type Model struct {
 func New(b Backend, o Options) Model {
 	m := Model{b: b, opts: o, theme: NewTheme(o.Profile), width: defaultWidth}
 	m.load()
+	if m.autoCheck() {
+		m.up.st = upChecking
+	}
 	if m.screen == ScreenHome {
 		m.enterSection()
 	}
@@ -127,7 +137,12 @@ func (m *Model) load() {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd {
+	if m.autoCheck() {
+		return m.checkCmd()
+	}
+	return nil
+}
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -138,6 +153,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateKey(msg)
 	case actionDoneMsg:
 		return m.actionDone(msg), nil
+	case updateCheckedMsg:
+		return m.updateChecked(msg), nil
 	}
 	return m, nil
 }
@@ -149,6 +166,7 @@ const (
 	actSetup actionKind = iota
 	actAdd
 	actUnlock
+	actUpdate
 )
 
 // actionDoneMsg reports that an Action (a suspended prompt, or the setup)
@@ -172,6 +190,8 @@ func (m Model) actionDone(msg actionDoneMsg) Model {
 		}
 	case actUnlock:
 		m.refreshAfter(msg.err, "unlocked")
+	case actUpdate:
+		m.updateDone(msg.err)
 	}
 	return m
 }
@@ -255,6 +275,8 @@ func (m Model) updateHome(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		next, cmd, ok = m.syncKey(key)
 	case "Doctor":
 		next, cmd, ok = m.doctorKey(key)
+	case "Update":
+		next, cmd, ok = m.updateSectionKey(key)
 	}
 	if ok {
 		return next, cmd

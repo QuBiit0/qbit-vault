@@ -71,6 +71,11 @@ type Inputs struct {
 	// the grants store and closes it. nil error: unlocked; ErrLocked: locked;
 	// any other error is reported with its (fixed) message.
 	Open func() (Opened, error)
+	// Prompt names the backend that asks the user out of band without
+	// starting it. nil leaves the line out. The terminal ("tty") is the
+	// default and says nothing, like audit and grants when they are fine, so
+	// a healthy report stays short; a native dialog is named.
+	Prompt func() (string, error)
 }
 
 // Run builds the report. It never writes.
@@ -106,6 +111,14 @@ func Run(in Inputs) Report {
 		add("permissions", Warn, bad)
 	} else {
 		add("permissions", OK, "owner-only")
+	}
+
+	if in.Prompt != nil {
+		if name, perr := in.Prompt(); perr != nil {
+			add("prompt", Warn, perr.Error())
+		} else if name != "tty" {
+			add("prompt", OK, name)
+		}
 	}
 
 	if err == nil && opened.GrantsReset {

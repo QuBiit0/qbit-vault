@@ -108,6 +108,10 @@ type PassphraseRequest struct {
 	Again string
 	// Confirm asks twice and refuses two different entries.
 	Confirm bool
+	// Reason says who needs the passphrase and why, when the user did not
+	// start the command (an agent call that finds the vault locked). It is
+	// shown above the entry and never holds a value.
+	Reason string
 }
 
 // The passphrases qbit-vault asks for.
@@ -212,6 +216,25 @@ func SelectWith(e Env) (Backend, error) {
 	}
 }
 
+// Describe names the backend Select would pick, for `doctor`: the backend
+// name, with " (WSL)" for the Windows dialog reached from Linux. It starts
+// no helper and shows nothing. A backend named by QBIT_VAULT_PROMPT that
+// cannot run is an error, as it is for any command.
+func Describe(getenv func(string) string) (string, error) {
+	return describeWith(Env{GOOS: runtime.GOOS, Getenv: getenv, LookPath: exec.LookPath, Interactive: interactiveSession, SystemRoot: systemRoot})
+}
+
+func describeWith(e Env) (string, error) {
+	b, err := SelectWith(e)
+	if err != nil {
+		return "", err
+	}
+	if n, ok := b.(*native); ok && e.GOOS == "linux" && n.t.name() == "powershell" {
+		return n.t.name() + " (WSL)", nil
+	}
+	return b.Name(), nil
+}
+
 // New builds the terminal backend over open, which is called for every
 // prompt and whose terminal is closed when the prompt ends.
 func New(open func() (Terminal, error), opts ...Option) Backend {
@@ -231,6 +254,14 @@ func Timeout(d time.Duration) Option { return func(b *tty) { b.timeout = d } }
 type tty struct {
 	open    func() (Terminal, error)
 	timeout time.Duration
+	ctx     context.Context // ends every prompt with it; nil is never
+}
+
+// WithContext implements Contexter.
+func (b *tty) WithContext(ctx context.Context) Backend {
+	c := *b
+	c.ctx = ctx
+	return &c
 }
 
 func (*tty) Name() string { return "tty" }
@@ -245,7 +276,7 @@ func (b *tty) with(fn func(context.Context, Terminal) error) error {
 		return ErrNoTerminal
 	}
 	defer t.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), b.timeout)
+	ctx, cancel := context.WithTimeout(base(b.ctx), b.timeout)
 	defer cancel()
 	return fn(ctx, t)
 }
@@ -253,7 +284,7 @@ func (b *tty) with(fn func(context.Context, Terminal) error) error {
 // readErr maps a terminal read failure.
 func readErr(err error) error {
 	switch {
-	case errors.Is(err, io.EOF), errors.Is(err, ErrCancelled):
+	case errors.Is(err, io.EOF), errors.Is(err, ErrCancelled), errors.Is(err, context.Canceled):
 		return ErrCancelled
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, ErrTimeout):
 		return ErrTimeout
@@ -295,6 +326,9 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 func (b *tty) Passphrase(req PassphraseRequest) (secret.Secret, error) {
 	var out secret.Secret
 	err := b.with(func(ctx context.Context, t Terminal) error {
+		if req.Reason != "" {
+			_, _ = io.WriteString(t, escape(req.Reason)+"\n")
+		}
 		for try := 1; ; try++ {
 			_, _ = io.WriteString(t, req.Label+": ")
 			first, err := t.ReadHidden(ctx)

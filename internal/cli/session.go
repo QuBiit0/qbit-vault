@@ -65,6 +65,9 @@ func (g *globals) openSession() (*session, error) {
 	if err != nil {
 		return nil, mapErr(err, "")
 	}
+	if g.unlock.asked {
+		g.recordUnlock()
+	}
 	v, key, err := g.openRecovering(home, id, key)
 	if err != nil {
 		key.Wipe()
@@ -86,9 +89,14 @@ func (g *globals) noPrompt() bool { return g.getenv(noPromptKey) == "1" }
 
 // passphraseSource is where a vault in passphrase mode with no cached key may
 // get its passphrase: the prompt backend, or nowhere in the no-prompt mode.
+// An agent call (broker or MCP) asks through its own dialog, which names the
+// requester and may be switched off (agentPassphrase).
 func (g *globals) passphraseSource() keychain.PassphraseFunc {
-	if g.noPrompt() {
+	switch {
+	case g.noPrompt():
 		return nil
+	case g.broker:
+		return g.agentPassphrase()
 	}
 	return g.unlockPassphrase
 }

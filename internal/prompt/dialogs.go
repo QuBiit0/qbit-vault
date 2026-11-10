@@ -38,6 +38,8 @@ func passphraseDialog(req PassphraseRequest, again bool) dialog {
 	text := req.Label + ":"
 	if again {
 		text = req.again() + ":"
+	} else if req.Reason != "" {
+		text = escapeLines(req.Reason) + "\n\n" + text
 	}
 	return dialog{kind: dialogSecret, title: dialogTitle, heading: req.heading(), text: text, okLabel: "Continue", cancelLabel: "Cancel"}
 }

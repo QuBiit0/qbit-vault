@@ -236,7 +236,7 @@ func (g *globals) grantGate(stderr io.Writer, s *session, recs []vault.Entry, cw
 			d, m := grants.Check(work, e.Name, e.Layer.Key(), e.Record.ID, e.Record.Sensitive, g.Session, cwd, now)
 			mutated = mutated || m
 			if !d.Allowed {
-				return false, refusal.New(refusal.GrantRequired, e.Name)
+				return false, grantRefusal(e.Name, d.Why)
 			}
 			if d.Once != nil {
 				taken = append(taken, *d.Once)
@@ -256,6 +256,34 @@ func (g *globals) grantGate(stderr io.Writer, s *session, recs []vault.Entry, cw
 		return nil, err
 	}
 	return claimed, nil
+}
+
+// grantCwdOf is the directory grants are evaluated for: the root of the
+// repository dir is in, else dir itself, in the same canonical form the root
+// was bound to when a project grant of a global secret was approved
+// (vault.ProjectRoot). exec and the broker's list both use it, so they agree.
+func grantCwdOf(dir string) (string, error) {
+	root, ok, err := vault.ProjectRoot(dir)
+	if err != nil {
+		return foldPath(dir), err
+	}
+	if ok {
+		return root, nil
+	}
+	return foldPath(dir), nil
+}
+
+// grantRefusal is grant_required, saying what the user must do when a grant
+// exists but does not apply here (issue #42). It names no path and no value.
+func grantRefusal(name string, why grants.Why) refusal.Refusal {
+	r := refusal.New(refusal.GrantRequired, name)
+	switch why {
+	case grants.WhyOtherDirectory:
+		return r.WithMessage(name + " has a project grant for another directory; call secret_request")
+	case grants.WhyOtherRecord:
+		return r.WithMessage(name + " has a grant for an earlier value of it; call secret_request")
+	}
+	return r
 }
 
 // releaseOnce gives back the once grants an exec claimed when its command
@@ -306,13 +334,9 @@ func (g *globals) runExec(cmd *cobra.Command, p execPlan, stream bool) error {
 		recs = append(recs, e)
 		byName[name] = e
 	}
-	root, ok, err := vault.ProjectRoot(p.dir)
+	grantCwd, err := grantCwdOf(p.dir)
 	if err != nil {
 		return mapErr(err, "")
-	}
-	grantCwd := foldPath(p.dir)
-	if ok {
-		grantCwd = root
 	}
 
 	// 2. Grants, without consuming anything yet.

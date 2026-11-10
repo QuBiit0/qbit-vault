@@ -12,7 +12,8 @@ import (
 
 // rootHelpBeforeTUI is `qbit-vault --help` as captured before the tui command
 // existed. The no-args behavior outside a terminal must stay byte-identical to
-// it, except for the one new line in "Available Commands".
+// it, except for the one new line in "Available Commands". (The `update` line
+// was added to the baseline when that command was built.)
 const rootHelpBeforeTUI = `Local secrets broker for coding agents
 
 Usage:
@@ -48,6 +49,7 @@ Available Commands:
   sync        Re-apply the recorded host registrations (not vault sync: see 'remote')
   uninstall   Revert the host registrations; with --purge also delete the vault
   unlock      Passphrase mode: ask the passphrase and refresh the cached master key
+  update      Update qbit-vault to the latest release (user-only)
   version     Print version information
 
 Flags:
@@ -246,4 +248,33 @@ func TestTUIStatusBackend(t *testing.T) {
 			t.Fatalf("status = %+v, err = %v", st, err)
 		}
 	})
+}
+
+func TestTUIOptionsCarryTheUpdateSwitches(t *testing.T) {
+	cases := []struct {
+		name    string
+		version string
+		env     map[string]string
+		wantOff bool
+		wantNot bool
+	}{
+		{"release, check on", "v1.0.0", nil, false, false},
+		{"release, check off", "v1.0.0", map[string]string{"QBIT_VAULT_NO_UPDATE_CHECK": "1"}, true, false},
+		{"another value keeps it on", "v1.0.0", map[string]string{"QBIT_VAULT_NO_UPDATE_CHECK": "0"}, false, false},
+		{"dev build", "dev", nil, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := probeTUI(t, true)
+			old := Version
+			Version = c.version
+			t.Cleanup(func() { Version = old })
+			if code, _, errs := run(t, c.env, "tui"); code != exitcode.OK {
+				t.Fatalf("code=%d err=%q", code, errs)
+			}
+			if p.opts.NoUpdateCheck != c.wantOff || p.opts.NotRelease != c.wantNot {
+				t.Errorf("opts = %+v", p.opts)
+			}
+		})
+	}
 }

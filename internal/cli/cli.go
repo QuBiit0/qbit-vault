@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,8 +41,14 @@ type globals struct {
 	execStdin io.Reader
 	// cwd is the working directory of a broker call (its envelope's cwd);
 	// empty means the process's own, except in a broker call (broker).
-	cwd     string
-	broker  bool
+	cwd    string
+	broker bool
+	// ctx, when set, is the call this command serves (an MCP request the
+	// client may cancel): its dialogs end with it. Nil is the CLI.
+	ctx context.Context
+	// unlock is what an agent call tells the passphrase dialog it may open
+	// (agentunlock.go); the zero value asks for the vault with no name.
+	unlock  agentUnlock
 	home    string
 	JSON    bool
 	Session string
@@ -234,7 +241,7 @@ func newRoot(g *globals, entered *bool) *cobra.Command {
 	root.AddCommand(newLock(g), newUnlock(g), newRestore(g), newRekey(g), newImport(g), newExport(g))
 	root.AddCommand(newBrokerCmd(g), newMCPCmd(g), newHookCmd(g), newLink(g))
 	root.AddCommand(newRemote(g))
-	root.AddCommand(newTUI(g))
+	root.AddCommand(newTUI(g), newUpdate(g))
 	return root
 }
 

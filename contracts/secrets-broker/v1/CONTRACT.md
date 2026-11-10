@@ -85,6 +85,8 @@ Response:
   "policy": { "…": "see below" } }
 ```
 
+`grant` is the grant `exec` would accept for this secret from `cwd` and this session (the same check, run without spending a `once` grant): `null` when none applies. A grant that exists but does not apply here is never shown as active. In that case the optional `grant_note` says why and what to do: `a project grant exists for another directory; call secret_request` (a project grant of a global secret covers only the repository it was approved in) or `the grant is for an earlier value of this secret; call secret_request` (the value was replaced). The field is absent when there is nothing to say; clients that do not know it ignore it (added in 1.1.0, additive, issue #42).
+
 Returns the secrets that resolve from `cwd`: every secret of the current project layer, plus every global secret not overridden by it. `project` is `null` outside a repository. Other projects' secrets are never listed. Never values. `unlinked_match` is `{ "label": "shop-api" }` when sync brought a project layer from another device whose origin URL matches this repository but the user has not linked it here (`REMOTE_SYNC.md` § 7.5): the agent may suggest that the user run `qbit-vault link shop-api`; it cannot link it itself. Otherwise `null`.
 
 `policy` tells the agent everything it may and may not do. Its strings are normative (hosts ship them verbatim) and the same text is the MCP server's `instructions`:
@@ -201,7 +203,7 @@ A refusal is `{ "ok": false, "refusal": { "type": "<type>", "name": "<secret nam
 
 | `type` | When | `retryable` | Expected host behavior |
 | --- | --- | --- | --- |
-| `grant_required` | `exec` references a name with no active grant | yes | Open the grant prompt; retry once |
+| `grant_required` | `exec` references a name with no active grant. When a grant exists but does not apply (another directory, or an earlier value) the `message` says so, e.g. `NAME has a project grant for another directory; call secret_request` | yes | Open the grant prompt; retry once |
 | `unknown_secret` | `exec` or `manage` references a name that does not resolve from `cwd` (in neither this project nor global) | yes | Model should call `request` |
 | `user_declined` | User cancelled the prompt | no (60 s cooldown) | Tell the model the user declined; do not re-ask |
 | `rate_limited` | Re-request inside the cooldown | no | Back off |

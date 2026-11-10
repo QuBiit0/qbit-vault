@@ -16,6 +16,7 @@ import (
 	"github.com/qbitdevz/qbit-vault/internal/doctor"
 	"github.com/qbitdevz/qbit-vault/internal/exitcode"
 	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/pi"
 	"github.com/qbitdevz/qbit-vault/internal/keychain"
 	"github.com/qbitdevz/qbit-vault/internal/prompt"
 	"github.com/qbitdevz/qbit-vault/internal/refusal"
@@ -174,6 +175,11 @@ func newInit(g *globals) *cobra.Command {
 					if _, err := fmt.Fprintln(out, hostLine(r, body.Hosts[i])); err != nil {
 						return err
 					}
+					if hint := extensionHint(r); hint != "" {
+						if _, err := fmt.Fprintln(out, hint); err != nil {
+							return err
+						}
+					}
 				}
 				if show {
 					if err := rep.WriteHuman(out); err != nil {
@@ -200,6 +206,17 @@ func newInit(g *globals) *cobra.Command {
 	f.BoolVar(&passphraseStdin, "passphrase-stdin", false, "read the passphrase from the first line of stdin instead of asking on the terminal")
 	f.StringSliceVar(&agents, "agents", nil, "hosts to register, comma-separated, or 'none' (default: the hosts detected on this machine)")
 	return cmd
+}
+
+// extensionHint is the optional install suggestion printed under the line of a
+// host that has an extension, once that host is registered. It is text only:
+// qbit-vault never runs it (invariant 8: installing needs the network). JSON
+// output does not carry it.
+func extensionHint(r hosts.Result) string {
+	if r.Host != pi.Name || r.Err() != nil {
+		return ""
+	}
+	return "  Pi extension (optional, run it yourself): " + pi.ExtensionInstallCommand + "\n  with plain Pi: " + pi.ExtensionInstallCommandPi
 }
 
 // hostLine is the human line of one host.

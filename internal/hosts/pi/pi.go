@@ -13,9 +13,9 @@
 // (docs/environment-variables.md, same source). Only our entry is edited; the
 // rest of the user's file stays byte for byte as it was.
 //
-// The rich path (tools, hooks, masked input) is the qbit-vault-pi extension.
-// Installing it needs the network, so init never does it, and while the
-// package is unpublished init does not print its command either.
+// The rich path (/vault commands, footer status, paste interception) is the
+// qbit-vault-pi extension. Installing it needs the network, so init never does
+// it: init and sync only print its install command as a suggestion.
 // Nothing here reads a secret.
 package pi
 
@@ -36,10 +36,22 @@ import (
 // Name is the host name used by --agents, state.json and doctor.
 const Name = "pi"
 
-// ExtensionInstallCommand is what init will print for the user to run once
-// the extension is published. It is not printed today and never executed by
-// qbit-vault.
-const ExtensionInstallCommand = "pi install npm:qbit-vault-pi"
+// The extension is distributed as an immutable git tag of this repository, not
+// on npm (odd/tasks/pi-extension.md S12): the tag pi-v<ExtensionVersion> holds
+// only the built package. A test keeps ExtensionVersion equal to the version
+// in packages/qbit-vault-pi/package.json.
+const (
+	ExtensionVersion = "0.1.0"
+	ExtensionSource  = "git:github.com/qbitdevz/qbit-vault@pi-v" + ExtensionVersion
+)
+
+// ExtensionInstallCommand and ExtensionInstallCommandPi are what init and sync
+// suggest for the user to run (Gentle Shell passes everything after `--` to
+// Pi). They are text only: qbit-vault never executes them (invariant 8).
+const (
+	ExtensionInstallCommand   = "gentle-shell -- install " + ExtensionSource
+	ExtensionInstallCommandPi = "pi install " + ExtensionSource
+)
 
 const (
 	serverName  = "qbit-vault"

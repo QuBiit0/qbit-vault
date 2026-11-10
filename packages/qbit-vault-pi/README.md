@@ -17,7 +17,28 @@ The `qbit-vault` binary on `PATH` (see the [QBit Vault install guide](https://gi
 
 ## Install
 
-Once it is published to npm, install it with Pi's package command for npm sources (`npm:qbit-vault-pi`), or with `gentle-shell install npm:qbit-vault-pi` in Gentle Shell. Check the Pi documentation for the exact command of your version.
+The package is not published to npm. It is distributed as an immutable git tag of the QBit Vault repository: `pi-v<version>` points to a commit that holds only this package, already built, so installing needs no build and pulls no dev dependency (Pi runs `npm install --omit=dev` for git packages, and never installs the peers).
+
+In Gentle Shell (it passes everything after `--` to Pi):
+
+```sh
+gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.1.0
+```
+
+In plain Pi:
+
+```sh
+pi install git:github.com/qbitdevz/qbit-vault@pi-v0.1.0
+```
+
+To try it for one run without installing it, load the same source with `-e`:
+
+```sh
+gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.1.0
+pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.1.0
+```
+
+To update, install the newer tag (for example `@pi-v0.2.0`): a tag is pinned, so Pi never moves a configured ref by itself. Tags are never moved or reused. `qbit-vault init` and `sync` print the install line for the version that matches your `qbit-vault` binary, for you to run.
 
 To try a local build without installing anything:
 
@@ -46,4 +67,4 @@ npm run typecheck   # src and tests
 
 ## Publishing
 
-The maintainer publishes from this directory while logged in to npm, with the `publish` command of npm and `--access public`. The `prepublishOnly` script runs the typecheck, the build and the tests first, so the package always ships a fresh `dist/`.
+The maintainer runs the `pi-extension-release` workflow (Actions tab, on `main`). It reads the version from `package.json`, stops if the tag `pi-v<version>` already exists, runs `npm ci`, the typecheck, the build and the tests, and assembles the tree with `node scripts/assemble-dist.mjs --out <empty dir>`: a `package.json` without `devDependencies` and `scripts`, `dist/`, `secret-patterns.yaml`, `README.md` and `LICENSE`. That tree is committed with no parent the first time, and with the previous head of the branch `pi-extension` as parent afterwards (fast-forward only, never forced), and the annotated tag `pi-v<version>` is pushed with it. To publish a new version, raise `version` in `package.json` and `ExtensionVersion` in `internal/hosts/pi` (a test keeps both equal). Run the script by hand after `npm run build` to see the tree before publishing.

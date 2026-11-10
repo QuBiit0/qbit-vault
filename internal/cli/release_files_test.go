@@ -22,7 +22,7 @@ func repoFile(t *testing.T, parts ...string) string {
 // comment (S8.4), so a moved tag cannot change what a release job runs.
 func TestWorkflowActionsArePinnedToCommitSHAs(t *testing.T) {
 	pinned := regexp.MustCompile(`^\s*- uses: [\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$`)
-	for _, wf := range []string{"ci.yml", "release.yml"} {
+	for _, wf := range []string{"ci.yml", "release.yml", "pi-extension-release.yml"} {
 		uses := 0
 		for _, line := range strings.Split(repoFile(t, ".github", "workflows", wf), "\n") {
 			if !strings.Contains(line, "uses:") {
@@ -204,5 +204,34 @@ func TestReadmeHasFirstFiveMinutesWithTheDialogScreenshot(t *testing.T) {
 	}
 	if strings.Index(r, "releases/latest/download/install.sh") > i {
 		t.Error("First 5 minutes must come after the install commands")
+	}
+}
+
+// The extension workflow is manual, writes only contents, never forces a push
+// and never refers to the tag of a binary release; release.yml only reacts to
+// tags that start with v, so pi-v* tags cannot start it (S12.1).
+func TestPiExtensionReleaseWorkflowIsManualAndNeverForces(t *testing.T) {
+	w := repoFile(t, ".github", "workflows", "pi-extension-release.yml")
+	for _, want := range []string{
+		"\non:\n  workflow_dispatch:\n",
+		"\npermissions:\n  contents: read\n",
+		"contents: write",
+		"git commit-tree",
+		"git push --atomic origin",
+		"refs/heads/pi-extension",
+		"already exists",
+		"github-actions[bot]",
+	} {
+		if !strings.Contains(w, want) {
+			t.Errorf("pi-extension-release.yml lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"--force", "push -f", "\n  push:", "id-token"} {
+		if strings.Contains(w, bad) {
+			t.Errorf("pi-extension-release.yml contains %q", bad)
+		}
+	}
+	if !strings.Contains(repoFile(t, ".github", "workflows", "release.yml"), `tags: ["v*"]`) {
+		t.Error("release.yml no longer filters on v* tags: re-check that pi-v* cannot trigger it")
 	}
 }

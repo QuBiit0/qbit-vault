@@ -1,6 +1,6 @@
 # Gentle Shell / Pi extension: `qbit-vault-pi`
 
-**Status: built (Phase 4 v1), not yet on npm.** The package lives in `packages/qbit-vault-pi`, is tested in CI (`pi-extension` job) and is published to npm by the maintainer, not by CI. Until then `qbit-vault init` prints no install line for it (it only registers the MCP entry, `AGENT_INTEGRATIONS.md`), and the install steps below do not work yet; use the local test.
+**Status: built (Phase 4 v1), distributed as a git tag, not on npm.** The package lives in `packages/qbit-vault-pi`, is tested in CI (`pi-extension` job) and is published by the maintainer running the `pi-extension-release` workflow, which pushes the immutable tag `pi-v<version>`. The install commands below work once that tag exists. `qbit-vault init` and `sync` print them as a suggestion when the Pi host is registered, and never run them.
 
 The extension adds what MCP cannot: commands the user runs without the model, a vault status in the footer, and paste interception so a token typed or pasted into the chat never reaches the model. The four MCP tools (`secret_request`, `secret_list`, `secret_exec`, `secret_manage`), the native dialogs and `exec` redaction stay exactly as they are; the extension does not register tools of its own.
 
@@ -8,10 +8,14 @@ It is written in TypeScript against the Pi extension API and peer-depends on `@e
 
 ## Install
 
-Once the package is on npm, the user installs it (`init` never does: AGENTS.md invariant 8):
+The user installs it from the git tag (`init` never does: AGENTS.md invariant 8). The owner has no npm account, so the package is not on npm. A git source is installed as the repository root of that ref, and the tag `pi-v<version>` points to a commit that holds only the built package (`package.json`, `dist/`, `secret-patterns.yaml`, `README.md`, `LICENSE`):
 
-- Pi: `pi install npm:qbit-vault-pi` (Pi's documented form for npm sources).
-- Gentle Shell: `gentle-shell install npm:qbit-vault-pi`.
+- Gentle Shell (it passes everything after `--` to Pi): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.1.0`.
+- Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.1.0`.
+- One run only, nothing installed: `gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.1.0` or `pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.1.0`.
+- Update: install the newer tag, for example `@pi-v0.2.0`. Pi pins a tag and does not move a configured ref by itself.
+
+What Pi does with a git package (Pi 1.5, `docs/packages.md` and its package manager): it clones the source, checks out the ref and runs `npm install --omit=dev --legacy-peer-deps` (pnpm and Bun have their own production flags) when the package has a `package.json`; it never installs peer dependencies for git packages. So the published `package.json` has no `devDependencies`, no `scripts` and only the three `peerDependencies` (`*`, provided by Pi), and nothing is built on the user's machine. `node packages/qbit-vault-pi/scripts/assemble-dist.mjs --out <empty dir>` builds that tree locally (after `npm run build`); the workflow commits it with no parent the first time and with the previous `pi-extension` head as parent afterwards, so the branch only moves forward, and pushes the annotated tag. The `v*` tags of the binary release are a different filter: a `pi-v*` tag does not start `release.yml`.
 
 Requirements: the `qbit-vault` binary on `PATH` and a vault created with `qbit-vault init`.
 

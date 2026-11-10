@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { completeArguments } from "../src/commands.js";
 import { BAD_NAME, LOCKED, NOT_INITIALIZED, NOT_INSTALLED, USAGE } from "../src/messages.js";
@@ -134,7 +136,7 @@ describe("S4 /vault list", () => {
 
 	it("reports a missing binary with the fix", async () => {
 		useFake({});
-		process.env.QBIT_VAULT_BIN = "qbit-vault-definitely-not-installed";
+		process.env.QBIT_VAULT_BIN = join(tmpdir(), "qbit-vault-definitely-not-installed");
 		const harness = mockPi();
 		const { ctx, ui } = mockCtx();
 		await harness.command().handler("list", ctx);

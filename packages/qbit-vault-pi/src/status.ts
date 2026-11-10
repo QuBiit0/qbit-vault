@@ -12,7 +12,13 @@ export function statusText(grants: number | null): string {
 	return `🔐 ${grants} ${grants === 1 ? "grant" : "grants"}`;
 }
 
+const GUARD_OFF = "⚠ paste guard off";
+export const PATTERNS_UNAVAILABLE =
+	"qbit-vault-pi could not load its secret patterns; pasted secrets are not caught. Reinstall the extension.";
+
 export type StatusRefresher = {
+	/** The paste guard has no patterns: shows it in the footer and says so once. Messages keep flowing. */
+	guardOff(ctx: ExtensionContext): void;
 	/** Re-reads the grants and updates the footer. `announce` also reports a missing binary or a locked vault, once. */
 	refresh(ctx: ExtensionContext, options?: { announce?: boolean }): Promise<void>;
 };
@@ -20,13 +26,31 @@ export type StatusRefresher = {
 export function createStatusRefresher(): StatusRefresher {
 	let latest = 0;
 	const announced = new Set<"not_installed" | "locked">();
+	let pasteGuardOff = false;
+	let guardWarned = false;
+	let base: string | undefined; // the vault part of the footer, as of the last refresh
+
+	const compose = () => [base, pasteGuardOff ? GUARD_OFF : undefined].filter(Boolean).join(" · ") || undefined;
 
 	return {
+		guardOff(ctx) {
+			pasteGuardOff = true;
+			if (!ctx.hasUI) return;
+			try {
+				ctx.ui.setStatus(STATUS_KEY, compose());
+				if (!guardWarned) {
+					guardWarned = true;
+					ctx.ui.notify(PATTERNS_UNAVAILABLE, "warning");
+				}
+			} catch {
+				// A stale context: the guard stays off and the next refresh shows it.
+			}
+		},
+
 		async refresh(ctx, options = {}) {
 			if (!ctx.hasUI) return;
 			const mine = ++latest;
 			const outcome = await runJson(["grants"], { timeoutMs: STATUS_TIMEOUT_MS, cwd: ctx.cwd });
-			if (mine !== latest) return; // a newer refresh owns the footer
 
 			let text: string | undefined;
 			let problem: "not_installed" | "locked" | undefined;
@@ -38,7 +62,7 @@ export function createStatusRefresher(): StatusRefresher {
 					return session === null || session === undefined || session === own;
 				}).length;
 				text = statusText(count);
-				announced.delete("locked");
+				if (mine === latest) announced.delete("locked");
 			} else if (outcome.reason === "not_installed") {
 				problem = "not_installed";
 			} else if (outcome.error?.code === "vault_locked") {
@@ -47,7 +71,11 @@ export function createStatusRefresher(): StatusRefresher {
 			}
 
 			try {
-				ctx.ui.setStatus(STATUS_KEY, text);
+				// A newer refresh owns the footer, but a one-time announcement is not its to drop.
+				if (mine === latest) {
+					base = text;
+					ctx.ui.setStatus(STATUS_KEY, compose());
+				}
 				if (options.announce && problem && !announced.has(problem)) {
 					announced.add(problem);
 					ctx.ui.notify(problem === "locked" ? LOCKED : NOT_INSTALLED, "warning");

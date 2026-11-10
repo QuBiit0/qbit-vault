@@ -60,7 +60,7 @@ function dropNotice(ctx: ExtensionContext): void {
  * `pi.on("input")` handler (S6). A typed or pasted value that looks like a secret is never sent as
  * typed: the user stores it (and the text carries `secret://NAME` instead) or the message is dropped.
  */
-export function createPasteHandler() {
+export function createPasteHandler(onPatternsUnavailable: (ctx: ExtensionContext) => void = () => {}) {
 	return async (event: InputEvent, ctx: ExtensionContext): Promise<InputEventResult> => {
 		if (event.source !== "interactive") return { action: "continue" };
 
@@ -68,8 +68,9 @@ export function createPasteHandler() {
 		try {
 			patterns = loadPatterns();
 		} catch {
-			// A broken install must not block every message; say so once per message.
-			ctx.ui?.notify?.("qbit-vault-pi could not read its secret patterns; pasted secrets are not checked", "warning");
+			// A broken install must not block every message: they keep flowing, and the footer and a
+			// one-time warning say that the guard is off.
+			onPatternsUnavailable(ctx);
 			return { action: "continue" };
 		}
 

@@ -1,18 +1,18 @@
 # Agent integrations
 
-One broker, one contract, three hosts: Claude Code, Codex and Pi / Gentle Shell. OpenCode was in the original design and is dropped (`odd/tasks/hosts.md` S8; no adapter exists). "Built" means `init` registers it and it is tested; *extension* items need the Pi extension `qbit-vault-pi` (Phase 4 v1, built, not yet on npm, `GENTLE_SHELL_EXTENSION.md`); *planned* items are not built. "MCP" is the portable path through `secret_exec`; today it is the path every host uses.
+One broker, one contract, three hosts: Claude Code, Codex and Pi / Gentle Shell. OpenCode was in the original design and is dropped (`odd/tasks/hosts.md` S8; no adapter exists). "Built" means `init` registers it and it is tested; *extension* items need the Pi extension `qbit-vault-pi` (Phase 4 v1, built, not yet on npm, `GENTLE_SHELL_EXTENSION.md`); *deferred* items are not built (not in v1 of the extension, or not on the roadmap yet for the other hosts). "MCP" is the portable path through `secret_exec`; today it is the path every host uses.
 
 | Capability | Pi / Gentle Shell | Claude Code | Codex |
 | --- | --- | --- | --- |
-| `secret_request` / `secret_list` / `secret_exec` / `secret_manage` tools | MCP (built, Pi ≥ 0.99); extension-registered tools (planned, not in v1) | MCP (built) | MCP (built) |
-| Agent rules (`policy`) known up front | `secret_list` (built); system prompt (planned) | MCP `instructions` + `secret_list` | MCP `instructions` + `secret_list` |
+| `secret_request` / `secret_list` / `secret_exec` / `secret_manage` tools | MCP (built, Pi ≥ 0.99); extension-registered tools (deferred) | MCP (built) | MCP (built) |
+| Agent rules (`policy`) known up front | `secret_list` (built); system prompt (deferred) | MCP `instructions` + `secret_list` | MCP `instructions` + `secret_list` |
 | Manual entry by the user | `qbit-vault set` in a terminal; `/vault set` (extension) | `qbit-vault set` in a terminal | same |
-| Masked capture | native dialog or terminal prompt (built); `ctx.ui.custom` inline (planned, deferred) | native dialog | native dialog |
-| Transparent injection into the host's own shell tool | `bash` override (planned) | `PreToolUse` rewrite (planned; `pre-bash` today only denies user-only commands) | no (use `secret_exec`) |
-| Output redaction of the host's shell/read tools | `tool_result` hook (planned) | `PostToolUse` hooks `post-bash` and `post-read` (built) | n/a (`secret_exec` output is already redacted) |
+| Masked capture | native dialog or terminal prompt (built); `ctx.ui.custom` inline (deferred) | native dialog | native dialog |
+| Transparent injection into the host's own shell tool | `bash` override (deferred) | `PreToolUse` rewrite (deferred; `pre-bash` today only denies user-only commands) | no (use `secret_exec`) |
+| Output redaction of the host's shell/read tools | `tool_result` hook (deferred) | `PostToolUse` hooks `post-bash` and `post-read` (built) | n/a (`secret_exec` output is already redacted) |
 | Paste interception | `pi.on("input")` (extension) | `UserPromptSubmit` hook `user-prompt` (built; blocks) | not available |
 | Vault dir on read deny list | none registered | `permissions.deny` Read and Edit (built) | none registered |
-| Audit widget | footer status (extension); sidebar (planned) | none (`qbit-vault audit --tail` in a terminal) | none |
+| Audit widget | footer status (extension); sidebar (deferred) | none (`qbit-vault audit --tail` in a terminal) | none |
 
 ## MCP server (all hosts)
 

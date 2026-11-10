@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LOCKED, NOT_INSTALLED } from "../src/messages.js";
 import { STATUS_KEY, statusText } from "../src/status.js";
@@ -11,7 +13,8 @@ const grantsOf = (...sessions: Array<string | null>) =>
 		grants: sessions.map((session, i) => ({ name: `N${i}`, layer: "global", scope: "session", session, expires_at: null })),
 	});
 const statusCalls = (ui: ReturnType<typeof mockCtx>["ui"]) => ui.setStatus.mock.calls;
-const flush = () => vi.waitFor(() => undefined, { timeout: 50 }).catch(() => undefined);
+// Long enough for a spawned fake binary to have answered, so "nothing happened" is a real observation.
+const flush = () => new Promise((resolve) => setTimeout(resolve, 700));
 
 describe("S5 status text", () => {
 	it("uses the exact footer texts", () => {
@@ -66,7 +69,7 @@ describe("S5 refresh on session_start", () => {
 
 	it("shows nothing without the binary and reports it once", async () => {
 		useFake({});
-		process.env.QBIT_VAULT_BIN = "qbit-vault-definitely-not-installed";
+		process.env.QBIT_VAULT_BIN = join(tmpdir(), "qbit-vault-definitely-not-installed");
 		const harness = mockPi();
 		const { ctx, ui } = mockCtx();
 		await harness.emit("session_start", {}, ctx);
@@ -85,6 +88,31 @@ describe("S5 refresh on session_start", () => {
 		await harness.emit("session_start", {}, ctx);
 		expect(fake.calls()).toEqual([]);
 		expect(ui.setStatus).not.toHaveBeenCalled();
+	});
+});
+
+describe("S5 announcements do not depend on refresh ordering", () => {
+	it("still reports a locked vault when a newer refresh overtakes the session_start one", async () => {
+		useFake({ grants: err("vault_locked", "locked", 4) }, { FAKE_QV_SLEEP_MS: "100" });
+		const harness = mockPi();
+		const { ctx, ui } = mockCtx();
+		const first = harness.emit("session_start", {}, ctx);
+		await harness.emit("tool_result", { toolName: "mcp__qbit_vault__secret_request" }, ctx);
+		await first;
+		await vi.waitFor(() => expect(statusCalls(ui)).toHaveLength(1));
+		expect(ui.notify.mock.calls).toEqual([[LOCKED, "warning"]]);
+	});
+
+	it("still reports a missing binary when a newer refresh overtakes the session_start one", async () => {
+		useFake({}, { FAKE_QV_SLEEP_MS: "100" });
+		process.env.QBIT_VAULT_BIN = join(tmpdir(), "qbit-vault-definitely-not-installed");
+		const harness = mockPi();
+		const { ctx, ui } = mockCtx();
+		const first = harness.emit("session_start", {}, ctx);
+		await harness.emit("tool_result", { toolName: "mcp__qbit_vault__secret_exec" }, ctx);
+		await first;
+		await vi.waitFor(() => expect(statusCalls(ui)).toHaveLength(1));
+		expect(ui.notify.mock.calls).toEqual([[NOT_INSTALLED, "warning"]]);
 	});
 });
 
@@ -115,7 +143,7 @@ describe("S5 refresh after a QBit Vault MCP tool result", () => {
 		await vi.waitFor(() => expect(statusCalls(ui)).toEqual([["qbit-vault", "🔐 2 grants"]]));
 	});
 
-	it.each(["secret_list", "bash", "read", "mcp__other__secret_requests"])("ignores %s", async (tool) => {
+	it.each(["secret_list", "bash", "read", "mcp__other__secret_requests", "mcp__other__secret_request", "mcp__other__secret_exec", "other_secret_manage", "mcp__qbit_vault__secret_requests", "mcp__qbit_vault_evil__secret_exec"])("ignores %s", async (tool) => {
 		const fake = useFake({ grants: grantsOf() });
 		const harness = mockPi();
 		const { ctx, ui } = mockCtx();
@@ -161,7 +189,7 @@ describe("S7 session_shutdown", () => {
 
 	it("never blocks or throws when the binary is missing", async () => {
 		useFake({});
-		process.env.QBIT_VAULT_BIN = "qbit-vault-definitely-not-installed";
+		process.env.QBIT_VAULT_BIN = join(tmpdir(), "qbit-vault-definitely-not-installed");
 		const harness = mockPi();
 		const { ctx, ui } = mockCtx();
 		await expect(harness.emit("session_shutdown", { reason: "quit" }, ctx)).resolves.toBeUndefined();

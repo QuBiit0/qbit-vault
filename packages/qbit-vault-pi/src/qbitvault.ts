@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { accessSync, constants, statSync } from "node:fs";
+import { delimiter, isAbsolute, join, resolve as resolvePath, win32 } from "node:path";
 
 /** Env var that points at the binary; tests use it, users normally leave it unset. */
 export const BIN_ENV = "QBIT_VAULT_BIN";
@@ -33,11 +35,78 @@ export type Outcome<T> =
 	| { ok: true; data: T }
 	| { ok: false; reason: "not_installed" | "timeout" | "failed"; error?: CliError; code?: number | null };
 
-function resolveCommand(): { command: string; prefix: string[] } {
-	const bin = process.env[BIN_ENV] || "qbit-vault";
+export type Resolved = { ok: true; path: string } | { ok: false; reason: "not_found" | "relative_override" };
+
+const sameDir = (a: string, b: string) =>
+	process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+
+function isExecutableFile(file: string): boolean {
+	try {
+		if (!statSync(file).isFile()) return false;
+		if (process.platform !== "win32") accessSync(file, constants.X_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Finds `qbit-vault` as an absolute path. Node's spawn searches the working directory on Windows, and
+ * a relative PATH entry means the same thing anywhere, so a repository could plant a binary that
+ * receives a pasted secret on stdin. Only absolute PATH entries other than the working directory are
+ * searched, then the installers' default locations. `QBIT_VAULT_BIN` must be absolute.
+ */
+export function resolveBinary(env: NodeJS.ProcessEnv, cwd: string | readonly string[]): Resolved {
+	const override = env[BIN_ENV];
+	if (override) {
+		const absolute = process.platform === "win32" ? win32.isAbsolute(override) : isAbsolute(override);
+		return absolute ? { ok: true, path: override } : { ok: false, reason: "relative_override" };
+	}
+
+	const win = process.platform === "win32";
+	const names = win
+		? (env.PATHEXT ?? ".COM;.EXE")
+				.split(";")
+				.map((ext) => ext.toLowerCase())
+				// .cmd and .bat need a shell; spawn without one refuses them.
+				.filter((ext) => ext === ".exe" || ext === ".com")
+				.map((ext) => `qbit-vault${ext}`)
+		: ["qbit-vault"];
+	if (win && names.length === 0) names.push("qbit-vault.exe");
+
+	const home = (win ? env.USERPROFILE : env.HOME) || env.HOME || env.USERPROFILE;
+	const defaults: string[] = [];
+	if (home) {
+		if (win) {
+			if (env.LOCALAPPDATA) defaults.push(join(env.LOCALAPPDATA, "Programs", "qbit-vault"));
+			defaults.push(join(home, "go", "bin"));
+		} else {
+			defaults.push(join(home, ".local", "bin"));
+		}
+	} else if (win && env.LOCALAPPDATA) {
+		defaults.push(join(env.LOCALAPPDATA, "Programs", "qbit-vault"));
+	}
+
+	const here = (typeof cwd === "string" ? [cwd] : cwd).map((d) => resolvePath(d));
+	const fromPath = (env.PATH ?? env.Path ?? "").split(delimiter).filter((entry) => {
+		if (entry === "" || !(win ? win32.isAbsolute(entry) : isAbsolute(entry))) return false;
+		return !here.some((d) => sameDir(resolvePath(entry), d));
+	});
+	for (const dir of [...fromPath, ...defaults.filter((d) => isAbsolute(d))]) {
+		for (const name of names) {
+			const candidate = join(dir, name);
+			if (isExecutableFile(candidate)) return { ok: true, path: candidate };
+		}
+	}
+	return { ok: false, reason: "not_found" };
+}
+
+function resolveCommand(cwd: string | undefined): { command: string; prefix: string[] } | Extract<Resolved, { ok: false }> {
+	const found = resolveBinary(process.env, cwd === undefined ? process.cwd() : [process.cwd(), cwd]);
+	if (!found.ok) return found;
 	// A script path (the fake binary in tests) runs through the current Node, still without a shell.
-	if (/\.(mjs|cjs|js)$/i.test(bin)) return { command: process.execPath, prefix: [bin] };
-	return { command: bin, prefix: [] };
+	if (/\.(mjs|cjs|js)$/i.test(found.path)) return { command: process.execPath, prefix: [found.path] };
+	return { command: found.path, prefix: [] };
 }
 
 /**
@@ -46,7 +115,11 @@ function resolveCommand(): { command: string; prefix: string[] } {
  * extension shows comes from the parsed `--json` error object.
  */
 export function run(args: string[], options: RunOptions): Promise<RunResult> {
-	const { command, prefix } = resolveCommand();
+	const resolved = resolveCommand(options.cwd);
+	if (!("command" in resolved)) {
+		return Promise.resolve({ kind: resolved.reason === "not_found" ? "not_installed" : "failed_to_start" });
+	}
+	const { command, prefix } = resolved;
 	return new Promise((resolve) => {
 		let settled = false;
 		const finish = (result: RunResult) => {

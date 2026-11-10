@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run, runJson } from "../src/qbitvault.js";
 import { cleanupFake, err, FIXTURE, ok, useFake } from "./helpers.js";
@@ -28,7 +30,7 @@ describe("spawn wrapper", () => {
 	});
 
 	it("reports a missing binary as a typed not_installed result", async () => {
-		process.env.QBIT_VAULT_BIN = "qbit-vault-definitely-not-installed";
+		process.env.QBIT_VAULT_BIN = join(tmpdir(), "qbit-vault-definitely-not-installed");
 		expect(await run(["grants"], { timeoutMs: 5000 })).toEqual({ kind: "not_installed" });
 		expect(await runJson(["grants"], { timeoutMs: 5000 })).toEqual({ ok: false, reason: "not_installed" });
 	});

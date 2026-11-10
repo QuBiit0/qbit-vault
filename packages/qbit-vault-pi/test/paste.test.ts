@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BAD_NAME, LOCKED, NOT_INSTALLED } from "../src/messages.js";
 import { cleanupFake, err, mockCtx, mockPi, ok, useFake } from "./helpers.js";
 
@@ -270,5 +270,64 @@ describe("paste interception: several matches", () => {
 		expect(await s.input(`${TOKEN} ${TOKEN2}`)).toEqual({ action: "handled" });
 		expect(s.fake.calls()).toHaveLength(1);
 		expect(s.ui.notify).toHaveBeenLastCalledWith(NOTICE_DROPPED, "warning");
+	});
+});
+
+describe("paste interception: patterns that cannot be loaded", () => {
+	const WARNING = "qbit-vault-pi could not load its secret patterns; pasted secrets are not caught. Reinstall the extension.";
+
+	async function broken() {
+		vi.resetModules();
+		vi.doMock("../src/patterns.js", async (importOriginal) => ({
+			...(await importOriginal<typeof import("../src/patterns.js")>()),
+			loadPatterns: () => {
+				throw new Error("ENOENT secret-patterns.yaml");
+			},
+		}));
+		const helpers = await import("./helpers.js");
+		const fake = helpers.useFake({ grants: helpers.ok({ ok: true, grants: [{ name: "A", layer: "global", scope: "session", session: null }] }) });
+		const harness = helpers.mockPi();
+		const { ctx, ui } = helpers.mockCtx({ cwd: dir(false) });
+		return { fake, harness, ctx, ui };
+	}
+
+	afterEach(() => {
+		vi.doUnmock("../src/patterns.js");
+		vi.resetModules();
+	});
+
+	it("keeps messages flowing with no prompt and no child process", async () => {
+		const s = await broken();
+		const result = await s.harness.emit("input", { type: "input", text: `x ${TOKEN}`, source: "interactive" }, s.ctx);
+		expect(result).toEqual({ action: "continue" });
+		expect(s.ui.select).not.toHaveBeenCalled();
+		expect(s.fake.calls()).toEqual([]);
+	});
+
+	it("warns once per session, however many messages follow", async () => {
+		const s = await broken();
+		for (const text of ["one", "two", `three ${TOKEN}`])
+			await s.harness.emit("input", { type: "input", text, source: "interactive" }, s.ctx);
+		expect(s.ui.notify.mock.calls).toEqual([[WARNING, "warning"]]);
+	});
+
+	it("shows the guard off in the footer next to the vault status", async () => {
+		const s = await broken();
+		await s.harness.emit("session_start", {}, s.ctx);
+		await s.harness.emit("input", { type: "input", text: "hello", source: "interactive" }, s.ctx);
+		expect(s.ui.setStatus.mock.calls.at(-1)).toEqual(["qbit-vault", "🔐 1 grant · ⚠ paste guard off"]);
+		expect(s.ui.notify.mock.calls).toEqual([[WARNING, "warning"]]);
+	});
+
+	it("shows the guard off alone when there is no vault", async () => {
+		const s = await broken();
+		await s.harness.emit("input", { type: "input", text: "hello", source: "interactive" }, s.ctx);
+		expect(s.ui.setStatus.mock.calls.at(-1)).toEqual(["qbit-vault", "⚠ paste guard off"]);
+	});
+
+	it("does not warn for input that is not typed by the user", async () => {
+		const s = await broken();
+		await s.harness.emit("input", { type: "input", text: "x", source: "extension" }, s.ctx);
+		expect(s.ui.notify).not.toHaveBeenCalled();
 	});
 });

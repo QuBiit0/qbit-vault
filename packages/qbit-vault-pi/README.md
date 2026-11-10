@@ -42,4 +42,8 @@ npm test            # vitest, with a fake qbit-vault script
 npm run typecheck   # src and tests
 ```
 
-`QBIT_VAULT_BIN` overrides the binary path (the tests point it at a fake). A path ending in `.js`, `.mjs` or `.cjs` runs through the current Node.
+`QBIT_VAULT_BIN` overrides the binary path and must be absolute (the tests point it at a fake). A path ending in `.js`, `.mjs` or `.cjs` runs through the current Node. Without it the binary is looked up only in absolute `PATH` entries and the installers' default locations, never in the current directory, so a repository cannot plant its own `qbit-vault`.
+
+## Publishing
+
+The maintainer publishes from this directory while logged in to npm, with the `publish` command of npm and `--access public`. The `prepublishOnly` script runs the typecheck, the build and the tests first, so the package always ships a fresh `dist/`.

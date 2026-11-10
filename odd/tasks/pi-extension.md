@@ -30,6 +30,13 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 - S10. Docs: `docs/GENTLE_SHELL_EXTENSION.md` describes what v1 ships and lists what is deferred (terminal capture, bash override, read/write guard); `AGENT_INTEGRATIONS.md` (Pi section), `README.md` (one line + install command `gentle-shell install npm:qbit-vault-pi` / Pi's local or npm source, verified against the docs), `AGENTS.md` layout (`packages/qbit-vault-pi` exists; peer dependency names updated from `@mariozechner/*` to `@earendil-works/*`), `docs/ROADMAP.md`, CHANGELOG [Unreleased]. `qbit-vault init` prints no install line until the package is published (AGENTS.md invariant 8).
 - S11. Verified by the owner in Gentle Shell from the local package before publishing: `/vault list`, the status, and a pasted test token caught and stored.
 
+- S12. Distribution without npm (owner, verbatim choices: "Repo aparte en GitHub, sin npm", then "Tags pi-v* en el mismo repo (recomendado)"): the owner has no npm account; Pi installs git sources (`git:github.com/<owner>/<repo>@<ref>`, the repository root of that ref), so the built package is published as immutable tags `pi-v<version>` of qbitdevz/qbit-vault that point to a commit holding only the package at its root.
+  - S12.1 A workflow `.github/workflows/pi-extension-release.yml`, run manually (`workflow_dispatch`), on ubuntu-latest with pinned actions and only `contents: write`: reads the version from `packages/qbit-vault-pi/package.json`; refuses if the tag `pi-v<version>` already exists (tags are never moved or reused); runs `npm ci`, typecheck, build and test; assembles a tree with exactly `package.json` (without devDependencies and scripts that need the source), `dist/`, `secret-patterns.yaml`, `README.md` and `LICENSE`; commits it as a commit with no parent (the branch `pi-extension` is fast-forwarded only by adding a new commit whose parent is the previous `pi-extension` head, never force-pushed) and pushes the annotated tag `pi-v<version>`. The main release workflow (`v*` tags) is not triggered by `pi-v*` tags (verify the glob).
+  - S12.2 What Pi does with a git package (does it run `npm install`? with dev dependencies?) is checked in the installed Pi docs; the published package.json is shaped so that an install needs no build and pulls no dev dependency.
+  - S12.3 Install commands documented: Pi `pi install git:github.com/qbitdevz/qbit-vault@pi-v<version>`, Gentle Shell `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v<version>` (Gentle Shell passes everything after `--` to Pi), one-off try with `-e`. README, packages/qbit-vault-pi/README.md, docs/GENTLE_SHELL_EXTENSION.md, docs/AGENT_INTEGRATIONS.md, docs/INSTALL.md (Pi section). The npm route stays documented as "not published to npm".
+  - S12.4 `qbit-vault init` (and `sync`) for the Pi host prints the install line once the first `pi-v*` tag exists: the constant in internal/hosts/pi (ExtensionInstallCommand) becomes the Gentle Shell/Pi git command for the current extension version; it never runs it (AGENTS.md invariant 8); tests updated.
+  - S12.5 After merge the parent runs the workflow for 0.1.0 and verifies the tag tree; the owner installs it in Gentle Shell from the tag.
+
 ## Tasks
 
 | ID | Specs | Route | Commit | Status |
@@ -38,7 +45,8 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 | T1 | S3, S4, S5, S7, S8 (their tests) | worker | f3f252b | done |
 | T2 | S6, S8 (paste tests), S6.1 parity | worker | 768f1a6 | done |
 | T3 | S9, S10 | worker | 25ed0fd | done |
-| T4 | review, PR, owner check S11, release note | parent + owner | | pending |
+| T4 | review, PR, owner check S11 | parent + owner | PR #44 | done (owner: "si funciona") |
+| T5 | S12 | worker | | in progress |
 
 ## Log
 
@@ -50,3 +58,4 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 - L6. T3 done (uncommitted): CI job `pi-extension` (checkout v7.0.1 3d3c42e5…, setup-node v7.1.0 949feb24…, `lts/*`, npm cache, `npm ci`/typecheck/build/test); docs rewritten to what v1 ships (GENTLE_SHELL_EXTENSION, AGENT_INTEGRATIONS, README, AGENTS layout and peer names, ROADMAP Phase 4, CLI.md, CHANGELOG); `init` unchanged (no install line until published).
 - L7. T4 follow-ups from the three native reviews (all approved): the binary is resolved only from absolute PATH entries and the installers' default locations, never the cwd, and QBIT_VAULT_BIN must be absolute (R1-cwd-binary-planting); a failed pattern load keeps chat flowing but shows a paste-guard-off status and one warning (R1/R3 fail-open); the one-time locked/missing notice no longer depends on refresh order; only QBit Vault's own MCP tools refresh the status; prepublishOnly runs typecheck, build and tests; CI pins Node 24; docs say deferred. The worker stalled on a host guard prompt (its bash mentioned the npm publish command); the parent verified nothing was published (npm 404) and finished the package.json, README, CI and docs edits. 155 tests.
 - L8. Native review of the four commits (risk + reliability/readability): all approved. The branch was rebuilt as feat/pi-extension-v1 (same final tree) so no commit holds a token-shaped literal that the prompt hook blocks; the old branch feat/pi-extension stays until merge. Open advisories after v1: R3-flush-fixed-sleep (status.test.ts:16), R3-grant-tool-name-assumption (index.ts:14; the MCP server name qbit_vault is confirmed by the harness tool names), R3-relative-win-path-literal (binary.test.ts:88).
+- L9. Owner checked the extension in Gentle Shell from the local build (`gentle-shell -- -e .\dist\index.js`): "si funciona". The owner has no npm account; chose git distribution with `pi-v*` tags in this repository (S12).

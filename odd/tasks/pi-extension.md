@@ -35,9 +35,9 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
 | T0 | research | explorer | | done |
-| T1 | S3, S4, S5, S7, S8 (their tests) | worker | | done (uncommitted) |
-| T2 | S6, S8 (paste tests), S6.1 parity | worker | | done (uncommitted) |
-| T3 | S9, S10 | worker | | done (uncommitted) |
+| T1 | S3, S4, S5, S7, S8 (their tests) | worker | f3f252b | done |
+| T2 | S6, S8 (paste tests), S6.1 parity | worker | 768f1a6 | done |
+| T3 | S9, S10 | worker | 25ed0fd | done |
 | T4 | review, PR, owner check S11, release note | parent + owner | | pending |
 
 ## Log
@@ -49,3 +49,4 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 - L5. T2 done (uncommitted): paste interception in `packages/qbit-vault-pi` (`src/patterns.ts` reads the package copy of `secret-patterns.yaml` with its own small YAML reader and RE2→JS converter; `src/paste.ts` is the `input` handler); Go parity test `TestExtensionSecretPatternsEqualDefaults` in `internal/hosts/pi`; 129 vitest tests pass (51 new), build and typecheck clean.
 - L6. T3 done (uncommitted): CI job `pi-extension` (checkout v7.0.1 3d3c42e5…, setup-node v7.1.0 949feb24…, `lts/*`, npm cache, `npm ci`/typecheck/build/test); docs rewritten to what v1 ships (GENTLE_SHELL_EXTENSION, AGENT_INTEGRATIONS, README, AGENTS layout and peer names, ROADMAP Phase 4, CLI.md, CHANGELOG); `init` unchanged (no install line until published).
 - L7. T4 follow-ups from the three native reviews (all approved): the binary is resolved only from absolute PATH entries and the installers' default locations, never the cwd, and QBIT_VAULT_BIN must be absolute (R1-cwd-binary-planting); a failed pattern load keeps chat flowing but shows a paste-guard-off status and one warning (R1/R3 fail-open); the one-time locked/missing notice no longer depends on refresh order; only QBit Vault's own MCP tools refresh the status; prepublishOnly runs typecheck, build and tests; CI pins Node 24; docs say deferred. The worker stalled on a host guard prompt (its bash mentioned the npm publish command); the parent verified nothing was published (npm 404) and finished the package.json, README, CI and docs edits. 155 tests.
+- L8. Native review of the four commits (risk + reliability/readability): all approved. The branch was rebuilt as feat/pi-extension-v1 (same final tree) so no commit holds a token-shaped literal that the prompt hook blocks; the old branch feat/pi-extension stays until merge. Open advisories after v1: R3-flush-fixed-sleep (status.test.ts:16), R3-grant-tool-name-assumption (index.ts:14; the MCP server name qbit_vault is confirmed by the harness tool names), R3-relative-win-path-literal (binary.test.ts:88).

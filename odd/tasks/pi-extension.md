@@ -35,7 +35,7 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
 | T0 | research | explorer | | done |
-| T1 | S3, S4, S5, S7, S8 (their tests) | worker | | pending |
+| T1 | S3, S4, S5, S7, S8 (their tests) | worker | | done (uncommitted) |
 | T2 | S6, S8 (paste tests), S6.1 parity | worker | | pending |
 | T3 | S9, S10 | worker | | pending |
 | T4 | review, PR, owner check S11, release note | parent + owner | | pending |
@@ -45,3 +45,4 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 - L1. User (verbatim): "si" — start the Pi / Gentle Shell extension.
 - L2. Owner choices: v1 = /vault commands + status, paste interception, terminal capture (then "Dejarla para después (recomendado)"); read the installed Pi docs; owner publishes to npm.
 - L3. T0 research (installed `@earendil-works/pi-coding-agent` 1.5.0): manifest `"pi": {"extensions": [...]}`; peers `@earendil-works/pi-ai`, `pi-agent-core`, `pi-coding-agent`, `pi-tui`, `typebox` as `"*"`; `pi.registerCommand(name, {description, getArgumentCompletions, handler(args, ctx)})`; `ctx.ui.notify`, `ctx.ui.custom`, `ctx.ui.setStatus(key, text)`, `setWidget`, `setFooter`; `pi.sendMessage` enters the LLM context (never use it for vault output); `pi.on("input")` with `{action: "continue"|"transform"|"handled"}` and `source`; `ctx.sessionManager.getSessionId()`; `session_start` / `session_shutdown`; MCP tools surface as `mcp__<server>__<tool>`; `tool_call` can only block or mutate input, so an extension cannot answer an MCP tool (why the terminal capture is deferred); local test with `pi -e <path>` or `<agent-dir>/extensions/` and `/reload`; no documented Gentle Shell sidebar entry point (unverified); `pi.exec` has no documented stdin, so values go through `node:child_process` with a pipe. Examples: `examples/extensions/` (`input-transform.ts`, `custom-footer.ts`, `qna.ts`).
+- L4. T1 done (uncommitted): `packages/qbit-vault-pi/` built (spawn wrapper, `/vault` list/set/rm/revoke/audit/doctor with completions, footer status, session_shutdown revoke, `input` left free for T2); peers added as dev dependencies at 1.5.0 (type-checked against the real Pi types, no local declarations); 78 vitest tests pass, `npm run build` and `npm run typecheck` clean; smoke: real Pi 1.5.1 loaded `dist/index.js` with `pi -e` (RPC `get_commands` lists `vault`, footer status set on session_start).

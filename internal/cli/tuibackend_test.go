@@ -1303,6 +1303,14 @@ func TestTUICheckUpdateUpToDate(t *testing.T) {
 	}
 }
 
+func TestTUICheckUpdateNonReleaseBuildIsOlderThanAnyRelease(t *testing.T) {
+	w := newUpdWorld(t, "dev", "v1.1.0")
+	got, err := updBackend(w).CheckUpdate()
+	if err != nil || !got.Available || got.Current != "dev" || got.Latest != "v1.1.0" {
+		t.Fatalf("got %+v, %v; want the release offered, like update --check", got, err)
+	}
+}
+
 func TestTUICheckUpdateFailureIsAFixedLine(t *testing.T) {
 	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
 	w.srv.Close()

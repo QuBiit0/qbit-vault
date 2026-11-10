@@ -92,6 +92,7 @@ var denyCommands = []string{
 	"qbit-vault uninstall --purge",
 	"qbit-vault sync",
 	"qbit-vault update",
+	"qbit-vault update --check",
 	"qbit-vault prompt --name A_KEY --reason r",
 	"qbit-vault mcp",
 	"qbit-vault broker --op grant",

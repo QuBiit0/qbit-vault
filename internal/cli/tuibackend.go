@@ -318,6 +318,9 @@ func (b *tuiBackend) CheckUpdate() (tui.UpdateInfo, error) {
 	}
 	newer, err := selfupdate.Newer(Version, rel.Tag)
 	if err != nil {
+		// Latest only returns release tags, so the comparison fails only when
+		// the running build is not a release. As in `update --check`, such a
+		// build counts as older than any release.
 		newer = true
 	}
 	return tui.UpdateInfo{Current: Version, Latest: rel.Tag, URL: rel.URL, Available: newer}, nil

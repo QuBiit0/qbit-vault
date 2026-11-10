@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -430,5 +431,57 @@ func TestCanReplace(t *testing.T) {
 	empty(t, dir)
 	if err := CanReplace(filepath.Join(dir, "nope")); err == nil {
 		t.Fatal("a missing directory is not replaceable")
+	}
+}
+
+func TestDownloadSyncsTempFileBeforeClose(t *testing.T) {
+	var synced []string
+	prev := syncFile
+	syncFile = func(f *os.File) error { synced = append(synced, f.Name()); return prev(f) }
+	t.Cleanup(func() { syncFile = prev })
+	f := newFake(t)
+	f.setLinux(t, []byte("NEWBINARY"))
+	rel, _ := f.client().Latest(context.Background())
+	p, err := f.client().Download(context.Background(), rel, "linux", "amd64", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(synced) != 1 || synced[0] != p {
+		t.Fatalf("synced %v, want [%s]", synced, p)
+	}
+}
+
+func TestDownloadSyncFailureLeavesNothing(t *testing.T) {
+	prev := syncFile
+	syncFile = func(*os.File) error { return errors.New("disk full") }
+	t.Cleanup(func() { syncFile = prev })
+	f := newFake(t)
+	f.setLinux(t, []byte("NEWBINARY"))
+	rel, _ := f.client().Latest(context.Background())
+	dir := t.TempDir()
+	if _, err := f.client().Download(context.Background(), rel, "linux", "amd64", dir); err == nil {
+		t.Fatal("want an error when the new binary cannot be synced")
+	}
+	if es, _ := os.ReadDir(dir); len(es) != 0 {
+		t.Fatalf("temp file left: %v", es)
+	}
+}
+
+func TestReplacePosixSyncsDirectoryAfterRename(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "qbit-vault")
+	os.WriteFile(target, []byte("OLD"), 0o600)
+	nf := filepath.Join(dir, ".new")
+	os.WriteFile(nf, []byte("NEW"), 0o600)
+	var got string
+	var seen []byte
+	prev := syncDir
+	syncDir = func(d string) error { got = d; seen, _ = os.ReadFile(target); return nil }
+	t.Cleanup(func() { syncDir = prev })
+	if err := Replace(target, nf, "linux"); err != nil {
+		t.Fatal(err)
+	}
+	if got != dir || string(seen) != "NEW" {
+		t.Fatalf("syncDir(%q) saw %q, want the directory after the rename", got, seen)
 	}
 }

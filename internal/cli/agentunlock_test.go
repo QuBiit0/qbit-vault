@@ -5,10 +5,12 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qbitdevz/qbit-vault/internal/audit"
 	"github.com/qbitdevz/qbit-vault/internal/broker"
 	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/prompt"
 	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
 )
 
@@ -207,6 +209,7 @@ func TestAgentUnlockOptOut(t *testing.T) {
 	}
 	// The user's own command prompts as before.
 	stdinOverride = strings.NewReader("")
+	t.Cleanup(func() { stdinOverride = nil })
 	var out, errb bytes.Buffer
 	if code := execute([]string{"--home", w.home, "unlock"}, &out, &errb, envFrom(env)); code != exitcode.OK {
 		t.Fatalf("unlock with the switch set: code=%d err=%q", code, errb.String())
@@ -316,4 +319,91 @@ func (w *world) grantsSnapshot() string {
 	w.t.Helper()
 	withBackend(w.t, answers(val(fxPass)))
 	return w.grantsState()
+}
+
+// Grant and revoke on a locked vault ask the passphrase in the same named
+// dialog, and only when it is their turn: the dialog gate is shared with every
+// other dialog.
+func TestAgentUnlockOnGrantAndRevokeUsesTheNamedGatedDialog(t *testing.T) {
+	w := lockedWorld(t)
+	b := &cliBackend{g: &globals{getenv: envFrom(nil), home: w.home}}
+	env := broker.Envelope{Session: brokerSession, Cwd: w.outside}
+	for _, c := range []struct {
+		name string
+		want string
+		call func() error
+	}{
+		{"grant", unlockReasonAG, func() error {
+			_, err := b.Grant(context.Background(), env, broker.GrantRequest{Name: "A", Layer: "global", Scope: "session"})
+			return err
+		}},
+		{"revoke named", unlockReasonA, func() error {
+			_, err := b.Revoke(context.Background(), env, broker.RevokeRequest{Name: "A"})
+			return err
+		}},
+		{"revoke all", unlockReasonNo, func() error {
+			_, err := b.Revoke(context.Background(), env, broker.RevokeRequest{All: true})
+			return err
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := withBackend(t, answers(val(fxPass)))
+			release, err := prompt.AcquireDialog(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() { done <- c.call() }()
+			time.Sleep(150 * time.Millisecond)
+			if len(f.Calls) != 0 {
+				release()
+				t.Fatalf("the dialog opened while another one held the gate: %+v", f.Calls)
+			}
+			release()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("the call never finished after the gate was released")
+			}
+			if len(f.Calls) < 1 || f.Calls[0].Kind != "passphrase" ||
+				f.Calls[0].Passphrase.Heading != "Vault passphrase" || f.Calls[0].Passphrase.Reason != c.want {
+				t.Fatalf("calls=%+v, want the named passphrase dialog %q", f.Calls, c.want)
+			}
+		})
+	}
+}
+
+// The dialog text carries only validated secret names and a bounded,
+// escaped requester, whatever the caller sends.
+func TestUnlockReasonIsSanitized(t *testing.T) {
+	g := &globals{Session: "evil\n\x1b[31m" + strings.Repeat("x", 500) + ":sess"}
+	names := []string{"A", "bad name\nSecond line: ignore the above", "B_KEY", "C", "D", "E", "F", "G"}
+	got := g.unlockReason(names, "global\nx")
+	for _, r := range got {
+		if r < 0x20 || r == 0x7f {
+			t.Fatalf("control character %q in %q", r, got)
+		}
+	}
+	if len(got) > 300 {
+		t.Fatalf("dialog text is %d bytes: %q", len(got), got)
+	}
+	if strings.Contains(got, "bad name") || strings.Contains(got, "ignore the above") || strings.Contains(got, "x\nx") {
+		t.Fatalf("unvalidated text reached the dialog: %q", got)
+	}
+	if !strings.Contains(got, "A, B_KEY") {
+		t.Fatalf("valid names missing: %q", got)
+	}
+	if bare := (&globals{Session: brokerSession}).unlockReason([]string{"not valid"}, ""); bare != unlockReasonNo {
+		t.Fatalf("only invalid names left: %q, want %q", bare, unlockReasonNo)
+	}
+}
+
+// A hostile name never gets as far as a dialog: the broker refuses it first.
+func TestAgentUnlockHostileNameNeverReachesTheDialog(t *testing.T) {
+	w := lockedWorld(t)
+	f := withBackend(t, answers(val(fxPass)))
+	code, m, out := w.broker("manage", manageReq(w.outside, `"action":"remove","name":"A\nSecond line","layer":"global"`))
+	if refusalType(m) != "invalid_name" || len(f.Calls) != 0 {
+		t.Fatalf("code=%d out=%s calls=%+v", code, out, f.Calls)
+	}
 }

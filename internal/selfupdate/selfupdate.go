@@ -359,6 +359,13 @@ func (c *Client) Download(ctx context.Context, rel Release, goos, goarch, dir st
 		os.Remove(name)
 		return "", err
 	}
+	// Flush to disk before the swap: a power loss must not leave a truncated
+	// binary behind the renamed name.
+	if err := syncFile(tmp); err != nil {
+		tmp.Close()
+		os.Remove(name)
+		return "", errors.New("could not write the new binary")
+	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(name)
 		return "", errors.New("could not write the new binary")
@@ -432,6 +439,19 @@ func copyBinary(dst io.Writer, src io.Reader) error {
 	return nil
 }
 
+// Seams for the tests: flushing the new binary and the directory entry.
+var (
+	syncFile = func(f *os.File) error { return f.Sync() }
+	syncDir  = func(dir string) error {
+		d, err := os.Open(dir)
+		if err != nil {
+			return err
+		}
+		defer d.Close()
+		return d.Sync()
+	}
+)
+
 // CanReplace reports whether a file can be created in dir, which is what a
 // swap needs. It leaves nothing behind.
 func CanReplace(dir string) error {
@@ -453,7 +473,13 @@ func Replace(target, newFile, goos string) error {
 		if err := os.Chmod(newFile, 0o755); err != nil {
 			return err
 		}
-		return os.Rename(newFile, target)
+		if err := os.Rename(newFile, target); err != nil {
+			return err
+		}
+		// Best effort: the swap is done, this only makes the new directory
+		// entry durable.
+		_ = syncDir(filepath.Dir(target))
+		return nil
 	}
 	var id [4]byte
 	if _, err := rand.Read(id[:]); err != nil {

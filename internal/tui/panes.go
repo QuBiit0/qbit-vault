@@ -360,6 +360,10 @@ const (
 type updatePane struct {
 	st   updateState
 	info UpdateInfo
+	// rechecking: c asked again while st holds the last known result, which
+	// stays on screen until the new one arrives. recheckFailed: the last
+	// re-check failed and st still holds the result from before it.
+	rechecking, recheckFailed bool
 }
 
 // updateCheckedMsg carries the result of the release check.
@@ -384,7 +388,11 @@ func (m Model) updateChecked(msg updateCheckedMsg) Model {
 	if m.up.st == upDone {
 		return m
 	}
+	known := m.up.rechecking && (m.up.st == upAvailable || m.up.st == upCurrent)
 	switch {
+	case msg.err != nil && known:
+		// A failed re-check does not forget the release already found.
+		m.up.rechecking, m.up.recheckFailed = false, true
 	case msg.err != nil:
 		m.up = updatePane{st: upFailed}
 	case msg.info.Available:
@@ -406,7 +414,7 @@ func (m *Model) updateDone(err error) {
 // canCheck: c checks again unless a check runs, the build cannot update, or
 // the update just ran.
 func (m Model) canCheck() bool {
-	return !m.opts.NotRelease && m.up.st != upChecking && m.up.st != upDone
+	return !m.opts.NotRelease && m.up.st != upChecking && m.up.st != upDone && !m.up.rechecking
 }
 
 func (m Model) updateSectionKey(key tea.KeyMsg) (Model, tea.Cmd, bool) {
@@ -414,7 +422,11 @@ func (m Model) updateSectionKey(key tea.KeyMsg) (Model, tea.Cmd, bool) {
 	case isRune(key, 'u') && m.up.st == upAvailable && !m.opts.NotRelease:
 		return m, m.exec(m.b.Update(), func(err error) tea.Msg { return actionDoneMsg{kind: actUpdate, err: err} }), true
 	case isRune(key, 'c') && m.canCheck():
-		m.up.st = upChecking
+		if m.up.st == upAvailable || m.up.st == upCurrent {
+			m.up.rechecking, m.up.recheckFailed = true, false
+		} else {
+			m.up = updatePane{st: upChecking}
+		}
 		return m, m.checkCmd(), true
 	}
 	return m, nil, false
@@ -443,8 +455,10 @@ func (m Model) updateBody(w int) []string {
 		rows = append(rows, "", t.Frost("could not check for updates"))
 	case upCurrent:
 		rows = append(rows, "", t.Green("up to date"))
+		rows = append(rows, m.recheckRows()...)
 	case upAvailable:
 		rows = append(rows, field("latest", clean(m.up.info.Latest)), "", t.Mist("release notes below"))
+		rows = append(rows, m.recheckRows()...)
 	case upDone:
 		rows = append(rows, "")
 		rows = append(rows, wrapAll(t.Green, "updated to "+clean(m.up.info.Latest)+"; restart qbit-vault and your agents", w)...)
@@ -453,6 +467,17 @@ func (m Model) updateBody(w int) []string {
 		rows = append(rows, wrapAll(t.Mist, "The update check is off (QBIT_VAULT_NO_UPDATE_CHECK=1).", w)...)
 	}
 	return rows
+}
+
+// recheckRows says what a re-check is doing next to the result it kept.
+func (m Model) recheckRows() []string {
+	switch {
+	case m.up.rechecking:
+		return []string{"", m.theme.Mist("checking again…")}
+	case m.up.recheckFailed:
+		return []string{"", m.theme.Frost("could not re-check; showing the last result")}
+	}
+	return nil
 }
 
 func (m Model) updateDetail(w int) (string, []string) {

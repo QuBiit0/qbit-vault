@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
@@ -150,11 +148,31 @@ func TestUpdateNeverTouchesGrantsOrTheVault(t *testing.T) {
 	b := newReady()
 	b.update = newer
 	before := len(b.grants)
-	m := pressAll(opened(newModelWith(b, tui.Options{})), digit('7'), runeKey('u'))
-	_ = m
+	pressAll(opened(newModelWith(b, tui.Options{})), digit('7'), runeKey('u'))
 	if len(b.grants) != before || b.revokedAll != 0 || len(b.revoked) != 0 || len(b.added) != 0 {
 		t.Error("the update changed grants or secrets")
 	}
 }
 
-var _ tea.Msg
+func TestUpdateRecheckKeepsKnownReleaseUntilTheResultArrives(t *testing.T) {
+	b := newReady()
+	b.update = newer
+	m := pressAll(opened(newModelWith(b, tui.Options{})), digit('7'))
+	next, cmd := m.Update(runeKey('c')) // the check runs; its result is not delivered yet
+	if cmd == nil {
+		t.Fatal("c started no check")
+	}
+	wantView(t, next.(tui.Model), "update available v1.1.0", "latest v1.1.0", "update now")
+}
+
+func TestUpdateFailedRecheckKeepsKnownReleaseAndSaysSo(t *testing.T) {
+	b := newReady()
+	b.update = newer
+	m := pressAll(opened(newModelWith(b, tui.Options{})), digit('7'))
+	b.updateErr = errBoom
+	m = pressAll(m, runeKey('c'))
+	wantView(t, m, "update available v1.1.0", "latest v1.1.0", "update now", "could not re-check")
+	if strings.Contains(m.View(), errBoom.Error()) {
+		t.Errorf("a failed re-check shows the error:\n%s", m.View())
+	}
+}

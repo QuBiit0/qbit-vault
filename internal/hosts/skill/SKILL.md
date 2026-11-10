@@ -49,6 +49,14 @@ An `exec` that runs but gets `401`, `403`, "invalid token" or "authentication fa
 | `dump_command` | The command would print a secret or the environment. Rewrite it so it does not. |
 | `scope_binary` | The secret is limited to other programs. Tell the user; they can change its allowlist. |
 | `scope_not_allowed` | The secret is sensitive: only a one-time (`once`) grant is possible. |
-| `vault_locked` | Ask the user to run `qbit-vault unlock` in their terminal. |
+| `rate_limited` | You asked again too soon after a decline. Back off; do not retry now, tell the user what is blocked. |
+| `invalid_name` | The name is not valid (capital letters, digits and `_`, starting with a letter) or appears twice. Fix it and call again. |
+| `no_project` | You asked for the project layer outside a repository. Use the global layer, or work from the repository. |
+| `not_model_callable` | That operation is not yours to call. Stop and tell the user; do not try another route to the same effect. |
+| `vault_locked` | The user is asked for the passphrase in a dialog when the machine can show one; if you still get this, ask the user to run `qbit-vault unlock` in their terminal, then retry. |
+| `vault_corrupt` | The vault failed its integrity check. Stop; tell the user to run `qbit-vault restore`. |
+| `timeout` | The command ran past `timeout_ms` and was killed; the redacted output so far is in `partial`. Raise `timeout_ms` or run something shorter. |
+| `contract_mismatch` | This server and the tools disagree on the contract version. Tell the user to run `qbit-vault sync` and restart the agent. |
+| `internal` | A malformed argument, a missing prompt, or a call cancelled before the user answered (the message says which). Fix the arguments and retry once; otherwise tell the user. Nothing was stored or granted. |
 
 If the qbit-vault tools are not available in this session, tell the user to run `qbit-vault doctor` and restart the agent; do not fall back to asking for the value.

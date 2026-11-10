@@ -78,10 +78,11 @@ func TestContentIsAValidSkillThatNamesEveryTool(t *testing.T) {
 			t.Errorf("skill does not mention %s", tool)
 		}
 	}
-	// So must the refusals it tells the model how to handle.
-	for _, r := range []refusal.Type{refusal.GrantRequired, refusal.UnknownSecret, refusal.UserDeclined, refusal.DumpCommand} {
-		if !strings.Contains(s, "`"+string(r)+"`") {
-			t.Errorf("skill does not mention refusal %s", r)
+	// So must every refusal type, each with its own row: a new type in
+	// internal/refusal needs its instruction here in the same change.
+	for _, r := range refusal.Types() {
+		if !strings.Contains(s, "| `"+string(r)+"` |") {
+			t.Errorf("skill has no row in \"Refusals and what to do\" for refusal %s", r)
 		}
 	}
 	if bytes.Contains(skill.Content, []byte("TESTSECRET_")) {

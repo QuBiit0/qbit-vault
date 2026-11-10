@@ -271,6 +271,14 @@ type native struct {
 	run     runner
 	timeout time.Duration
 	open    func() (Terminal, error) // the terminal, for what a helper cannot show
+	ctx     context.Context          // ends every dialog with it; nil is never
+}
+
+// WithContext implements Contexter.
+func (n *native) WithContext(ctx context.Context) Backend {
+	c := *n
+	c.ctx = ctx
+	return &c
 }
 
 func (n *native) Name() string { return n.t.name() }
@@ -287,13 +295,16 @@ func (n *native) ask(d dialog) (result, status, error) {
 
 // askWith runs a built helper command for dialog d.
 func (n *native) askWith(c command, d dialog) (result, status, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), n.timeout)
+	ctx, cancel := context.WithTimeout(base(n.ctx), n.timeout)
 	defer cancel()
 	r, err := n.run(ctx, c)
 	if err != nil {
 		clear(r.Stdout)
 		if errors.Is(err, context.DeadlineExceeded) {
 			return result{}, statusFail, ErrTimeout
+		}
+		if errors.Is(err, context.Canceled) {
+			return result{}, statusFail, ErrCancelled
 		}
 		if errors.Is(err, ErrTooLarge) {
 			return result{}, statusFail, ErrTooLarge

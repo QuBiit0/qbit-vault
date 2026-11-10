@@ -6,6 +6,9 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Fixed
 
+- A tool call that waits for a dialog is no longer lost when the client gives up. The MCP call's context now reaches the dialog: when the client cancels, the native helper is killed (or the terminal prompt stops) and nothing is stored, granted or audited as a capture or grant, even if the user answered at that instant; the call ends with a retryable `internal` refusal and starts no cooldown. While a call with a progress token waits, the server sends `notifications/progress` every 15 s so clients keep waiting.
+- Two concurrent `secret_request` / `secret_manage` calls no longer open two dialogs at once: the server shows one at a time, and a waiting call that is cancelled never shows its dialog.
+- The agent skill now says what to do for every refusal type (`rate_limited`, `invalid_name`, `no_project`, `not_model_callable`, `vault_corrupt`, `timeout`, `contract_mismatch`, `internal`); a test fails when a refusal type has no row. The `vault_locked` row no longer says the terminal is the only way to unlock.
 - Under WSL the capture, permission and passphrase dialogs are the Windows ones (`powershell.exe` at its fixed `/mnt/c/Windows/…` path) instead of sending the user to a terminal: WSL is detected by `WSL_DISTRO_NAME` or the WSLInterop registration, the helper is chosen before `zenity` and `kdialog` whether or not `DISPLAY` is set, and `QBIT_VAULT_PROMPT` still forces a backend. `doctor` names the backend (`prompt: powershell (WSL)`); it says nothing when the backend is the terminal.
 
 ### Added

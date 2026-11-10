@@ -41,7 +41,7 @@ func (n *native) Show(title, text string) error {
 	default:
 		// The helper takes its text only as arguments, which any local user
 		// can read: the terminal shows it.
-		return New(n.open, Timeout(n.timeout)).(Shower).Show(title, text)
+		return Bind(base(n.ctx), New(n.open, Timeout(n.timeout))).(Shower).Show(title, text)
 	}
 	_, st, err := n.askWith(c, d)
 	if err != nil {

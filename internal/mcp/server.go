@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -29,6 +30,12 @@ var ToolDescriptions = map[string]string{
 	"secret_manage":  "Propose a change to a secret: remove it, edit its metadata, move it between global and this project, or replace its value. The user confirms or declines outside the chat; nothing changes without that. You never see values and you cannot grant access. Give a concrete reason.",
 	"secret_exec":    "Run a shell command with named secrets injected as environment variables for that process only. Output is returned with secret values redacted. Commands that print the environment or a secret are refused; to use only a length, write ${#NAME}. Prefer this over asking the user to paste credentials.",
 }
+
+// ProgressInterval is how often a call that waits for the user sends
+// notifications/progress, when the client gave a progress token. Clients that
+// reset their request timeout on progress keep waiting while a dialog is open.
+// It is a variable for tests.
+var ProgressInterval = 15 * time.Second
 
 // panicLog is where broker.PanicLine goes. It is a seam for tests.
 var panicLog io.Writer = os.Stderr
@@ -105,7 +112,7 @@ func add(srv *sdk.Server, b broker.Backend, o Options, tool, op string) {
 // handler turns the tool input into an envelope for op and answers with the
 // broker's JSON as text, an error result when it is a refusal.
 func handler[In any](b broker.Backend, o Options, op string) sdk.ToolHandlerFor[In, any] {
-	return func(ctx context.Context, _ *sdk.CallToolRequest, in In) (res *sdk.CallToolResult, _ any, _ error) {
+	return func(ctx context.Context, req *sdk.CallToolRequest, in In) (res *sdk.CallToolResult, _ any, _ error) {
 		// A panic must not kill the server or print a trace: answer the
 		// typed internal refusal, with one fixed line on stderr.
 		defer func() {
@@ -115,6 +122,7 @@ func handler[In any](b broker.Backend, o Options, op string) sdk.ToolHandlerFor[
 				res = &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: string(out)}}, IsError: true}
 			}
 		}()
+		defer keepAlive(ctx, req, op)()
 		out := broker.Handle(ctx, envelope(o, op, in), b, broker.TransportModel)
 		var ok struct {
 			OK bool `json:"ok"`
@@ -122,6 +130,38 @@ func handler[In any](b broker.Backend, o Options, op string) sdk.ToolHandlerFor[
 		_ = json.Unmarshal(out, &ok)
 		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: string(out)}}, IsError: !ok.OK}, nil, nil
 	}
+}
+
+// keepAlive sends a progress notification every ProgressInterval while a
+// request or manage call waits for a dialog, if the client sent a progress
+// token; the returned stop ends it and waits for it. Without a token it does
+// nothing. The notification carries a fixed text, never a name or a value.
+func keepAlive(ctx context.Context, req *sdk.CallToolRequest, op string) (stop func()) {
+	if (op != "request" && op != "manage") || req == nil || req.Session == nil || req.Params == nil {
+		return func() {}
+	}
+	token := req.Params.GetProgressToken()
+	if token == nil {
+		return func() {}
+	}
+	done, finished := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(finished)
+		tick := time.NewTicker(ProgressInterval)
+		defer tick.Stop()
+		for n := 1.0; ; n++ {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				_ = req.Session.NotifyProgress(ctx, &sdk.ProgressNotificationParams{
+					ProgressToken: token, Progress: n, Message: "Waiting for the user to answer the dialog."})
+			}
+		}
+	}()
+	return func() { close(done); <-finished }
 }
 
 // envelope merges the tool input with the contract envelope. A cwd that

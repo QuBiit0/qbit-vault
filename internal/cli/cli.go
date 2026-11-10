@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,8 +41,11 @@ type globals struct {
 	execStdin io.Reader
 	// cwd is the working directory of a broker call (its envelope's cwd);
 	// empty means the process's own, except in a broker call (broker).
-	cwd     string
-	broker  bool
+	cwd    string
+	broker bool
+	// ctx, when set, is the call this command serves (an MCP request the
+	// client may cancel): its dialogs end with it. Nil is the CLI.
+	ctx     context.Context
 	home    string
 	JSON    bool
 	Session string

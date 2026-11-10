@@ -3,6 +3,7 @@
 package prompt
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -107,5 +108,36 @@ func TestScriptedBackendNeedsItsFiles(t *testing.T) {
 	}
 	if _, err = b.Secret(SecretRequest{Name: "x"}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("err = %v, want ErrUnavailable", err)
+	}
+}
+
+// A call the client cancels must not leave the scripted dialog waiting for an
+// answer that never comes (it would hold the one-dialog-at-a-time turn).
+func TestScriptedBackendEndsWithItsBoundContext(t *testing.T) {
+	env, transcript := scriptedEnv(t, "")
+	orig := env.Getenv
+	env.Getenv = func(k string) string {
+		if k == EnvScriptedWait {
+			return "30s"
+		}
+		return orig(k)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	b, err := SelectWith(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = Bind(ctx, b)
+	errc := make(chan error, 1)
+	go func() { _, err := b.Secret(SecretRequest{Name: "A", Reason: "Register"}); errc <- err }()
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	within(t, "scripted secret", func() {
+		if err := <-errc; !errors.Is(err, ErrCancelled) {
+			t.Errorf("err = %v, want ErrCancelled", err)
+		}
+	})
+	if raw, _ := os.ReadFile(transcript); strings.Contains(string(raw), "EXHAUSTED") {
+		t.Error("a cancelled call was logged as running out of answers")
 	}
 }

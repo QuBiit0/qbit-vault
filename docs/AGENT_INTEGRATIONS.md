@@ -20,6 +20,17 @@ Started by the host as `qbit-vault mcp`. Exposes exactly four tools with the nor
 
 The MCP server never exposes `grant`: there is no such tool, and a `grant` envelope sent over a model-facing transport (`broker --op`) is refused with `not_model_callable` unless it carries a prompt token the broker's own prompt backend issued.
 
+### While a dialog is open
+
+`secret_request` and `secret_manage` wait for the user, who answers in a dialog outside the chat. What the agent and the client see meanwhile:
+
+- **Progress.** If the client sent a progress token with the call, the server sends `notifications/progress` every 15 s until the call ends (a fixed text, never a name or a value), so clients that reset their request timeout on progress keep waiting. Without a token nothing is sent. The dialog itself still ends after `QBIT_VAULT_PROMPT_TIMEOUT` (5 minutes by default) with `user_declined`.
+- **Cancel.** If the client cancels the call (`notifications/cancelled`), the dialog is closed (the native helper process is killed) and the call ends with a retryable `internal` refusal, "the request was cancelled before the user answered". Nothing is stored, granted or recorded in the audit log as a capture or grant, even if the user typed an answer at that moment, and no cooldown starts: it is not a decline.
+- **One dialog at a time.** The server shows one dialog at a time. A second call made meanwhile waits for the first dialog to close and then asks its own question; cancelling the waiting call ends its wait without ever showing a dialog. Calls that do not prompt (`secret_list`, `secret_exec`) never wait for it.
+- **Quiet stderr.** The server writes nothing to stderr on these paths; a recovered panic leaves one fixed line.
+
+The end-to-end driver `e2e/mcpclient` can exercise this: a `tools/call` step with `"progress": true` reports how many progress notifications arrived, and `"cancel_after": "2s"` cancels the call that long after it started.
+
 ### Registration written by `init`
 
 **Claude Code** (adapter `claude-code`, `internal/hosts/claude`): four steps, each written into a user-scope file after a snapshot, owning only its own entries.

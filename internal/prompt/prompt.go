@@ -250,6 +250,14 @@ func Timeout(d time.Duration) Option { return func(b *tty) { b.timeout = d } }
 type tty struct {
 	open    func() (Terminal, error)
 	timeout time.Duration
+	ctx     context.Context // ends every prompt with it; nil is never
+}
+
+// WithContext implements Contexter.
+func (b *tty) WithContext(ctx context.Context) Backend {
+	c := *b
+	c.ctx = ctx
+	return &c
 }
 
 func (*tty) Name() string { return "tty" }
@@ -264,7 +272,7 @@ func (b *tty) with(fn func(context.Context, Terminal) error) error {
 		return ErrNoTerminal
 	}
 	defer t.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), b.timeout)
+	ctx, cancel := context.WithTimeout(base(b.ctx), b.timeout)
 	defer cancel()
 	return fn(ctx, t)
 }
@@ -272,7 +280,7 @@ func (b *tty) with(fn func(context.Context, Terminal) error) error {
 // readErr maps a terminal read failure.
 func readErr(err error) error {
 	switch {
-	case errors.Is(err, io.EOF), errors.Is(err, ErrCancelled):
+	case errors.Is(err, io.EOF), errors.Is(err, ErrCancelled), errors.Is(err, context.Canceled):
 		return ErrCancelled
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, ErrTimeout):
 		return ErrTimeout

@@ -4,6 +4,7 @@ package prompt
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -44,7 +45,16 @@ func testBackend(name string, e Env) (Backend, bool) {
 	return scripted{env: e}, true
 }
 
-type scripted struct{ env Env }
+type scripted struct {
+	env Env
+	ctx context.Context // a cancelled call stops waiting for an answer
+}
+
+// WithContext implements Contexter.
+func (s scripted) WithContext(ctx context.Context) Backend {
+	s.ctx = ctx
+	return s
+}
 
 // consumed counts the answers this process has taken from the queue.
 var consumed int
@@ -93,7 +103,11 @@ func (s scripted) next() (string, error) {
 			s.log("EXHAUSTED")
 			return "", ErrCancelled
 		}
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-base(s.ctx).Done():
+			return "", ErrCancelled
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
 )
 
 // key.enc and the unlock cache are owner-only, independent of what the

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/merge"
+	"github.com/qbitdevz/qbit-vault/internal/merge"
 )
 
 // Sync conflicts and restore (docs/REMOTE_SYNC.md § 7.4, § 7.6). A conflict

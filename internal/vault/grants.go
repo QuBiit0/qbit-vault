@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/envelope"
+	"github.com/qbitdevz/qbit-vault/internal/envelope"
 )
 
 const (

@@ -3,7 +3,7 @@ package broker
 import (
 	"context"
 
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
 )
 
 // Envelope is the part every request carries (CONTRACT.md § Envelope).

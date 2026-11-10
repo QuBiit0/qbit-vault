@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
 )
 
 // S12.5: the orphan notice and the revoke audit are written as soon as the

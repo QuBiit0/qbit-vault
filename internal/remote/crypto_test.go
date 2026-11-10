@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 func key(b byte) secret.Secret { return secret.New("k", bytes.Repeat([]byte{b}, 32)) }

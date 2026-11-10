@@ -13,10 +13,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/perm"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // Status of one check. Warn and Fail both make the report unhealthy.

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 const fixture = "TESTSECRET_exportfile_value_0123456789"

@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 const (

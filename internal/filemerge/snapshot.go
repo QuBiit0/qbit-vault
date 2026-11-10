@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
 )
 
 const (

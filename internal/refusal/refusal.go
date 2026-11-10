@@ -3,7 +3,7 @@
 // Messages are built only from the secret name and fixed strings.
 package refusal
 
-import "github.com/QuBiit0/qbit-vault/internal/exitcode"
+import "github.com/qbitdevz/qbit-vault/internal/exitcode"
 
 // Type is a refusal type from the contract.
 type Type string

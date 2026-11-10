@@ -3,7 +3,7 @@ package tui_test
 import (
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/tui"
+	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
 func syncPane(b *fakeBackend) tui.Model { return pressAll(newModel(b, false), digit('5')) }

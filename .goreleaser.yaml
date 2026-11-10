@@ -21,8 +21,8 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/QuBiit0/qbit-vault/internal/cli.Version={{ .Tag }}
-      - -X github.com/QuBiit0/qbit-vault/internal/cli.Commit={{ .ShortCommit }}
+      - -X github.com/qbitdevz/qbit-vault/internal/cli.Version={{ .Tag }}
+      - -X github.com/qbitdevz/qbit-vault/internal/cli.Commit={{ .ShortCommit }}
   - id: qbit-vault-server
     main: ./cmd/qbit-vault-server
     binary: qbit-vault-server
@@ -72,7 +72,7 @@ changelog:
 
 release:
   github:
-    owner: QuBiit0
+    owner: qbitdevz
     name: qbit-vault
   # Regular releases, never pre-releases: releases/latest/download/install.sh
   # skips pre-releases, and the -beta in the version already says what it is.
@@ -82,22 +82,22 @@ release:
     - glob: scripts/install.sh
     - glob: scripts/install.ps1
   header: |
-    What changed in {{ .Tag }}: see its section in [CHANGELOG.md](https://github.com/QuBiit0/qbit-vault/blob/{{ .Tag }}/CHANGELOG.md).
+    What changed in {{ .Tag }}: see its section in [CHANGELOG.md](https://github.com/qbitdevz/qbit-vault/blob/{{ .Tag }}/CHANGELOG.md).
   footer: |
     ## Install
 
     Linux / macOS:
 
     ```bash
-    curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
+    curl -fsSL https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.sh | sh
     ```
 
     Windows (PowerShell):
 
     ```powershell
-    irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
+    irm https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.ps1 | iex
     ```
 
-    With Go 1.26+: `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@{{ .Tag }}`
+    With Go 1.26+: `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@{{ .Tag }}`
 
-    Then run `qbit-vault` (guided setup) or `qbit-vault init`. Verify an archive's provenance with `gh attestation verify <file> --repo QuBiit0/qbit-vault`.
+    Then run `qbit-vault` (guided setup) or `qbit-vault init`. Verify an archive's provenance with `gh attestation verify <file> --repo qbitdevz/qbit-vault`.

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/conformance"
-	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
-	"github.com/QuBiit0/qbit-vault/internal/refusal"
+	"github.com/qbitdevz/qbit-vault/internal/conformance"
+	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
+	"github.com/qbitdevz/qbit-vault/internal/refusal"
 )
 
 // TestContractConformance drives every op through `broker --op` against a real

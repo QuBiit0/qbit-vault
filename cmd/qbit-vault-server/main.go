@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/QuBiit0/qbit-vault/internal/server"
+	"github.com/qbitdevz/qbit-vault/internal/server"
 )
 
 func main() {

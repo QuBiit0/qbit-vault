@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // backupIDRE matches a snapshot directory name: the fixed-width UTC layout of

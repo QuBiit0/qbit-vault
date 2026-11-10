@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/tui"
+	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
 // Expectations below were generated once with the reference rasterizer:

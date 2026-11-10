@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
 )
 
 // S4.2: the joiner's confirmation-code question is a plain question with its

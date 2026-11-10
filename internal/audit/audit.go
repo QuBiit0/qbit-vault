@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/lockfile"
-	"github.com/QuBiit0/qbit-vault/internal/perm"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/lockfile"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 const (

@@ -9,8 +9,8 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/prompt/prompttest"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/prompt/prompttest"
 )
 
 // noKeychain plays a machine without an OS keychain (WSL, a headless Linux

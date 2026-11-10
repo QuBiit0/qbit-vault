@@ -1,6 +1,6 @@
 # Install qbit-vault from a GitHub release on Windows (docs/INSTALL.md § One-line install).
 #
-#   irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
+#   irm https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.ps1 | iex
 #
 # Environment:
 #   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
@@ -22,7 +22,7 @@ function Install-QBitVault {
     $ProgressPreference = 'SilentlyContinue'
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-    $repo = 'QuBiit0/qbit-vault'
+    $repo = 'qbitdevz/qbit-vault'
     $releaseUrl = if ($env:QBIT_VAULT_RELEASE_URL) { $env:QBIT_VAULT_RELEASE_URL } else { "https://github.com/$repo/releases/download" }
     $installDir = $env:QBIT_VAULT_INSTALL_DIR
     $version = $env:QBIT_VAULT_VERSION

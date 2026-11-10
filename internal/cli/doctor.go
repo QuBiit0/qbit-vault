@@ -6,12 +6,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/doctor"
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
-	"github.com/QuBiit0/qbit-vault/internal/hosts"
-	"github.com/QuBiit0/qbit-vault/internal/hosts/claude"
-	"github.com/QuBiit0/qbit-vault/internal/hosts/codex"
-	"github.com/QuBiit0/qbit-vault/internal/hosts/pi"
+	"github.com/qbitdevz/qbit-vault/internal/doctor"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/claude"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/codex"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/pi"
 )
 
 // hostRegistry returns the host adapters of this build: Claude Code, Codex and

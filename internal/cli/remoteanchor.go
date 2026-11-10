@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/audit"
-	"github.com/QuBiit0/qbit-vault/internal/remote"
-	"github.com/QuBiit0/qbit-vault/internal/vault"
+	"github.com/qbitdevz/qbit-vault/internal/audit"
+	"github.com/qbitdevz/qbit-vault/internal/remote"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 // Audit anchors (docs/REMOTE_SYNC.md § 8). A round uploads the head of the

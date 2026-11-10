@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // now is replaceable so tests can pin timestamps.

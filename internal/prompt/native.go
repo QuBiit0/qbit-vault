@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // The native backends ask in a dialog of the desktop session instead of the

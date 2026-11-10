@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/tui"
+	"github.com/qbitdevz/qbit-vault/internal/tui"
 )
 
 func doctorPane(b *fakeBackend) tui.Model { return pressAll(newModel(b, false), digit('6')) }

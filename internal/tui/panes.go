@@ -342,7 +342,7 @@ func (m Model) doctorDetail(w int) (string, []string) {
 // ---- Update ----
 
 // updateCommand is the Go way to upgrade; the screen only shows it.
-const updateCommand = "go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest"
+const updateCommand = "go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest"
 
 func (m Model) updateBody(w int) []string {
 	t := m.theme

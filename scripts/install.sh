@@ -1,13 +1,13 @@
 #!/bin/sh
 # Install qbit-vault from a GitHub release (docs/INSTALL.md § One-line install).
 #
-#   curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.sh | sh
 #
 # Environment:
 #   QBIT_VAULT_VERSION      tag to install (default: the newest release, pre-releases included)
 #   QBIT_VAULT_RELEASES_API release list to pick the newest from (default: the GitHub releases API)
 #   QBIT_VAULT_INSTALL_DIR  target directory (default: where qbit-vault already is, else $HOME/.local/bin)
-#   QBIT_VAULT_RELEASE_URL  base download URL (default: the GitHub releases of QuBiit0/qbit-vault)
+#   QBIT_VAULT_RELEASE_URL  base download URL (default: the GitHub releases of qbitdevz/qbit-vault)
 #   QBIT_VAULT_NO_SYNC      set to 1 to skip `qbit-vault sync` after an upgrade
 #
 # It downloads one archive and checksums.txt, verifies the SHA-256, and copies
@@ -17,7 +17,7 @@
 # `qbit-vault init`: that stays your explicit step.
 set -eu
 
-REPO="QuBiit0/qbit-vault"
+REPO="qbitdevz/qbit-vault"
 RELEASE_URL="${QBIT_VAULT_RELEASE_URL:-https://github.com/$REPO/releases/download}"
 INSTALL_DIR="${QBIT_VAULT_INSTALL_DIR:-}"
 VERSION="${QBIT_VAULT_VERSION:-}"

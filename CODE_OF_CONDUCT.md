@@ -6,4 +6,4 @@ In short: be respectful and constructive, assume good faith, welcome newcomers, 
 
 ## Reporting
 
-Report unacceptable behavior privately to the maintainer through the contact on the [qbitdev GitHub profile](https://github.com/QuBiit0). Reports are handled confidentially. Maintainers may remove comments, commits, issues and other contributions that break this code, and may ban contributors who repeatedly do.
+Report unacceptable behavior privately to the maintainer through the contact on the [qbitdev GitHub profile](https://github.com/qbitdevz). Reports are handled confidentially. Maintainers may remove comments, commits, issues and other contributions that break this code, and may ban contributors who repeatedly do.

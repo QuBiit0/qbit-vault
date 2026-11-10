@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/QuBiit0/qbit-vault/internal/filemerge"
+	"github.com/qbitdevz/qbit-vault/internal/filemerge"
 )
 
 // CheckJSON is the read-only Check of a JSON step: nil when applying edits to

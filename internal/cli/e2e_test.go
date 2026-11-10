@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/keychain"
+	"github.com/qbitdevz/qbit-vault/internal/keychain"
 )
 
 // TestEndToEndSecretLifecycle drives the whole secret-lifecycle surface through

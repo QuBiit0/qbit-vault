@@ -52,7 +52,7 @@ func TestStatusPageServesBrandedHTMLWithHardenedHeaders(t *testing.T) {
 		"v9.8.7-test",
 		"API v1",
 		"only stores data sealed on your devices",
-		"https://github.com/QuBiit0/qbit-vault",
+		"https://github.com/qbitdevz/qbit-vault",
 		"<svg",
 	} {
 		if !strings.Contains(body, want) {

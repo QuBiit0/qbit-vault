@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/QuBiit0/qbit-vault/internal/perm"
+	"github.com/qbitdevz/qbit-vault/internal/perm"
 )
 
 // ErrBusy means another process (or handle) held the lock for the whole

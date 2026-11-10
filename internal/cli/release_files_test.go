@@ -73,14 +73,14 @@ func TestDocsServeTheInstallersFromTheLatestRelease(t *testing.T) {
 	for _, f := range [][]string{{"README.md"}, {"docs", "INSTALL.md"}} {
 		d := repoFile(t, f...)
 		for _, want := range []string{
-			"https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh",
-			"https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1",
+			"https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.sh",
+			"https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.ps1",
 		} {
 			if !strings.Contains(d, want) {
 				t.Errorf("%s lacks %s", filepath.Join(f...), want)
 			}
 		}
-		if strings.Contains(d, "raw.githubusercontent.com/QuBiit0/qbit-vault/main/scripts/install") {
+		if strings.Contains(d, "raw.githubusercontent.com/qbitdevz/qbit-vault/main/scripts/install") {
 			t.Errorf("%s still shows the installer from main", filepath.Join(f...))
 		}
 	}
@@ -108,8 +108,8 @@ func TestReleaseWorkflowPublishesTheServerImage(t *testing.T) {
 		"platforms: linux/amd64,linux/arm64",
 		"file: deploy/Dockerfile",
 		"push: true",
-		"ghcr.io/qubiit0/qbit-vault-server:${{ github.ref_name }}",
-		"ghcr.io/qubiit0/qbit-vault-server:latest",
+		"ghcr.io/qbitdevz/qbit-vault-server:${{ github.ref_name }}",
+		"ghcr.io/qbitdevz/qbit-vault-server:latest",
 		"VERSION=${{ github.ref_name }}",
 	} {
 		if !strings.Contains(job, want) {
@@ -143,7 +143,7 @@ func TestDockerfileBakesTheVersionIntoTheServer(t *testing.T) {
 // compose.yaml (S9.1); compose.yaml still builds from the repository.
 func TestComposeImageRunsThePublishedImageWithTheSameHardening(t *testing.T) {
 	img := repoFile(t, "deploy", "compose.image.yaml")
-	if !strings.Contains(img, "image: ghcr.io/qubiit0/qbit-vault-server:latest") {
+	if !strings.Contains(img, "image: ghcr.io/qbitdevz/qbit-vault-server:latest") {
 		t.Error("compose.image.yaml does not run the published image")
 	}
 	if strings.Contains(img, "build:") {
@@ -175,7 +175,7 @@ func TestComposeImageRunsThePublishedImageWithTheSameHardening(t *testing.T) {
 func TestDocsShowThePublishedServerImageFirst(t *testing.T) {
 	for _, f := range [][]string{{"deploy", "README.md"}, {"docs", "INSTALL.md"}} {
 		d := repoFile(t, f...)
-		if !strings.Contains(d, "compose.image.yaml") || !strings.Contains(d, "ghcr.io/qubiit0/qbit-vault-server") {
+		if !strings.Contains(d, "compose.image.yaml") || !strings.Contains(d, "ghcr.io/qbitdevz/qbit-vault-server") {
 			t.Errorf("%s does not show the published image path", filepath.Join(f...))
 		}
 		if strings.Contains(d, "No image is published yet") {

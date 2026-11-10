@@ -16,7 +16,7 @@ RUN mkdir -p /out/data && chmod 0700 /out/data
 FROM gcr.io/distroless/static-debian12:nonroot
 # Links the published image to its repository on GitHub (ghcr shows it under
 # the repository and takes its description and license from these labels).
-LABEL org.opencontainers.image.source="https://github.com/QuBiit0/qbit-vault" \
+LABEL org.opencontainers.image.source="https://github.com/qbitdevz/qbit-vault" \
       org.opencontainers.image.description="QBit Vault sync server: stores only data sealed on your devices" \
       org.opencontainers.image.licenses="MIT"
 # The version the server reports in /v1/info and on its status page.

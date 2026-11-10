@@ -8,7 +8,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
-	"github.com/QuBiit0/qbit-vault/internal/mcp"
+	"github.com/qbitdevz/qbit-vault/internal/mcp"
 )
 
 type nopWriteCloser struct{ io.Writer }

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/QuBiit0/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/secret"
 )
 
 // ErrNoForm means the backend has no multi-field form; ask the fields one

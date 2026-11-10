@@ -14,12 +14,12 @@ The two scripts are assets of every release, so `…/releases/latest/download/in
 
 ```bash
 # Linux / macOS
-curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell 5.1 or 7)
-irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
+irm https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.ps1 | iex
 ```
 
 What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them before piping them to a shell):
@@ -41,14 +41,14 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 
 Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v0.1.0-beta.2 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v0.1.0-beta.2'; irm …/install.ps1 | iex`.
 
-**Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo QuBiit0/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. Minisign-signed checksums are still planned (Phase 5).
+**Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo qbitdevz/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. Minisign-signed checksums are still planned (Phase 5).
 
 ## With Go
 
 Requires Go 1.26 or newer (`go version`). No C compiler is needed.
 
 ```bash
-go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
+go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest
 ```
 
 `@latest` is the newest release tag (pre-release tags are used only while no stable tag exists); pin one with `@v0.1.0-beta.2`. `qbit-vault version` reports the module version for a `go install` build and the commit for a checkout build.
@@ -56,7 +56,7 @@ go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest
 From a checkout:
 
 ```bash
-git clone https://github.com/QuBiit0/qbit-vault
+git clone https://github.com/qbitdevz/qbit-vault
 cd qbit-vault
 go install ./cmd/qbit-vault
 ```
@@ -110,7 +110,7 @@ Re-run the one-line install. It is safe on a machine that already has QBit Vault
 
 Your vault, keys, grants, backups and audit log live in `$QBIT_VAULT_HOME` and are never touched by the install. Restart your agents afterwards: an agent that was open during the update keeps running the old MCP server until it restarts.
 
-With Go, re-run `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` (or `git pull` then `go install ./cmd/qbit-vault`), then `qbit-vault sync` yourself; on Windows close your agents first, because `go install` cannot replace a running `.exe`. `qbit-vault update` does not exist yet (Phase 5).
+With Go, re-run `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` (or `git pull` then `go install ./cmd/qbit-vault`), then `qbit-vault sync` yourself; on Windows close your agents first, because `go install` cannot replace a running `.exe`. `qbit-vault update` does not exist yet (Phase 5).
 
 ## Uninstall
 
@@ -225,7 +225,7 @@ Every secret returns to its own layer with its metadata; project secrets return 
 
 `init` never contacts a server; sync is a separate, explicit step (`REMOTE_SYNC.md`).
 
-**1. Run the server** (once, on your VPS or Dokploy). Every release publishes the image `ghcr.io/qubiit0/qbit-vault-server` (linux/amd64 and linux/arm64, tagged with the release version and `latest`). Copy `deploy/compose.image.yaml` to the host, set `QBV_SERVER_PUBLIC_URL` to the `https://` origin your proxy serves (one volume `/data`, TLS at the proxy), start it and create an invite:
+**1. Run the server** (once, on your VPS or Dokploy). Every release publishes the image `ghcr.io/qbitdevz/qbit-vault-server` (linux/amd64 and linux/arm64, tagged with the release version and `latest`). Copy `deploy/compose.image.yaml` to the host, set `QBV_SERVER_PUBLIC_URL` to the `https://` origin your proxy serves (one volume `/data`, TLS at the proxy), start it and create an invite:
 
 ```bash
 export QBV_SERVER_PUBLIC_URL=https://vault.example.com
@@ -250,7 +250,7 @@ Use the **same URL** on every machine. Case, a default port (`:443`) and a trail
 **3. Every other machine:**
 
 ```bash
-curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh && qbit-vault init
+curl -fsSL https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.sh | sh && qbit-vault init
 qbit-vault remote join --server https://vault.example.com   # prints a pairing code
 # on the first machine:
 qbit-vault remote approve                                   # type the pairing code, name the device (Enter = "device 2"), read the confirmation code

@@ -1,4 +1,4 @@
-module github.com/QuBiit0/qbit-vault
+module github.com/qbitdevz/qbit-vault
 
 go 1.26.0
 

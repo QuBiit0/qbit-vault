@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/QuBiit0/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/exitcode"
 )
 
 // A value pasted with its quotes, or with invisible characters copied from a

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/QuBiit0/qbit-vault/internal/dumpguard"
+	"github.com/qbitdevz/qbit-vault/internal/dumpguard"
 )
 
 // DenyReason is the fixed refusal the agent reads. It never includes the

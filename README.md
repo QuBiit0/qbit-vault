@@ -4,8 +4,8 @@
 
 # QBit Vault
 
-[![Release](https://img.shields.io/github/v/release/QuBiit0/qbit-vault?include_prereleases&label=release)](https://github.com/QuBiit0/qbit-vault/releases)
-[![CI](https://github.com/QuBiit0/qbit-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/QuBiit0/qbit-vault/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/qbitdevz/qbit-vault?include_prereleases&label=release)](https://github.com/qbitdevz/qbit-vault/releases)
+[![CI](https://github.com/qbitdevz/qbit-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/qbitdevz/qbit-vault/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8.svg)](go.mod)
 
@@ -14,7 +14,7 @@ by **qbitdev**
 
 QBit Vault (`qbit-vault`) is a local secrets broker for coding agents. Claude Code, Codex and Pi / Gentle Shell can run commands that need a `GITHUB_TOKEN`, a `DATABASE_URL` or any API key, and the value never enters the model's context, the chat transcript, the session file or the provider's servers.
 
-> **Public beta.** Built and tested on Linux, macOS and Windows; expect rough edges. Found one? [Open an issue](https://github.com/QuBiit0/qbit-vault/issues) with the output of `qbit-vault doctor` (it never contains a secret value).
+> **Public beta.** Built and tested on Linux, macOS and Windows; expect rough edges. Found one? [Open an issue](https://github.com/qbitdevz/qbit-vault/issues) with the output of `qbit-vault doctor` (it never contains a secret value).
 
 ## Get started
 
@@ -22,15 +22,15 @@ QBit Vault (`qbit-vault`) is a local secrets broker for coding agents. Claude Co
 
 ```bash
 # Linux, macOS, WSL
-curl -fsSL https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://github.com/QuBiit0/qbit-vault/releases/latest/download/install.ps1 | iex
+irm https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.ps1 | iex
 ```
 
-The scripts are assets of every release (`releases/latest/download/…`); the copies in `scripts/` are the same files. The script downloads the latest release for your system, checks its SHA-256 and installs `qbit-vault` (Linux and macOS: `~/.local/bin`; Windows: added to your `PATH`, open a new terminal). Running it again upgrades in place. With Go 1.26+ you can use `go install github.com/QuBiit0/qbit-vault/cmd/qbit-vault@latest` instead. Options and details: [docs/INSTALL.md](docs/INSTALL.md).
+The scripts are assets of every release (`releases/latest/download/…`); the copies in `scripts/` are the same files. The script downloads the latest release for your system, checks its SHA-256 and installs `qbit-vault` (Linux and macOS: `~/.local/bin`; Windows: added to your `PATH`, open a new terminal). Running it again upgrades in place. With Go 1.26+ you can use `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` instead. Options and details: [docs/INSTALL.md](docs/INSTALL.md).
 
 ### First 5 minutes
 
@@ -288,11 +288,11 @@ Known gaps the docs state openly: `bindings.yaml` and `config.yaml` are not load
 
 ## Contributing
 
-Contributions are welcome; the rules are in [CONTRIBUTING.md](CONTRIBUTING.md). Read [AGENTS.md](AGENTS.md) first: the security invariants there are tested, and a change that breaks one is rejected. Bug reports and feature requests go to [Issues](https://github.com/QuBiit0/qbit-vault/issues) (guided forms); questions and ideas to [Discussions](https://github.com/QuBiit0/qbit-vault/discussions). How contributions are reviewed: [CONTRIBUTING.md § How contributions are reviewed](CONTRIBUTING.md#how-contributions-are-reviewed).
+Contributions are welcome; the rules are in [CONTRIBUTING.md](CONTRIBUTING.md). Read [AGENTS.md](AGENTS.md) first: the security invariants there are tested, and a change that breaks one is rejected. Bug reports and feature requests go to [Issues](https://github.com/qbitdevz/qbit-vault/issues) (guided forms); questions and ideas to [Discussions](https://github.com/qbitdevz/qbit-vault/discussions). How contributions are reviewed: [CONTRIBUTING.md § How contributions are reviewed](CONTRIBUTING.md#how-contributions-are-reviewed).
 
 ## Security
 
-Do not report a vulnerability in a public issue: use [private vulnerability reporting](https://github.com/QuBiit0/qbit-vault/security/advisories/new), as described in [SECURITY.md](SECURITY.md). The threat model and what is out of scope are in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+Do not report a vulnerability in a public issue: use [private vulnerability reporting](https://github.com/qbitdevz/qbit-vault/security/advisories/new), as described in [SECURITY.md](SECURITY.md). The threat model and what is out of scope are in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## License
 

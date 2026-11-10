@@ -78,8 +78,8 @@ if ! command -v claude >/dev/null && ! command -v codex >/dev/null && ! command 
 else
   fail "no claude, codex or pi binary"
 fi
-if [[ -f $SRC/go.mod && -f $SRC/cmd/qbit-vault/main.go ]] && head -n1 "$SRC/go.mod" | grep -qF 'github.com/QuBiit0/qbit-vault'; then
-  pass "the source tree is in $SRC (module github.com/QuBiit0/qbit-vault)"
+if [[ -f $SRC/go.mod && -f $SRC/cmd/qbit-vault/main.go ]] && head -n1 "$SRC/go.mod" | grep -qF 'github.com/qbitdevz/qbit-vault'; then
+  pass "the source tree is in $SRC (module github.com/qbitdevz/qbit-vault)"
 else
   fail "the source tree is in $SRC"
 fi

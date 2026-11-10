@@ -1,0 +1,102 @@
+name: pi-extension-release
+
+# Publishes the Pi / Gentle Shell extension as a git tag, not on npm (S12 of
+# odd/tasks/pi-extension.md). Run by hand from the Actions tab on main. It
+# builds and tests packages/qbit-vault-pi, assembles a tree that holds only the
+# installable package (package.json without devDependencies or scripts, dist/,
+# secret-patterns.yaml, README.md, LICENSE) and pushes it as one commit plus
+# the annotated tag pi-v<version>:
+#
+#   gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v<version>
+#
+# Versions are immutable: a tag that already exists stops the run, nothing is
+# ever moved, re-pushed or force-pushed. The commit has no parent the first
+# time; later ones have the previous head of the branch pi-extension as their
+# parent, so the branch only moves forward. Tags `pi-v*` do not match the
+# `v*` filter of release.yml (a tag filter is matched against the whole ref
+# name, which here starts with "pi-"), so the binary release does not run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pi-extension-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # The tree is built from the dispatched ref: only reviewed code on main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the branch pi-extension and the tag pi-v<version>
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: packages/qbit-vault-pi/package-lock.json
+      - name: version and tag
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/qbit-vault-pi/package.json').version")"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::package.json version is not a semantic version: $version"
+            exit 1
+          fi
+          tag="pi-v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::error::the tag $tag already exists; tags are never moved or reused, bump the version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+      - name: install
+        working-directory: packages/qbit-vault-pi
+        run: npm ci
+      - name: typecheck
+        working-directory: packages/qbit-vault-pi
+        run: npm run typecheck
+      - name: build
+        working-directory: packages/qbit-vault-pi
+        run: npm run build
+      - name: test
+        working-directory: packages/qbit-vault-pi
+        run: npm test
+      - name: assemble the tree
+        run: node packages/qbit-vault-pi/scripts/assemble-dist.mjs --out "$RUNNER_TEMP/pi-tree"
+      - name: commit the tree
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Write the tree object from the assembled directory with a scratch
+          # index, so the checkout is never touched.
+          tree="$(
+            cd "$RUNNER_TEMP/pi-tree"
+            export GIT_INDEX_FILE="$RUNNER_TEMP/pi-index"
+            git --git-dir="$GITHUB_WORKSPACE/.git" --work-tree=. add -A -f
+            git --git-dir="$GITHUB_WORKSPACE/.git" write-tree
+          )"
+
+          # First publish: no parent. Later ones: the previous head, so the
+          # branch is only ever fast-forwarded.
+          parent_args=()
+          if [ -n "$(git ls-remote --heads origin pi-extension)" ]; then
+            git fetch --no-tags origin "+refs/heads/pi-extension:refs/remotes/origin/pi-extension"
+            parent_args=(-p "$(git rev-parse refs/remotes/origin/pi-extension)")
+          fi
+          commit="$(git commit-tree "$tree" "${parent_args[@]}" -m "qbit-vault-pi $VERSION")"
+          git tag -a "$TAG" -m "qbit-vault-pi $VERSION" "$commit"
+          echo "COMMIT=$commit" >> "$GITHUB_ENV"
+          git ls-tree -r --name-only "$commit"
+      - name: push the branch and the tag
+        # Never forced: a branch that moved meanwhile makes this fail, and the
+        # run is repeated. Both refs go in one atomic push.
+        run: git push --atomic origin "$COMMIT:refs/heads/pi-extension" "refs/tags/$TAG"

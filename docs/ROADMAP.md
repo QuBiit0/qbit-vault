@@ -73,7 +73,7 @@ Exit criterion (met by the Docker sync battery): TESTING.md Tier 2 step 7 green;
 
 ## Phase 3 — hosts — done as scoped
 
-Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; npm and Homebrew packaging moved to Phase 5 (they are not built; install with the release scripts or `go install`). Pi works through its MCP entry; the native extension is Phase 4 (built, not yet published, so `init` prints no install line for it).
+Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; npm and Homebrew packaging moved to Phase 5 (they are not built; install with the release scripts or `go install`). Pi works through its MCP entry; the native extension is Phase 4 (built and published as git tags `pi-v<version>` of this repository; `init` prints its install command as a suggestion and never runs it).
 
 | Slice | Content | Req | Status |
 | --- | --- | --- | --- |
@@ -88,7 +88,7 @@ Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for C
 
 Dogfood round 1 (real use on Windows with Claude Code and Pi, `odd/tasks/dogfood-1.md`) added: `bash`/`sh` in `exec` never resolve to WSL and shell words stay intact (5180b22); a `once` grant is released when the child never started (5180b22); refusals answered over the broker and MCP are audited (97b796e); the dump guard stays strict and only `${#NAME}` is allowed, which the `secret_exec` description now tells agents (eaed280, after a relaxation was tried and withdrawn); session grants last 12 h and `session` is preselected in the approval dialog (2d5f944; superseded in 0.1.0-beta.8: agent dialogs offer once, always in this project, or no, see `CHANGELOG.md`).
 
-## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — v1 built, not yet published
+## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — v1 built, published from `pi-v*` git tags (not on npm)
 
 `packages/qbit-vault-pi` is built and tested (vitest with a fake binary, a Go test that keeps its `secret-patterns.yaml` equal to `defaults/`, the `pi-extension` CI job). The owner publishes it to npm, so `init` still prints no install line for it. Scope decided in `odd/tasks/pi-extension.md` S2; reference in `GENTLE_SHELL_EXTENSION.md`.
 

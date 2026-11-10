@@ -112,8 +112,9 @@ func TestName(t *testing.T) {
 	if len(steps) != 2 || steps[0].Name != "mcp" || steps[1].Name != "skill" {
 		t.Fatalf("steps %+v", steps)
 	}
-	if pi.ExtensionInstallCommand != "pi install npm:qbit-vault-pi" {
-		t.Fatalf("install command %q", pi.ExtensionInstallCommand)
+	const src = "git:github.com/qbitdevz/qbit-vault@pi-v" + pi.ExtensionVersion
+	if pi.ExtensionSource != src || pi.ExtensionInstallCommand != "gentle-shell -- install "+src || pi.ExtensionInstallCommandPi != "pi install "+src {
+		t.Fatalf("install commands %q, %q", pi.ExtensionInstallCommand, pi.ExtensionInstallCommandPi)
 	}
 }
 

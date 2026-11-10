@@ -9,6 +9,8 @@
 services:
   server:
     image: ghcr.io/qbitdevz/qbit-vault-server:latest
+    # Pull on every up/redeploy, so :latest is the newest release.
+    pull_policy: always
     environment:
       QBV_SERVER_PUBLIC_URL: ${QBV_SERVER_PUBLIC_URL:?set the https:// origin clients use}
       # How many proxies are in front of the server (the client IP for rate

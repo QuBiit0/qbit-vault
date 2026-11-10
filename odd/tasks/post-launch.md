@@ -37,12 +37,12 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 | T1 | S3.1-S3.5 | worker | 1fbb206, f76723a, PR #36 | done |
 | T2 | S3.6 | worker | b6b5aac, e8be089, PR #37 | done |
 | T3 | S4.1-S4.4 | worker | 4071677, PR #38 | done |
-| T4 | S5 | parent (Dokploy API) | | pending |
-| T5 | S6 + S2 attribution + odd/README + S10 README | worker | | done (uncommitted) |
+| T4 | S5 | parent (Dokploy API) | live config + deploy/README | done |
+| T5 | S6 + S2 attribution + odd/README + S10 README | worker | 442e152, PR #40 | done |
 | T6 | S7 | parent | docs/v1-launch | done |
 | T8 | S9 | parent | 26809e9, PR #39 | done |
-| T9 | S10 demo assets | worker | | in progress |
-| T7 | S8 | parent | | pending |
+| T9 | S10 demo assets | worker | 04aedf8, 78ee6a2, PR #40 | done |
+| T7 | S8 | parent | v1.0.0 (925c37a) | done |
 
 ## Log
 
@@ -56,3 +56,4 @@ After 0.1.0-beta.17 (launch candidate, `odd/tasks/launch-polish.md`). Close ever
 - L7. Transfer accepted: qbitdevz/qbit-vault, QuBiit0 has write. PR #39 (rename) merged. Dokploy still deploys from the QuBiit0 GitHub app, which cannot see the moved repo: T4 switches it to a raw compose with the published image after the release (same appName, so the same vault-data volume). Release version is 1.0.0 (owner). T5 docs pass and T9 demo assets run in parallel on docs/v1-launch with disjoint edit surfaces.
 - T5 (worker, uncommitted): S6/S10 docs pass against the built binary's `--help` and a real `init`/`doctor` run. README rewritten for 1.0.0 (hero `assets/demo/cli.gif`, Why, Install, First 5 minutes, TUI screenshot and tour link, sync with `compose.image.yaml`, security in brief, docs table); ROADMAP status and Phase 5 now state plainly what is not built (npm, Homebrew, Pi extension, Minisign, `qbit-vault update`); INSTALL, PRD, ARCHITECTURE, CLI, AGENT_INTEGRATIONS, REMOTE_SYNC, TESTING, THREAT_MODEL, SECURITY, AGENTS, deploy/README lose beta/unpublished text and use 1.0.0 in version examples; odd/README indexes every task file. CONTRACT.md untouched. Open: S2 says `remote status` exits 0 with warnings, the code exits 1 (remotesync.go, pinned by remote_test.go); docs describe the code (exit 1) until the owner picks one.
 - L8. T9 demo assets (04aedf8) and T5 docs pass (442e152) on docs/v1-launch; the parent looked at the TUI screenshot, a frame sheet of tui.gif and the last frame of cli.gif (`[REDACTED:OPENAI_API_KEY]`, no value visible). T6: GitHub has only main and this branch, no open PRs, local tool folders are ignored; CHANGELOG gets the 1.0.0 section. Release next.
+- L9. PR #40 merged (native review could not close: reviewers cannot inspect the binary images; the first run was blocked by QBit Vault's own prompt hook on token-shaped demo values, fixed in 78ee6a2; owner chose to merge on the parent's verification). v1.0.0 released from 925c37a: release and server-image jobs green (first run of goreleaser-action v7 and attest v4), regular release, latest=v1.0.0, 11 assets, attestation signed by release.yml@refs/tags/v1.0.0, ghcr.io/qbitdevz/qbit-vault-server public and pulled without login, notebook upgraded (doctor healthy, sync up to date). T4: Dokploy compose switched from the QuBiit0 GitHub source to a raw compose with ghcr.io/qbitdevz/qbit-vault-server:latest and pull_policy always; the volume is named explicitly (compose-hack-1080p-circuit-zbih14_vault-data, the one in use); the first deploy failed because composePath stayed ./deploy/compose.yaml (deploy/.env missing), fixed by composePath ./docker-compose.yml; the old container kept serving meanwhile. /v1/info reports v1.0.0; remote sync up to date (version 4), both devices listed, audit anchor ok. Documented in deploy/README.md (Dokploy section); compose.image.yaml gets pull_policy: always.

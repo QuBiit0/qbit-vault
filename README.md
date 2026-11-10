@@ -140,7 +140,7 @@ Every agent gets the MCP server and the `qbit-vault` skill; only Claude Code als
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | yes | `~/.claude/skills` | `pre-bash`, `post-bash`, `post-read`, `user-prompt` | `Read` / `Edit` of the vault directory | `post-*` redact tool output; `user-prompt` blocks a prompt that carries a secret; `pre-bash` keeps user-only commands out of the agent's shell |
 | Codex | yes | `~/.agents/skills` | no | no | `secret_exec` output is already redacted |
-| Pi / Gentle Shell | yes | `~/.agents/skills` (shared with Codex) | no | no | via `mcp.json`; a native Pi extension is not built |
+| Pi / Gentle Shell | yes | `~/.agents/skills` (shared with Codex) | no | no | via `mcp.json`; the `qbit-vault-pi` extension (`/vault` commands, footer status, paste interception; [docs](docs/GENTLE_SHELL_EXTENSION.md)) is built but not yet on npm |
 
 Choose agents yourself with `qbit-vault init --agents claude-code,codex,pi` (or `--agents none`). OpenCode is not supported. Every config file an install touches is backed up first, and `qbit-vault uninstall` reverts it. Per-agent files and the hook protocol: [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md).
 
@@ -195,8 +195,8 @@ Do not report a vulnerability in a public issue: use [private vulnerability repo
 | [deploy/README.md](deploy/README.md) | Running the sync server image |
 | [docs/PRD.md](docs/PRD.md) | Requirements with stable IDs, scope, non-goals, implementation status |
 | [docs/TESTING.md](docs/TESTING.md) | Test tiers, leak battery, Docker batteries |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | What is built and what is not (npm package, Homebrew, native Pi extension) |
-| [docs/GENTLE_SHELL_EXTENSION.md](docs/GENTLE_SHELL_EXTENSION.md) | Design of the Pi / Gentle Shell extension (not built) |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is built and what is not (npm launcher, Homebrew, publishing the Pi extension) |
+| [docs/GENTLE_SHELL_EXTENSION.md](docs/GENTLE_SHELL_EXTENSION.md) | The Pi / Gentle Shell extension: what v1 ships and what is deferred |
 | [docs/PROPOSAL.md](docs/PROPOSAL.md) | The original proposal (historical) |
 | [contracts/secrets-broker/v1/CONTRACT.md](contracts/secrets-broker/v1/CONTRACT.md) | The wire contract and typed refusals |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each release |

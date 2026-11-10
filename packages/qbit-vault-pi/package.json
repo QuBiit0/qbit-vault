@@ -1,0 +1,49 @@
+{
+  "name": "qbit-vault-pi",
+  "version": "0.1.0",
+  "description": "Pi / Gentle Shell extension for QBit Vault: /vault commands and a vault status in the footer. Never sees a secret value.",
+  "keywords": [
+    "pi-package",
+    "qbit-vault",
+    "secrets"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qbitdevz/qbit-vault.git",
+    "directory": "packages/qbit-vault-pi"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "files": [
+    "dist",
+    "secret-patterns.yaml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "prepublishOnly": "npm run typecheck && npm run build && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.5.0",
+    "@types/node": "^26.6.6",
+    "typebox": "^1.4.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

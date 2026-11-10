@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- `packages/qbit-vault-pi`, the Pi / Gentle Shell extension (not yet published to npm; `init` still prints no install line for it): `/vault list|set|rm|revoke|audit|doctor` commands the user runs without the model, a vault status in the footer (`🔐 <n> grants`, `🔐 vault`, `🔒 locked`), paste interception that asks to store a secret-shaped message in the vault and sends `secret://NAME` instead (or nothing), and a revoke of the session's grants when Pi exits. It never opens the vault and never keeps a value: it runs the `qbit-vault` binary and passes values over stdin only. A new `pi-extension` CI job typechecks, builds and tests it, and a Go test keeps its `secret-patterns.yaml` equal to `defaults/secret-patterns.yaml`. Terminal capture, a bash override, read/write guards and a sidebar entry are not in v1 (`docs/GENTLE_SHELL_EXTENSION.md`).
+
 ## [1.1.0] - 2026-11-10
 
 Self-update, Windows dialogs from WSL, the passphrase asked on demand, a sturdier MCP server, and the fix for #42.

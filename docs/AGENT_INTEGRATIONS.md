@@ -1,18 +1,18 @@
 # Agent integrations
 
-One broker, one contract, three hosts: Claude Code, Codex and Pi / Gentle Shell. OpenCode was in the original design and is dropped (`odd/tasks/hosts.md` S8; no adapter exists). "Built" means `init` registers it and it is tested; *planned* items need the Pi extension (Phase 4, `GENTLE_SHELL_EXTENSION.md`) and are not built. "MCP" is the portable path through `secret_exec`; today it is the path every host uses.
+One broker, one contract, three hosts: Claude Code, Codex and Pi / Gentle Shell. OpenCode was in the original design and is dropped (`odd/tasks/hosts.md` S8; no adapter exists). "Built" means `init` registers it and it is tested; *extension* items need the Pi extension `qbit-vault-pi` (Phase 4 v1, built, not yet on npm, `GENTLE_SHELL_EXTENSION.md`); *planned* items are not built. "MCP" is the portable path through `secret_exec`; today it is the path every host uses.
 
 | Capability | Pi / Gentle Shell | Claude Code | Codex |
 | --- | --- | --- | --- |
-| `secret_request` / `secret_list` / `secret_exec` / `secret_manage` tools | MCP (built, Pi ≥ 0.99); extension-registered tools (planned) | MCP (built) | MCP (built) |
+| `secret_request` / `secret_list` / `secret_exec` / `secret_manage` tools | MCP (built, Pi ≥ 0.99); extension-registered tools (planned, not in v1) | MCP (built) | MCP (built) |
 | Agent rules (`policy`) known up front | `secret_list` (built); system prompt (planned) | MCP `instructions` + `secret_list` | MCP `instructions` + `secret_list` |
-| Manual entry by the user | `qbit-vault set` in a terminal; `/vault set` (planned) | `qbit-vault set` in a terminal | same |
-| Masked capture | native dialog or terminal prompt (built); `ctx.ui.custom` inline (planned) | native dialog | native dialog |
+| Manual entry by the user | `qbit-vault set` in a terminal; `/vault set` (extension) | `qbit-vault set` in a terminal | same |
+| Masked capture | native dialog or terminal prompt (built); `ctx.ui.custom` inline (planned, deferred) | native dialog | native dialog |
 | Transparent injection into the host's own shell tool | `bash` override (planned) | `PreToolUse` rewrite (planned; `pre-bash` today only denies user-only commands) | no (use `secret_exec`) |
 | Output redaction of the host's shell/read tools | `tool_result` hook (planned) | `PostToolUse` hooks `post-bash` and `post-read` (built) | n/a (`secret_exec` output is already redacted) |
-| Paste interception | `pi.on("input")` (planned) | `UserPromptSubmit` hook `user-prompt` (built; blocks) | not available |
+| Paste interception | `pi.on("input")` (extension) | `UserPromptSubmit` hook `user-prompt` (built; blocks) | not available |
 | Vault dir on read deny list | none registered | `permissions.deny` Read and Edit (built) | none registered |
-| Audit widget | sidebar (planned) | none (`qbit-vault audit --tail` in a terminal) | none |
+| Audit widget | footer status (extension); sidebar (planned) | none (`qbit-vault audit --tail` in a terminal) | none |
 
 ## MCP server (all hosts)
 
@@ -139,7 +139,7 @@ Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.
 
 **OpenCode**: dropped. The original design registered an MCP entry in `~/.config/opencode/opencode.json` and a bash-rewrite plugin; no adapter exists, `--agents opencode` is an unknown agent, and none is planned (`odd/tasks/hosts.md` S8).
 
-**Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`qbit-vault-pi`, the rich path) is Phase 4 and not built, so there is no command to run.
+**Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`qbit-vault-pi`, the rich path) is built (Phase 4 v1, `packages/qbit-vault-pi`) but not yet published to npm, so there is no install command to run yet; to try it, see `GENTLE_SHELL_EXTENSION.md` § Try it from a checkout.
 
 **Pi / Gentle Shell registration written by `init`** (adapter `pi`, `internal/hosts/pi`): two steps: `skill` writes `~/.agents/skills/qbit-vault/SKILL.md`, shared with Codex (§ Agent skill), and `mcp` is merged into `<Pi agent dir>/mcp.json` after a snapshot, owning only `mcpServers.qbit-vault`:
 
@@ -149,9 +149,9 @@ Limitation: Codex moves its config when `CODEX_HOME` is set (https://developers.
 
 `env` with `QBIT_VAULT_HOME` appears only when the vault home is not `~/.qbit-vault` (a path containing `${` or starting with `!` is refused, because Pi expands both in `env` values). `type` is omitted: Pi picks stdio from `command`. Format checked 2026-11-04 against the Pi docs (<https://github.com/badlogic/pi-mono>, `packages/coding-agent/docs/mcp.md`): Pi connects MCP servers natively since 0.99, reads user servers from `<agent dir>/mcp.json` (top-level `mcpServers`; stdio entries use `command`, `args`, `env`) and project servers from `.pi/mcp.json` (only after project trust; not touched). The `pi-mcp-adapter` extension reads the same file. The agent directory is `$PI_CODING_AGENT_DIR` when set (`docs/environment-variables.md`: "Override the config directory; default is `~/.pi/agent`"), else `<user home>/.pi/agent`; a leading `~` is expanded against the user home and a relative path is refused. Gentle Shell is detected by a `gentle-shell` binary on `PATH` and uses the same file when it runs on Pi; a Gentle Shell with its own agent directory (`~/.gentle-shell/agent`) is reached through `PI_CODING_AGENT_DIR`. Detection is read-only: the agent directory or `~/.pi` exists, or `pi` or `gentle-shell` is on `PATH`.
 
-The extension is **not** installed by `init` (it needs the network, invariant 8). Because the extension does not exist, `init` and `sync` print no install command for it and `--json` has no `install_command`; if it ships, `init` will print the command for the user to run. Not honored: `.pi/mcp.json`, and an agent directory passed with a Pi command-line option.
+The extension is **not** installed by `init` (it needs the network, invariant 8). Because the extension is not published yet, `init` and `sync` print no install command for it and `--json` has no `install_command`; once it is published, `init` will print the command for the user to run (`ExtensionInstallCommand` in `internal/hosts/pi`). Not honored: `.pi/mcp.json`, and an agent directory passed with a Pi command-line option.
 
-**Gentle Shell** (planned, with the extension): `gentle-shell install npm:qbit-vault-pi` into `~/.gentle-shell/agent` (or `--link` home). See `GENTLE_SHELL_EXTENSION.md`.
+**Gentle Shell** (extension built, not yet on npm): once published, `gentle-shell install npm:qbit-vault-pi` into `~/.gentle-shell/agent` (or `--link` home). See `GENTLE_SHELL_EXTENSION.md`.
 
 ## Agent skill
 

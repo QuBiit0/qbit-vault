@@ -73,7 +73,7 @@ Exit criterion (met by the Docker sync battery): TESTING.md Tier 2 step 7 green;
 
 ## Phase 3 — hosts — done as scoped
 
-Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; npm and Homebrew packaging moved to Phase 5 (they are not built; install with the release scripts or `go install`). Pi works through its MCP entry; the native extension is Phase 4 (it is not built, so `init` prints no install line for it).
+Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for Claude Code, Codex and Gentle Shell / Pi. OpenCode is out; npm and Homebrew packaging moved to Phase 5 (they are not built; install with the release scripts or `go install`). Pi works through its MCP entry; the native extension is Phase 4 (built, not yet published, so `init` prints no install line for it).
 
 | Slice | Content | Req | Status |
 | --- | --- | --- | --- |
@@ -82,26 +82,29 @@ Scope decision (user, 2026-11-04, `odd/tasks/hosts.md` S8): a working tool for C
 | 3.2 | Claude Code adapter: MCP entry, hooks (`pre-bash`, `post-bash`, `post-read`, `user-prompt`; `pre-bash` denies every `qbit-vault` subcommand except the read-only ones and `exec`, so mutating, `remote` and `link` commands stay user-only), deny rules | R-HOST-02, R-INS-05, R-SYNC-05 | done (720fb0c); Gentle AI entries are preserved by construction (owned-entry merge, golden tests), there is no separate abort-and-restore check |
 | 3.3 | Codex adapter (MCP in `~/.codex/config.toml`; the prompt falls back to the terminal on its own) | R-HOST-03 | done (d00da6e) |
 | 3.4 | OpenCode adapter (MCP + plugin when available) | R-HOST-04 | **dropped** (hosts.md S8, P6) |
-| 3.5 | Pi (plain) adapter: MCP entry; the extension install command is printed, never run | R-HOST-01 | done (9ca10d6); the extension itself is Phase 4 |
+| 3.5 | Pi (plain) adapter: MCP entry; the extension install command is printed, never run | R-HOST-01 | done (9ca10d6); the extension itself is Phase 4 (v1 built) |
 | 3.6 | `init`, `sync`, `doctor`, `uninstall`, `state.json` receipts | R-INS-* | done (4373016 `init` + `doctor`, 309f37c `sync`, bff3a29 `uninstall`; Docker hosts battery `bash e2e/hosts-test.sh`, 27808b4) |
 | 3.7 | npm launcher + platform packages + goreleaser + Minisign | R-INS-02, R-NFR-03 | **moved to Phase 5** (hosts.md P9) |
 
 Dogfood round 1 (real use on Windows with Claude Code and Pi, `odd/tasks/dogfood-1.md`) added: `bash`/`sh` in `exec` never resolve to WSL and shell words stay intact (5180b22); a `once` grant is released when the child never started (5180b22); refusals answered over the broker and MCP are audited (97b796e); the dump guard stays strict and only `${#NAME}` is allowed, which the `secret_exec` description now tells agents (eaed280, after a relaxation was tried and withdrawn); session grants last 12 h and `session` is preselected in the approval dialog (2d5f944; superseded in 0.1.0-beta.8: agent dialogs offer once, always in this project, or no, see `CHANGELOG.md`).
 
-## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — not built
+## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — v1 built, not yet published
 
-Nothing of `packages/qbit-vault-pi` exists yet (there is no `packages/` directory). Until it does, Pi and Gentle Shell use QBit Vault through the MCP entry that `init` registers: the four tools and the native dialogs. The bash override, paste interception, `/vault` commands and the sidebar need the extension. Also planned here: `set --stdin --fields`, `prompt --field` and `prompt --confirm`.
+`packages/qbit-vault-pi` is built and tested (vitest with a fake binary, a Go test that keeps its `secret-patterns.yaml` equal to `defaults/`, the `pi-extension` CI job). The owner publishes it to npm, so `init` still prints no install line for it. Scope decided in `odd/tasks/pi-extension.md` S2; reference in `GENTLE_SHELL_EXTENSION.md`.
 
-| Slice | Content |
+Built in v1: `/vault list|set|rm|revoke|audit|doctor` with completions, the footer status, paste interception with the shared pattern file, and the `session_shutdown` revoke.
+
+Deferred (nothing here is promised for a date):
+
+| Item | Why |
 | --- | --- |
-| 4.1 | Package skeleton, `broker.ts` spawn wrapper, TypeBox types, degraded mode |
-| 4.2 | Tools `secret_request` / `secret_list` / `secret_exec` / `secret_manage`; `policy` in the system prompt |
-| 4.3 | `CaptureView` masked input + layer and scope select; grant-only mode; `manage` confirmation view |
-| 4.4 | Bash override with reference + binding scan, `--stream` plumbing |
-| 4.5 | Read/write guards (`tool_call`, `tool_result`) |
-| 4.6 | Paste interception (`input` hook) with shared `secret-patterns.yaml` + parity test |
-| 4.7 | `/vault` commands (manual `set`, `mv`, `edit`, layer filters) and fullscreen views |
-| 4.8 | Sidebar widget / status footer; session_end revoke |
+| Capture inside the terminal | an extension cannot answer an MCP tool call (`tool_call` only blocks or mutates), so agent captures stay in the native dialog; the owner deferred a masked in-terminal input |
+| Extension-registered tools and the `policy` in the system prompt | MCP already provides the four tools |
+| Bash override with reference and binding scan, `--stream` plumbing | agents use `secret_exec` |
+| Read/write guards (`tool_call`, `tool_result`) | needs a `redact` command |
+| `/vault mv`, `/vault edit`, fullscreen views | not needed for v1 |
+| Sidebar entry | no Gentle Shell extension entry point found; the footer status is the indicator |
+| `set --stdin --fields`, `prompt --field`, `prompt --confirm` | only needed by the deferred capture |
 
 ## Phase 5 — hardening and release 1.0.0
 

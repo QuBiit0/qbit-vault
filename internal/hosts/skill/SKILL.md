@@ -16,7 +16,7 @@ qbit-vault is the user's local secrets broker. You can run commands that need a 
 
 ## How to use it
 
-1. `secret_list` first. It returns the names visible from this directory (global ones and this project's), their metadata and the rules you must follow. It never returns values.
+1. `secret_list` first. It returns the names visible from this directory (global ones and this project's), their metadata and the rules you must follow. It never returns values. A secret's `grant` is what `secret_exec` will accept from this directory; `null` means it will refuse. When `grant_note` is present a grant exists but does not apply here (another directory, or an earlier value): call `secret_request`.
 2. Missing a name, or need permission for one: `secret_request` with every name the task needs in one call (up to 8 fields) and a concrete reason ("run `gh release create` for v1.2", not "needed"). The user types new values or approves existing ones in a dialog outside the chat. You get references and a grant, never the value.
 3. Run the command with `secret_exec`: the command plus `secrets: [{name}]`; each secret becomes an environment variable of that one process. Reference it the way the shell expects (`$GITHUB_TOKEN`, `%GITHUB_TOKEN%`, `$env:GITHUB_TOKEN`).
 4. Read the redacted output. `[REDACTED:NAME]` in it is expected; never try to recover what is behind it.
@@ -42,7 +42,7 @@ An `exec` that runs but gets `401`, `403`, "invalid token" or "authentication fa
 
 | Refusal | What to do |
 | --- | --- |
-| `grant_required` | Call `secret_request` for that name (the user approves it), then retry `secret_exec` once. |
+| `grant_required` | Call `secret_request` for that name (the user approves it), then retry `secret_exec` once. The message may say the grant is for another directory or an earlier value: the same answer, and run the command from the directory the grant was approved in if you can. |
 | `unknown_secret` | The name does not exist here: call `secret_request` so the user can store it. |
 | `user_declined` | Stop asking for it; tell the user what could not be done. Do not re-ask during the cooldown. |
 | `reason_too_vague` | Rephrase the reason: what command, what for. |

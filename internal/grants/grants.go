@@ -259,15 +259,78 @@ func purge(s *Store, now time.Time) bool {
 // whether anything went.
 func Purge(s *Store, now time.Time) bool { return purge(s, now.UTC()) }
 
+// Why says why a record that has a live grant is still refused.
+type Why string
+
+const (
+	// WhyNone: no grant of this record is in the way (there is none, or it
+	// belongs to another session).
+	WhyNone Why = ""
+	// WhyOtherDirectory: a project grant exists, for another repository.
+	WhyOtherDirectory Why = "other_directory"
+	// WhyOtherRecord: a live grant has this name and layer but belongs to an
+	// earlier record (the value was replaced or re-created). It is inert.
+	WhyOtherRecord Why = "other_record"
+)
+
 // Decision is the outcome of Check.
 type Decision struct {
 	Allowed bool
 	Scope   Scope  // the scope that allowed it
 	GrantID string // the grant that allowed it
 	Err     error  // nil when allowed, else ErrGrantRequired
+	// Why explains a refusal when a grant exists but does not apply here.
+	Why Why
 	// Once is a copy of the once grant this check consumed, as it was before;
 	// nil for any other scope. Restore puts it back.
 	Once *Grant
+}
+
+// covers is the one predicate that decides whether a grant lets a record be
+// used: Check (exec) and Lookup (list) both call it. g is already known to
+// belong to the record (name, layer, record id). cwd is the canonical working
+// directory, or its repository root when there is one.
+func covers(g Grant, layer string, sensitive bool, session, cwd string) bool {
+	switch g.Scope {
+	case ScopeOnce:
+		return !g.Consumed && session != "" && g.Session == session
+	case ScopeSession:
+		return !sensitive && session != "" && g.Session == session
+	case ScopeProject:
+		if sensitive {
+			return false // only a once grant may allow it
+		}
+		// A project record's grant covers its repository and below; a global
+		// record's grant only the exact repository it was approved in (cwd is
+		// the repository root when there is one), so a nested repository does
+		// not inherit it.
+		_, projectRecord := ProjectRootOf(layer)
+		return g.ProjectRoot != "" && (projectRecord && inside(g.ProjectRoot, cwd) || !projectRecord && g.ProjectRoot == cwd)
+	}
+	return false
+}
+
+// explain says why no live grant applies although one is there, over a store
+// that is already purged (or filtered by live).
+func explain(s *Store, name, layer, recordID string, sensitive bool, live func(Grant) bool) Why {
+	if recordID == "" || sensitive {
+		return WhyNone
+	}
+	why := WhyNone
+	for _, g := range s.Grants {
+		if g.Name != name || g.Layer != layer || !live(g) {
+			continue
+		}
+		switch {
+		case g.RecordID != recordID:
+			if why == WhyNone {
+				why = WhyOtherRecord
+			}
+		case g.Scope == ScopeProject:
+			return WhyOtherDirectory
+		}
+	}
+	return why
 }
 
 // Check evaluates docs/STORAGE.md § Grants for one resolved record: layer is
@@ -286,36 +349,44 @@ func Check(s *Store, name, layer, recordID string, sensitive bool, session, cwd 
 		return Decision{Err: ErrGrantRequired}, mutated
 	}
 	for _, g := range s.Grants {
-		if g.Name != name || g.Layer != layer || g.RecordID != recordID {
-			continue
-		}
-		if sensitive {
-			continue // only the once loop below may allow it
-		}
-		switch g.Scope {
-		case ScopeSession:
-			if session != "" && g.Session == session {
-				return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, mutated
-			}
-		case ScopeProject:
-			// A project record's grant covers its repository and below; a
-			// global record's grant only the exact repository it was approved
-			// in (cwd is the repository root when there is one), so a nested
-			// repository does not inherit it.
-			_, projectRecord := ProjectRootOf(layer)
-			if g.ProjectRoot != "" && (projectRecord && inside(g.ProjectRoot, cwd) || !projectRecord && g.ProjectRoot == cwd) {
-				return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, mutated
-			}
+		if g.Name == name && g.Layer == layer && g.RecordID == recordID && g.Scope != ScopeOnce && covers(g, layer, sensitive, session, cwd) {
+			return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID}, mutated
 		}
 	}
 	for i, g := range s.Grants {
-		if g.Name == name && g.Layer == layer && g.RecordID == recordID && g.Scope == ScopeOnce && !g.Consumed && session != "" && g.Session == session {
+		if g.Name == name && g.Layer == layer && g.RecordID == recordID && g.Scope == ScopeOnce && covers(g, layer, sensitive, session, cwd) {
 			s.Grants[i].Consumed = true
 			taken := g
 			return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID, Once: &taken}, true
 		}
 	}
-	return Decision{Err: ErrGrantRequired}, mutated
+	why := explain(s, name, layer, recordID, sensitive, func(Grant) bool { return true })
+	return Decision{Err: ErrGrantRequired, Why: why}, mutated
+}
+
+// Lookup is Check without side effects: the grant Check would allow the
+// record with (project, else session, else an unused once grant; never
+// consumed, never purged), or nil and, when a grant exists but does not apply
+// here, why. The store is not modified.
+func Lookup(s *Store, name, layer, recordID string, sensitive bool, session, cwd string, now time.Time) (best *Grant, why Why) {
+	now = now.UTC()
+	if recordID == "" {
+		return nil, WhyNone
+	}
+	rank := map[Scope]int{ScopeProject: 3, ScopeSession: 2, ScopeOnce: 1}
+	for i := range s.Grants {
+		g := s.Grants[i]
+		if g.Name != name || g.Layer != layer || g.RecordID != recordID || expired(g.ExpiresAt, now) {
+			continue
+		}
+		if covers(g, layer, sensitive, session, cwd) && (best == nil || rank[g.Scope] > rank[best.Scope]) {
+			best = &g
+		}
+	}
+	if best != nil {
+		return best, WhyNone
+	}
+	return nil, explain(s, name, layer, recordID, sensitive, func(g Grant) bool { return !expired(g.ExpiresAt, now) })
 }
 
 // Restore undoes the consumption of a once grant that Check returned in

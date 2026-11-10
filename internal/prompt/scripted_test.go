@@ -55,6 +55,11 @@ func TestScriptedBackendAnswersInOrderAndWritesTranscript(t *testing.T) {
 	if err != nil || string(p.Reveal()) != "TESTSECRET_pass" {
 		t.Fatalf("passphrase: %v", err)
 	}
+	unlock := VaultPassphrase
+	unlock.Reason = "Claude Code needs the vault. Unlock it to continue."
+	if _, err := b.Passphrase(unlock); err != nil {
+		t.Fatal(err)
+	}
 	sh, ok := b.(Shower)
 	if !ok {
 		t.Fatal("scripted backend is not a Shower")
@@ -64,7 +69,7 @@ func TestScriptedBackendAnswersInOrderAndWritesTranscript(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(transcript)
 	got := string(raw)
-	for _, want := range []string{"ASK secret name=\"invite code\"", "ASK confirm", "ASK choose", "ASK passphrase confirm=true", "SHOW Recovery key", "| AAAA-BBBB", "| line two"} {
+	for _, want := range []string{"ASK secret name=\"invite code\"", "ASK confirm", "ASK choose", "ASK passphrase confirm=true", `reason="Claude Code needs the vault. Unlock it to continue."`, "SHOW Recovery key", "| AAAA-BBBB", "| line two"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("transcript lacks %q:\n%s", want, got)
 		}

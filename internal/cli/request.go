@@ -49,6 +49,10 @@ type asked struct {
 func (b *cliBackend) Request(ctx context.Context, e broker.Envelope, r broker.RequestRequest) (broker.RequestResponse, error) {
 	g := b.bound(e)
 	g.ctx = ctx
+	g.unlock = agentUnlock{layer: r.SuggestedLayer}
+	for _, f := range r.Fields {
+		g.unlock.names = append(g.unlock.names, f.Name)
+	}
 	s, err := g.openSession()
 	if err != nil {
 		return broker.RequestResponse{}, asRefusal(err)

@@ -147,7 +147,11 @@ func (s scripted) Confirm(q string) (bool, error) {
 }
 
 func (s scripted) Passphrase(req PassphraseRequest) (secret.Secret, error) {
-	s.log("ASK passphrase confirm=%t label=%s", req.Confirm, strconv.Quote(req.Label))
+	reason := ""
+	if req.Reason != "" {
+		reason = " reason=" + strconv.Quote(req.Reason)
+	}
+	s.log("ASK passphrase confirm=%t label=%s%s", req.Confirm, strconv.Quote(req.Label), reason)
 	raw, err := os.ReadFile(s.env.Getenv(EnvScriptedPassphrase))
 	if err != nil {
 		return secret.Secret{}, ErrNoTerminal

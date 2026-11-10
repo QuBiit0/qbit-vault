@@ -53,7 +53,7 @@ An `exec` that runs but gets `401`, `403`, "invalid token" or "authentication fa
 | `invalid_name` | The name is not valid (capital letters, digits and `_`, starting with a letter) or appears twice. Fix it and call again. |
 | `no_project` | You asked for the project layer outside a repository. Use the global layer, or work from the repository. |
 | `not_model_callable` | That operation is not yours to call. Stop and tell the user; do not try another route to the same effect. |
-| `vault_locked` | The user is asked for the passphrase in a dialog when the machine can show one; if you still get this, ask the user to run `qbit-vault unlock` in their terminal, then retry. |
+| `vault_locked` | `secret_request` and `secret_manage` ask the user for the passphrase in a dialog that names you and the secret, so a locked vault is not a reason to stop. `secret_exec` and `secret_list` never ask: when one answers this, call `secret_request` for the name (it unlocks, then asks for the permission as usual) and retry. A wrong passphrase also answers this; calling again asks again. Only when `secret_request` itself answers this (no dialog is possible here, or the user turned it off) ask the user to run `qbit-vault unlock` in their terminal. |
 | `vault_corrupt` | The vault failed its integrity check. Stop; tell the user to run `qbit-vault restore`. |
 | `timeout` | The command ran past `timeout_ms` and was killed; the redacted output so far is in `partial`. Raise `timeout_ms` or run something shorter. |
 | `contract_mismatch` | This server and the tools disagree on the contract version. Tell the user to run `qbit-vault sync` and restart the agent. |

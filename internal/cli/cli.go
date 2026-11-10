@@ -45,7 +45,10 @@ type globals struct {
 	broker bool
 	// ctx, when set, is the call this command serves (an MCP request the
 	// client may cancel): its dialogs end with it. Nil is the CLI.
-	ctx     context.Context
+	ctx context.Context
+	// unlock is what an agent call tells the passphrase dialog it may open
+	// (agentunlock.go); the zero value asks for the vault with no name.
+	unlock  agentUnlock
 	home    string
 	JSON    bool
 	Session string

@@ -71,6 +71,7 @@ func (g *globals) coolDownIn(s *session, name string, layers []string) {
 func (b *cliBackend) Manage(ctx context.Context, e broker.Envelope, r broker.ManageRequest) (broker.ManageResponse, error) {
 	g := b.hot(e)
 	g.ctx = ctx
+	g.unlock = agentUnlock{names: []string{r.Name}, layer: r.Layer}
 	s, err := g.openSession()
 	if err != nil {
 		return broker.ManageResponse{}, asRefusal(err)

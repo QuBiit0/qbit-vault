@@ -108,6 +108,10 @@ type PassphraseRequest struct {
 	Again string
 	// Confirm asks twice and refuses two different entries.
 	Confirm bool
+	// Reason says who needs the passphrase and why, when the user did not
+	// start the command (an agent call that finds the vault locked). It is
+	// shown above the entry and never holds a value.
+	Reason string
 }
 
 // The passphrases qbit-vault asks for.
@@ -322,6 +326,9 @@ func (b *tty) Secret(req SecretRequest) (secret.Secret, error) {
 func (b *tty) Passphrase(req PassphraseRequest) (secret.Secret, error) {
 	var out secret.Secret
 	err := b.with(func(ctx context.Context, t Terminal) error {
+		if req.Reason != "" {
+			_, _ = io.WriteString(t, escape(req.Reason)+"\n")
+		}
 		for try := 1; ; try++ {
 			_, _ = io.WriteString(t, req.Label+": ")
 			first, err := t.ReadHidden(ctx)

@@ -24,6 +24,7 @@
   },
   "files": [
     "dist",
+    "secret-patterns.yaml",
     "README.md"
   ],
   "scripts": {

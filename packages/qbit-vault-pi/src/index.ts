@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { completeArguments, createVaultHandler } from "./commands.js";
+import { createPasteHandler } from "./paste.js";
 import { run } from "./qbitvault.js";
 import { sessionId } from "./session.js";
 import { createStatusRefresher } from "./status.js";
@@ -40,5 +41,6 @@ export default function qbitVaultPi(pi: ExtensionAPI): void {
 		}
 	});
 
-	// T2 (paste interception) registers here: pi.on("input", …) next to the handlers above.
+	// Paste interception: a secret typed into the chat is stored or dropped, never sent (S6).
+	pi.on("input", createPasteHandler());
 }

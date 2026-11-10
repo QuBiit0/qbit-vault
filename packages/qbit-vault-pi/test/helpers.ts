@@ -73,8 +73,11 @@ export function mockPi() {
 	return {
 		pi,
 		command: () => commands.get("vault"),
-		async emit(event: string, payload: any, ctx: any) {
-			for (const h of handlers.get(event) ?? []) await h(payload, ctx);
+		/** Runs every handler of the event; returns the last result a handler gave. */
+		async emit(event: string, payload: any, ctx: any): Promise<any> {
+			let result: unknown;
+			for (const h of handlers.get(event) ?? []) result = (await h(payload, ctx)) ?? result;
+			return result;
 		},
 		handlerCount: (event: string) => (handlers.get(event) ?? []).length,
 	};

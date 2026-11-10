@@ -183,13 +183,13 @@ describe("S7 session_shutdown", () => {
 	}, 10_000);
 });
 
-describe("structure for T2", () => {
-	it("registers only the handlers it needs and leaves input free", () => {
+describe("registered handlers", () => {
+	it("registers the status handlers and the one paste handler", () => {
 		useFake({});
 		const harness = mockPi();
 		expect(harness.handlerCount("session_start")).toBe(1);
 		expect(harness.handlerCount("tool_result")).toBe(1);
 		expect(harness.handlerCount("session_shutdown")).toBe(1);
-		expect(harness.handlerCount("input")).toBe(0);
+		expect(harness.handlerCount("input")).toBe(1);
 	});
 });

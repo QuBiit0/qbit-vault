@@ -46,7 +46,7 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 | T2 | S6, S8 (paste tests), S6.1 parity | worker | 768f1a6 | done |
 | T3 | S9, S10 | worker | 25ed0fd | done |
 | T4 | review, PR, owner check S11 | parent + owner | PR #44 | done (owner: "si funciona") |
-| T5 | S12 | worker | | done (uncommitted) |
+| T5 | S12 | worker | PR #46, tag pi-v0.1.0 | done |
 
 ## Log
 
@@ -60,3 +60,4 @@ A TypeScript extension for Pi / Gentle Shell that adds what MCP cannot: `/vault`
 - L8. Native review of the four commits (risk + reliability/readability): all approved. The branch was rebuilt as feat/pi-extension-v1 (same final tree) so no commit holds a token-shaped literal that the prompt hook blocks; the old branch feat/pi-extension stays until merge. Open advisories after v1: R3-flush-fixed-sleep (status.test.ts:16), R3-grant-tool-name-assumption (index.ts:14; the MCP server name qbit_vault is confirmed by the harness tool names), R3-relative-win-path-literal (binary.test.ts:88).
 - L9. Owner checked the extension in Gentle Shell from the local build (`gentle-shell -- -e .\dist\index.js`): "si funciona". The owner has no npm account; chose git distribution with `pi-v*` tags in this repository (S12).
 - L10. T5 done (uncommitted): `.github/workflows/pi-extension-release.yml` (manual, main only, `contents: write`, refuses an existing `pi-v<version>` tag, `npm ci`/typecheck/build/test, `scripts/assemble-dist.mjs` into a temp tree, `git commit-tree` with no parent the first time and the previous `pi-extension` head afterwards, one atomic non-forced push of the branch and the annotated tag, identity github-actions[bot]); `release.yml` is unchanged (its `v*` filter is matched against the whole ref name, so `pi-v*` does not match). Pi 1.5 runs `npm install --omit=dev --legacy-peer-deps` for a git package that has a `package.json` and never installs peers, so the published package.json has no devDependencies or scripts; `test/assemble.test.ts` checks the tree. `ExtensionVersion` (Go) is checked against `package.json`; `init` and `sync` print the Gentle Shell and Pi commands under the `host pi:` line (owner approved editing init.go and sync.go for this; human output only). Docs updated; the first publish and the tag check are S12.5 (the parent).
+- L11. S12.5: merged in PR #46; the release workflow pushed `pi-v0.1.0` (annotated, github-actions[bot]) on the branch `pi-extension` (331afac), whose tree holds only `LICENSE`, `README.md`, `dist/`, `package.json` and `secret-patterns.yaml`. Owner (verbatim, 2026-11-11): "ya esta, ya corrie el comando" (installed in Gentle Shell from the tag). Feature closed.

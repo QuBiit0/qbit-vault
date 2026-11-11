@@ -92,7 +92,7 @@ Dogfood round 1 (real use on Windows with Claude Code and Pi, `odd/tasks/dogfood
 
 `packages/qbit-vault-pi` is built and tested (vitest with a fake binary, a Go test that keeps its `secret-patterns.yaml` equal to `defaults/`, the `pi-extension` CI job). The owner publishes it to npm, so `init` still prints no install line for it. Scope decided in `odd/tasks/pi-extension.md` S2; reference in `GENTLE_SHELL_EXTENSION.md`.
 
-Built in v1: `/vault list|set|rm|revoke|audit|doctor` with completions, the footer status, paste interception with the shared pattern file, and the `session_shutdown` revoke.
+Built in v1: `/vault list|set|rm|revoke|audit|doctor` with completions, the footer status, paste interception with the shared pattern file, and the `session_shutdown` revoke. 0.2.0 adds the output and write guard on the built-in tools (`odd/tasks/output-guard.md`).
 
 Deferred (nothing here is promised for a date):
 
@@ -101,7 +101,6 @@ Deferred (nothing here is promised for a date):
 | Capture inside the terminal | an extension cannot answer an MCP tool call (`tool_call` only blocks or mutates), so agent captures stay in the native dialog; the owner deferred a masked in-terminal input |
 | Extension-registered tools and the `policy` in the system prompt | MCP already provides the four tools |
 | Bash override with reference and binding scan, `--stream` plumbing | agents use `secret_exec` |
-| Read/write guards (`tool_call`, `tool_result`) | needs a `redact` command |
 | `/vault mv`, `/vault edit`, fullscreen views | not needed for v1 |
 | Sidebar entry | no Gentle Shell extension entry point found; the footer status is the indicator |
 | `set --stdin --fields`, `prompt --field`, `prompt --confirm` | only needed by the deferred capture |

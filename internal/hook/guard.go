@@ -369,6 +369,17 @@ func preWriteGuard(ev Event, src Source) (o *Output) {
 	if !ok || !hasText(v) {
 		return nil
 	}
+	// Only what the call adds to a file is scanned; an unknown shape is
+	// scanned whole (S10.2).
+	var scan []string
+	if added, known := addedText(ev.ToolName, v); known {
+		scan = added
+	} else {
+		mapStrings(v, func(s string) string { scan = append(scan, s); return s })
+	}
+	if !anyText(scan) {
+		return nil
+	}
 	red, err := src()
 	if err != nil {
 		return denyWrite(uncheckedEdit(reasonOf(err)))
@@ -380,11 +391,14 @@ func preWriteGuard(ev Event, src Source) (o *Output) {
 	defer red.Wipe()
 	names := map[string]bool{}
 	hit, failed := false, false
-	mapStrings(v, func(s string) string {
+	for _, s := range scan {
+		if s == "" {
+			continue
+		}
 		r, c := red.Bytes([]byte(s))
 		if r == nil {
 			failed = true
-			return s
+			continue
 		}
 		if c > 0 {
 			hit = true
@@ -392,8 +406,7 @@ func preWriteGuard(ev Event, src Source) (o *Output) {
 				names[n] = true
 			}
 		}
-		return s
-	})
+	}
 	if failed {
 		return denyWrite(uncheckedEdit(reasonInternal))
 	}
@@ -437,4 +450,14 @@ func denyWrite(reason string) *Output {
 		PermissionDecision:       "deny",
 		PermissionDecisionReason: reason,
 	}}
+}
+
+// anyText reports whether any string is non-empty.
+func anyText(ss []string) bool {
+	for _, s := range ss {
+		if s != "" {
+			return true
+		}
+	}
+	return false
 }

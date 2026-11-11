@@ -172,6 +172,59 @@ func TestHookPreWriteDeniesAStoredValue(t *testing.T) {
 	}
 }
 
+// patchOf renders an apply_patch text (V4A) from its lines.
+func patchOf(lines ...string) string {
+	return "*** Begin Patch\n" + strings.Join(lines, "\n") + "\n*** End Patch"
+}
+
+// TestHookPreWriteScansOnlyWhatIsAdded: removing a stored value from a file is
+// allowed, adding it is not, on every tool shape (S10.2).
+func TestHookPreWriteScansOnlyWhatIsAdded(t *testing.T) {
+	w := hookWorld(t)
+	b64 := base64.StdEncoding.EncodeToString([]byte(hkA))
+	patch := func(lines ...string) map[string]any { return map[string]any{"command": patchOf(lines...)} }
+	cases := []struct {
+		name, tool string
+		input      map[string]any
+		deny       string // API_KEY or "" for allowed
+	}{
+		{"Edit removes", "Edit", map[string]any{"file_path": "/p/x", "old_string": "k=" + hkA, "new_string": "k=ref"}, ""},
+		{"Edit adds", "Edit", map[string]any{"file_path": "/p/x", "old_string": "k=ref", "new_string": "k=" + hkA}, "API_KEY"},
+		{"MultiEdit removes", "MultiEdit", map[string]any{"file_path": "/p/x", "edits": []any{map[string]any{"old_string": hkA, "new_string": "z"}}}, ""},
+		{"MultiEdit adds the second", "MultiEdit", map[string]any{"file_path": "/p/x", "edits": []any{
+			map[string]any{"old_string": hkA, "new_string": "z"}, map[string]any{"old_string": "a", "new_string": b64}}}, "API_KEY"},
+		{"NotebookEdit adds", "NotebookEdit", map[string]any{"notebook_path": "/p/n.ipynb", "cell_id": "c1", "edit_mode": "replace", "new_source": hkA}, "API_KEY"},
+		{"Pi edit removes", "edit", map[string]any{"path": "/p/x", "edits": []any{map[string]any{"oldText": hkA, "newText": "z"}}}, ""},
+		{"Pi edit adds", "edit", map[string]any{"path": "/p/x", "edits": []any{map[string]any{"oldText": "a", "newText": hkA}}}, "API_KEY"},
+		{"Pi write adds", "write", map[string]any{"path": "/p/x", "content": hkA}, "API_KEY"},
+		{"patch removes a line", "apply_patch", patch("*** Update File: /p/x", "@@", " keep", "-k="+hkA, "+k=ref"), ""},
+		{"patch context line", "apply_patch", patch("*** Update File: /p/x", "@@ func main", " k="+hkA, "+added"), ""},
+		{"patch deletes a file", "apply_patch", patch("*** Delete File: /p/x"), ""},
+		{"patch adds a line", "apply_patch", patch("*** Update File: /p/x", "@@", " keep", "-old", "+k="+hkA), "API_KEY"},
+		{"patch adds a file", "apply_patch", patch("*** Add File: /p/.env", "+A=1", "+KEY="+hkA), "API_KEY"},
+		{"patch value in a later file", "apply_patch", patch("*** Update File: /p/a", "@@", "-"+hkA, "+x", "*** Add File: /p/b", "+"+hkB), "ODD_KEY"},
+		{"patch as Edit alias", "Edit", patch("*** Update File: /p/x", "@@", "+"+hkA), "API_KEY"},
+		{"unknown tool scans everything", "mcp__files__rewrite", map[string]any{"old_string": hkA, "new_string": "z"}, "API_KEY"},
+		{"unknown key scans everything", "Edit", map[string]any{"file_path": "/p/x", "old_string": "a", "new_string": "b", "insert": hkA}, "API_KEY"},
+		{"command that is not a patch scans everything", "apply_patch", map[string]any{"command": "echo " + hkA}, "API_KEY"},
+	}
+	for _, c := range cases {
+		for _, host := range []string{"claude", "pi", "codex"} {
+			t.Run(c.name+"/"+host, func(t *testing.T) {
+				code, out, errs := w.run(preWriteEvent(t, c.tool, c.input), "hook", "pre-write", "--host", host)
+				want := ""
+				if c.deny != "" {
+					want = wantDeny(fmt.Sprintf(wantWriteOne, c.deny))
+				}
+				if code != 0 || errs != "" || out != want {
+					t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+				}
+				noFixtures(t, "pre-write", out+errs)
+			})
+		}
+	}
+}
+
 func TestHookPreWriteListsAtMostFiveNames(t *testing.T) {
 	w := newExecWorld(t)
 	var content strings.Builder
@@ -265,6 +318,11 @@ func TestHookGuardLeakBattery(t *testing.T) {
 	for _, host := range []string{"claude", "pi", "codex"} {
 		capture(p.run(postBashEvent(t, "k="+hkA), "hook", "post-bash", "--host", host))
 		capture(p.run(preWriteEvent(t, "Edit", map[string]any{"new_string": hkA}), "hook", "pre-write", "--host", host))
+	}
+	for _, host := range []string{"claude", "pi", "codex"} {
+		// A removed value is allowed, an added one denied, in the same file.
+		capture(w.run(preWriteEvent(t, "Edit", map[string]any{"old_string": hkA, "new_string": "ref"}), "hook", "pre-write", "--host", host))
+		capture(w.run(preWriteEvent(t, "apply_patch", map[string]any{"command": patchOf("*** Update File: /p/x", "@@", "-"+hkA, "+"+hkB)}), "hook", "pre-write", "--host", host))
 	}
 	got := captured.String()
 	for _, v := range []string{hkA, hkB} {

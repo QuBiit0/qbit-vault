@@ -94,6 +94,12 @@ func TestUserPromptIgnoresATokenAlreadyInTheMessage(t *testing.T) {
 	if want := wantBlock(wantStored("secret API_KEY")); out != want {
 		t.Fatalf("same name: %q", out)
 	}
+	// An unclosed mark before a value: only a valid entry name is reported,
+	// never the message's own text.
+	out, _, _ = runPrompt(t, newSource().get, promptEvent(t, "[REDACTED:typed_text"+tsPlain+"]"))
+	if want := wantBlock(wantStored("secret API_KEY")); out != want {
+		t.Fatalf("unclosed mark: %q", out)
+	}
 	// Only a literal token and nothing stored: nothing to block.
 	out, _, _ = runPrompt(t, newSource().get, promptEvent(t, "[REDACTED:API_KEY] is shown by exec"))
 	if out != "" {

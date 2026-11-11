@@ -39,8 +39,10 @@ var shapes = []struct {
 	{regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), "a JWT"},
 }
 
-// redactedToken matches the [REDACTED:NAME] marks the redactor writes.
-var redactedToken = regexp.MustCompile(`\[REDACTED:([^\]\s]+)\]`)
+// redactedToken matches the [REDACTED:NAME] marks the redactor writes. The
+// name is held to the vault's name syntax, so text around a mark in the
+// message is never taken for a name.
+var redactedToken = regexp.MustCompile(`\[REDACTED:([A-Z][A-Z0-9_]{0,63})\]`)
 
 // UserPrompt blocks a prompt that carries a secret: the value of a stored
 // secret (any encoding the redactor knows) or a well-known secret shape. The

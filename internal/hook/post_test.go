@@ -91,8 +91,6 @@ func runPrompt(t testing.TB, src Source, in []byte) (string, string, int) {
 const (
 	wantLockedPost   = `{"systemMessage":"qbit-vault could not check this output for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"qbit-vault could not check this output for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
 	wantLockedPrompt = `{"systemMessage":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
-	wantBlockStored  = `{"decision":"block","reason":"This prompt contains the value of a stored secret, so qbit-vault blocked it. Store secrets with 'qbit-vault set NAME' in your own terminal and refer to them by name.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}}` + "\n"
-	wantBlockShape   = `{"decision":"block","reason":"This prompt looks like it contains a secret, so qbit-vault blocked it. Store secrets with 'qbit-vault set NAME' in your own terminal and refer to them by name.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}}` + "\n"
 )
 
 func bashOut(stdout string, n int) string {

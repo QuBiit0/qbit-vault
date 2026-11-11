@@ -31,6 +31,10 @@ An `exec` that runs but gets `401`, `403`, "invalid token" or "authentication fa
 3. Propose **one** `secret_manage` replace with that in the reason. qbit-vault points out pasted quotes or invisible characters before saving, which is a common cause.
 4. If the new value is rejected too, stop and report what the service answered; do not ask again.
 
+## Background jobs, scripts and subagents
+
+A background job, a script or a subagent command that uses a credential runs through `secret_exec`, so its output and the notification when it ends are redacted. A job that prints a stored value directly (a plain shell command, not `secret_exec`) makes the host drop its completion notice, and the user sees a block naming the secret.
+
 ## Rules
 
 - Never print, echo, copy, encode or write a secret value, and never ask the user to paste one into the chat.

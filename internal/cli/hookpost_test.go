@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -18,7 +19,7 @@ const (
 const (
 	wantHookLockedPost   = `{"systemMessage":"qbit-vault could not check this output for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"qbit-vault could not check this output for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
 	wantHookLockedPrompt = `{"systemMessage":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
-	wantHookBlock        = `{"decision":"block","reason":"This prompt contains the value of a stored secret, so qbit-vault blocked it. Store secrets with 'qbit-vault set NAME' in your own terminal and refer to them by name.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}}` + "\n"
+	wantHookBlockFmt     = `{"decision":"block","reason":"This message contains the value of the stored secret %s, so qbit-vault blocked it. If you typed or pasted it, store it with 'qbit-vault set NAME' in your own terminal and refer to it by name. If it came from a background job or another agent's report, the command printed the value: run it through qbit-vault (secret_exec), which redacts its output.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}}` + "\n"
 )
 
 func postBashEvent(t *testing.T, stdout string) string {
@@ -152,10 +153,14 @@ func TestHookPostWithoutVaultIsSilent(t *testing.T) {
 
 func TestHookUserPromptBlocksStoredValueWithoutEchoing(t *testing.T) {
 	w := hookWorld(t)
-	for _, p := range []string{"my key is " + hkA, "basic " + base64.StdEncoding.EncodeToString([]byte(hkA)), "q=" + url.QueryEscape(hkB)} {
-		ev, _ := json.Marshal(map[string]any{"hook_event_name": "UserPromptSubmit", "prompt": p})
+	for _, c := range []struct{ prompt, name string }{
+		{"my key is " + hkA, "API_KEY"},
+		{"basic " + base64.StdEncoding.EncodeToString([]byte(hkA)), "API_KEY"},
+		{"q=" + url.QueryEscape(hkB), "ODD_KEY"},
+	} {
+		ev, _ := json.Marshal(map[string]any{"hook_event_name": "UserPromptSubmit", "prompt": c.prompt})
 		code, out, errs := w.run(string(ev), "hook", "user-prompt")
-		if code != 0 || errs != "" || out != wantHookBlock {
+		if code != 0 || errs != "" || out != fmt.Sprintf(wantHookBlockFmt, c.name) {
 			t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 		}
 		noFixtures(t, "hook output", out+errs)

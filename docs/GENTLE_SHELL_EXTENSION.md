@@ -10,9 +10,9 @@ It is written in TypeScript against the Pi extension API and peer-depends on `@e
 
 The user installs it from the git tag (`init` never does: AGENTS.md invariant 8). The owner has no npm account, so the package is not on npm. A git source is installed as the repository root of that ref, and the tag `pi-v<version>` points to a commit that holds only the built package (`package.json`, `dist/`, `secret-patterns.yaml`, `README.md`, `LICENSE`):
 
-- Gentle Shell (it passes everything after `--` to Pi): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0`.
-- Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0`.
-- One run only, nothing installed: `gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.0` or `pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.0`.
+- Gentle Shell (it passes everything after `--` to Pi): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1`.
+- Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1`.
+- One run only, nothing installed: `gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.1` or `pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.1`.
 - Update: install the newer tag, for example `@pi-v0.3.0`. Pi pins a tag and does not move a configured ref by itself.
 
 What Pi does with a git package (Pi 1.5, `docs/packages.md` and its package manager): it clones the source, checks out the ref and runs `npm install --omit=dev --legacy-peer-deps` (pnpm and Bun have their own production flags) when the package has a `package.json`; it never installs peer dependencies for git packages. So the published `package.json` has no `devDependencies`, no `scripts` and only the three `peerDependencies` (`*`, provided by Pi), and nothing is built on the user's machine. `node packages/qbit-vault-pi/scripts/assemble-dist.mjs --out <empty dir>` builds that tree locally (after `npm run build`); the workflow commits it with no parent the first time and with the previous `pi-extension` head as parent afterwards, so the branch only moves forward, and pushes the annotated tag. The `v*` tags of the binary release are a different filter: a `pi-v*` tag does not start `release.yml`.

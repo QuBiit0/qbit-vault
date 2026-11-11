@@ -177,7 +177,7 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 3 | Empty vault | Write `vault.enc` with an empty body. **Never** reads `process.env` or any `.env` | no |
 | 4 | Detect hosts | `claude-code` (`~/.claude/` or a `claude` binary on `PATH`), `codex` (`~/.codex/` or `codex`), `pi` (the Pi agent directory, `~/.pi/`, or a `pi` or `gentle-shell` binary); `--agents` names hosts explicitly. There is no OpenCode adapter (dropped, `ROADMAP.md`) | no |
 | 5 | Register hosts | Per `AGENT_INTEGRATIONS.md`, receipts to `state.json`. Claude Code: `mcpServers.qbit-vault` in `~/.claude.json`, six hooks and the `Read`/`Edit` deny rules for the vault home in `~/.claude/settings.json`. Codex: the `[mcp_servers.qbit-vault]` table in `~/.codex/config.toml` and two hooks (`PostToolUse` on `Bash`, `PreToolUse` on `apply_patch`) in `~/.codex/hooks.json`, next to the hooks of other tools; Codex runs them after you trust them in `/hooks`, and `init` prints that reminder. Pi / Gentle Shell: `mcpServers.qbit-vault` in `<Pi agent dir>/mcp.json` (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`). Every host also gets the `qbit-vault` agent skill: `~/.claude/skills/qbit-vault/SKILL.md` for Claude Code, one shared `~/.agents/skills/qbit-vault/SKILL.md` for Codex and Pi (`AGENT_INTEGRATIONS.md` § Agent skill) | no |
-| 6 | Extension | Pi: `init` prints the install command of the `qbit-vault-pi` extension as a suggestion under the `host pi:` line and never runs it (installing needs the network, AGENTS.md invariant 8): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0` (Gentle Shell) or `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0` (Pi). It is a git tag of this repository, not an npm package. Pi uses the MCP entry from step 5 either way | no |
+| 6 | Extension | Pi: `init` prints the install command of the `qbit-vault-pi` extension as a suggestion under the `host pi:` line and never runs it (installing needs the network, AGENTS.md invariant 8): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1` (Gentle Shell) or `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1` (Pi). It is a git tag of this repository, not an npm package. Pi uses the MCP entry from step 5 either way | no |
 | 7 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 
 Total questions on a machine with a keychain: **zero**. Not built: verifying a binary signature, and a separate check that other tools' deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`).
@@ -192,8 +192,8 @@ host claude-code: registered (mcp, hooks, deny, skill)
 host codex: registered (mcp, hooks, skill)
   Codex skips new hooks until you trust them: open /hooks in Codex and trust the qbit-vault hooks.
 host pi: registered (mcp, skill)
-  Pi extension (optional, run it yourself): gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0
-  with plain Pi: pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0
+  Pi extension (optional, run it yourself): gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
+  with plain Pi: pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
 ok    vault                    unlocked (keychain: secret-service)
 ok    permissions              owner-only
 ok    host.claude-code.mcp     registered

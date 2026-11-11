@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- Minisign-signed checksums, verifier side (`odd/tasks/minisign.md` S5, S6). `qbit-vault update` downloads `checksums.txt.minisig` after the SHA-256 check and verifies it with the release public key compiled into the binary before it extracts anything; a missing, malformed or non-matching signature stops with `the release <version> is not signed with the QBit Vault release key; nothing was changed` (exit 1), leaves the installed binary byte-identical and never falls back to the SHA-256 alone. `update --check` is unchanged. `install.sh` and `install.ps1` pin the same key: when `minisign` is on `PATH` they verify `checksums.txt.minisig` before writing anything (a release at or above `v1.4.0`, the first signed one, without it is refused; an older explicit version says it is unsigned), and when it is not they print `minisign not found: checksums.txt was checked with SHA-256 only. Verify the signature with: minisign -V -P <key> -m checksums.txt -x checksums.txt.minisig`. A test keeps the key in the binary and in both installers equal to `defaults/release-key.pub`.
+
 ## [1.3.0] - 2026-11-11
 
 An output and write guard for every agent host: Claude Code, Codex and the Pi / Gentle Shell extension (qbit-vault-pi 0.2.1) redact built-in tool output and block file writes that carry a stored value, and withhold the output when it cannot be checked.

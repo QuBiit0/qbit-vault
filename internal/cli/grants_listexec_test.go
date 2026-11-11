@@ -237,3 +237,20 @@ func TestStaleGrantIsNamedOnBothSides(t *testing.T) {
 		t.Fatalf("exec: code=%d m=%v", code, m)
 	}
 }
+
+// A working directory that cannot be resolved (it was removed) lists nothing
+// and runs nothing: neither side falls back to the unresolved path.
+func TestListAndExecRefuseWhereTheDirectoryCannotBeResolved(t *testing.T) {
+	w := newWorld(t)
+	w.approveProjectGrant()
+	if err := os.RemoveAll(w.repo); err != nil {
+		t.Fatal(err)
+	}
+	code, m, out := w.broker("list", envelope("list", w.repo, ""))
+	if code != exitcode.Refusal || m["ok"] != false || strings.Contains(out, "TESTSECRET_") || strings.Contains(out, `"grant"`) {
+		t.Fatalf("list: code=%d out=%s", code, out)
+	}
+	if code, m := w.execIn(w.repo); code != exitcode.Refusal || m["ok"] != false {
+		t.Fatalf("exec ran from a removed directory: code=%d m=%v", code, m)
+	}
+}

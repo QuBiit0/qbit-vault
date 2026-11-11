@@ -180,7 +180,10 @@ func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResu
 		res.Unlinked = &broker.UnlinkedMatch{Label: label}
 	}
 	now := clock()
-	listCwd, _ := grantCwdOf(e.Cwd)
+	listCwd, err := grantCwdOf(e.Cwd)
+	if err != nil {
+		return broker.ListResult{}, asRefusal(mapErr(err, "")) // exec refuses here too
+	}
 	for _, c := range grants.Cooldowns(st, e.Session, now) {
 		res.Cooldowns = append(res.Cooldowns, broker.Cooldown{Name: c.Name, Until: c.Until.UTC().Format(time.RFC3339)})
 	}

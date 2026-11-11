@@ -158,8 +158,10 @@ func newSync(g *globals) *cobra.Command {
 					hb.Status = statusUpToDate
 				}
 				lines = append(lines, syncLine(r, hb))
-				if hint := extensionHint(r); hint != "" {
-					lines = append(lines, hint)
+				for _, hint := range []string{extensionHint(r), codexTrustHint(r), codexPathHint(r)} {
+					if hint != "" {
+						lines = append(lines, hint)
+					}
 				}
 				body.Hosts = append(body.Hosts, hb)
 			}

@@ -194,3 +194,79 @@ func TestRealMinisignVerifiesOurSignature(t *testing.T) {
 		t.Fatalf("minisign -V: %v\n%s", err, out)
 	}
 }
+
+// runVerify runs `verify` with the given public key standing in for the
+// pinned one (nil: the pinned release key, as the workflow runs it).
+func runVerify(t *testing.T, pub *minisign.PublicKey, file string) result {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	e := &environment{stdout: &out, stderr: &errOut}
+	if pub != nil {
+		e.pinned = func() (*minisign.PublicKey, error) { return pub, nil }
+	}
+	return result{run(e, []string{"verify", file}), out.String(), errOut.String()}
+}
+
+func signedFile(t *testing.T) (pub *minisign.PublicKey, file string) {
+	t.Helper()
+	dir := t.TempDir()
+	pubPath, seed := genKey(t, dir)
+	file = writeFile(t, dir, "checksums.txt", "abc  a.tar.gz\n")
+	if r := runCLI(t, map[string]string{"QBIT_VAULT_SIGNING_KEY": seed}, "sign", file, "--version", "v1.4.0"); r.code != 0 {
+		t.Fatalf("sign: %d %q", r.code, r.errOut)
+	}
+	text, _ := os.ReadFile(pubPath)
+	pub, err := minisign.ParsePublicKey(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pub, file
+}
+
+func TestVerifyAcceptsAFreshSignature(t *testing.T) {
+	pub, file := signedFile(t)
+	r := runVerify(t, pub, file)
+	if r.code != 0 || r.errOut != "" || !strings.Contains(r.out, "verified "+file+".minisig with key "+pub.ID()) {
+		t.Fatalf("verify: %d out=%q err=%q", r.code, r.out, r.errOut)
+	}
+}
+
+func TestVerifyRefusesAChangedFileAnotherKeyAndMissingOrBrokenSignatures(t *testing.T) {
+	pub, file := signedFile(t)
+	// The file changed after signing.
+	if err := os.WriteFile(file, []byte("abc  a.tar.gz\nevil  b.tar.gz\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := runVerify(t, pub, file); r.code != 1 || r.out != "" || r.errOut != "release-sign: signature does not match\n" {
+		t.Errorf("changed file: %d out=%q err=%q", r.code, r.out, r.errOut)
+	}
+	// Signed by one key, verified with another.
+	_, otherFile := signedFile(t)
+	if r := runVerify(t, pub, otherFile); r.code != 1 || r.errOut != "release-sign: signature made with another key\n" {
+		t.Errorf("another key: %d err=%q", r.code, r.errOut)
+	}
+	// The pinned key (the test key until T5, never a throwaway key).
+	if r := runVerify(t, nil, otherFile); r.code != 1 || r.errOut != "release-sign: signature made with another key\n" {
+		t.Errorf("pinned key: %d err=%q", r.code, r.errOut)
+	}
+	// Missing and malformed signature files.
+	if err := os.Remove(otherFile + ".minisig"); err != nil {
+		t.Fatal(err)
+	}
+	if r := runVerify(t, pub, otherFile); r.code != 1 || r.errOut != "release-sign: cannot read "+otherFile+".minisig\n" {
+		t.Errorf("missing signature: %d err=%q", r.code, r.errOut)
+	}
+	writeFile(t, filepath.Dir(otherFile), "checksums.txt.minisig", "not a signature\n")
+	if r := runVerify(t, pub, otherFile); r.code != 1 || r.errOut != "release-sign: malformed signature\n" {
+		t.Errorf("malformed signature: %d err=%q", r.code, r.errOut)
+	}
+}
+
+func TestVerifyArguments(t *testing.T) {
+	for _, args := range [][]string{{"verify"}, {"verify", "a", "b"}} {
+		var out, errOut bytes.Buffer
+		if code := run(&environment{stdout: &out, stderr: &errOut}, args); code != 1 || !strings.Contains(errOut.String(), "usage:") {
+			t.Errorf("%v: %d %q", args, code, errOut.String())
+		}
+	}
+}

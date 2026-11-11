@@ -4,11 +4,14 @@
 //
 //	release-sign keygen --pub <file>
 //	release-sign sign <file> --version <tag>
+//	release-sign verify <file>
 //
 // The secret is a seed: base64 (standard, padded) of the 8-byte key id followed
 // by the 32-byte Ed25519 seed. keygen prints it once on stdout; sign reads it
 // only from the environment variable QBIT_VAULT_SIGNING_KEY, never from an
-// argument, and never writes it anywhere.
+// argument, and never writes it anywhere. verify checks <file>.minisig against
+// the release public key compiled in (internal/minisign), the same check
+// qbit-vault update does.
 package main
 
 import (
@@ -24,13 +27,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qbitdevz/qbit-vault/internal/minisign"
 	"golang.org/x/crypto/blake2b"
 )
 
 const (
 	keyEnv  = "QBIT_VAULT_SIGNING_KEY"
 	idLen   = 8
-	usage   = "usage: release-sign keygen --pub <file> | release-sign sign <file> --version <tag>"
+	usage   = "usage: release-sign keygen --pub <file> | release-sign sign <file> --version <tag> | release-sign verify <file>"
 	sigName = "signature from minisign secret key"
 )
 
@@ -38,11 +42,12 @@ type environment struct {
 	getenv         func(string) string
 	rand           io.Reader
 	now            func() time.Time
+	pinned         func() (*minisign.PublicKey, error) // nil: the release key compiled in
 	stdout, stderr io.Writer
 }
 
 func main() {
-	e := &environment{os.Getenv, rand.Reader, time.Now, os.Stdout, os.Stderr}
+	e := &environment{os.Getenv, rand.Reader, time.Now, nil, os.Stdout, os.Stderr}
 	os.Exit(run(e, os.Args[1:]))
 }
 
@@ -55,6 +60,8 @@ func run(e *environment, args []string) int {
 		err = keygen(e, args[1:])
 	case args[0] == "sign":
 		err = sign(e, args[1:])
+	case args[0] == "verify":
+		err = verify(e, args[1:])
 	default:
 		err = errors.New(usage)
 	}
@@ -151,5 +158,35 @@ func sign(e *environment, args []string) error {
 		return errors.New("cannot write " + file + ".minisig")
 	}
 	fmt.Fprintln(e.stdout, "wrote "+file+".minisig")
+	return nil
+}
+
+// verify checks <file>.minisig against the pinned release key. The workflow
+// runs it after signing and again on the uploaded asset, before publishing.
+func verify(e *environment, args []string) error {
+	if len(args) != 1 {
+		return errors.New(usage)
+	}
+	file := args[0]
+	pinned := e.pinned
+	if pinned == nil {
+		pinned = minisign.ReleaseKey
+	}
+	pub, err := pinned()
+	if err != nil {
+		return errors.New("cannot load the release public key")
+	}
+	msg, err := os.ReadFile(file)
+	if err != nil {
+		return errors.New("cannot read " + file)
+	}
+	sig, err := os.ReadFile(file + ".minisig")
+	if err != nil {
+		return errors.New("cannot read " + file + ".minisig")
+	}
+	if _, err := minisign.Verify(pub, msg, sig); err != nil {
+		return err
+	}
+	fmt.Fprintln(e.stdout, "verified "+file+".minisig with key "+pub.ID())
 	return nil
 }

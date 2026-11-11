@@ -3,6 +3,7 @@ package codex_test
 import (
 	"errors"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/qbitdevz/qbit-vault/internal/hosts"
@@ -28,6 +29,9 @@ func TestHookCommandQuoting(t *testing.T) {
 		{"drive path", `C:\Program Files\Q Bit\qbit-vault.exe`, `'C:\Program Files\Q Bit\qbit-vault.exe'`, `& 'C:\Program Files\Q Bit\qbit-vault.exe'`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			if c.name == "drive path" && runtime.GOOS != "windows" {
+				t.Skip("a Windows executable path is only ever written on Windows")
+			}
 			r := newRig(t)
 			r.host = codex.NewWithExe(c.exe)
 			r.apply()

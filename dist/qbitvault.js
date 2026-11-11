@@ -116,11 +116,12 @@ export function run(args, options) {
             child.kill();
             finish({ kind: "timeout" });
         }, options.timeoutMs);
+        const cap = options.maxOutputBytes ?? MAX_OUTPUT_BYTES;
         const chunks = [];
         let size = 0;
         child.stdout?.on("data", (chunk) => {
             size += chunk.length;
-            if (size <= MAX_OUTPUT_BYTES)
+            if (size <= cap)
                 chunks.push(chunk);
         });
         child.on("error", (err) => {
@@ -128,15 +129,17 @@ export function run(args, options) {
         });
         child.on("close", (code) => {
             let json;
-            if (size <= MAX_OUTPUT_BYTES) {
+            let text;
+            if (size <= cap) {
+                text = Buffer.concat(chunks).toString("utf8");
                 try {
-                    json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+                    json = JSON.parse(text);
                 }
                 catch {
                     json = undefined;
                 }
             }
-            finish({ kind: "done", code, json });
+            finish({ kind: "done", code, json, text });
         });
         if (options.stdin !== undefined && child.stdin) {
             child.stdin.on("error", () => { });

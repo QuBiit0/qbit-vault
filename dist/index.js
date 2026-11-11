@@ -1,4 +1,5 @@
 import { completeArguments, createVaultHandler } from "./commands.js";
+import { createGuard } from "./guard.js";
 import { createPasteHandler } from "./paste.js";
 import { loadPatterns } from "./patterns.js";
 import { run } from "./qbitvault.js";
@@ -28,6 +29,11 @@ export default function qbitVaultPi(pi) {
         }
         await status.refresh(ctx, { announce: true });
     });
+    // Output and write guard (output-guard S6). Registered before the footer handler below, so the check
+    // of a result never waits for or depends on the status refresh.
+    const guard = createGuard();
+    pi.on("tool_result", guard.onToolResult);
+    pi.on("tool_call", guard.onToolCall);
     pi.on("tool_result", async (event, ctx) => {
         if (!GRANT_TOOL.test(event.toolName))
             return;

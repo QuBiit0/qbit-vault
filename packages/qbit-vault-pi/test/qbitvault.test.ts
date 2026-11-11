@@ -23,6 +23,12 @@ describe("spawn wrapper", () => {
 		expect(fake.calls()[0]?.argv).toEqual(["grants", "--json"]);
 	});
 
+	it("returns stdout as text, and nothing when it is longer than the cap", async () => {
+		useFake({ hook: { raw: "not json at all" } });
+		expect(await run(["hook"], { timeoutMs: 5000 })).toEqual({ kind: "done", code: 0, json: undefined, text: "not json at all" });
+		expect(await run(["hook"], { timeoutMs: 5000, maxOutputBytes: 5 })).toEqual({ kind: "done", code: 0, json: undefined, text: undefined });
+	});
+
 	it("gives stdin nothing when no value is passed", async () => {
 		const fake = useFake({ grants: ok({ ok: true, grants: [] }) });
 		await runJson(["grants"], { timeoutMs: 5000 });

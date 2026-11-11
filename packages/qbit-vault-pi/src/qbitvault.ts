@@ -13,6 +13,8 @@ export type RunOptions = {
 	/** Kill the child after this many milliseconds. */
 	timeoutMs: number;
 	cwd?: string;
+	/** Largest stdout kept; a longer one is reported as undefined `text` and `json`. Default 1 MiB. */
+	maxOutputBytes?: number;
 };
 
 export type RunResult =
@@ -25,6 +27,8 @@ export type RunResult =
 			code: number | null;
 			/** Parsed stdout when it is one JSON value, otherwise undefined. */
 			json: unknown;
+			/** stdout as text, or undefined when it was longer than the cap. */
+			text: string | undefined;
 	  };
 
 /** The error object of a failed `--json` call. */
@@ -147,25 +151,28 @@ export function run(args: string[], options: RunOptions): Promise<RunResult> {
 			finish({ kind: "timeout" });
 		}, options.timeoutMs);
 
+		const cap = options.maxOutputBytes ?? MAX_OUTPUT_BYTES;
 		const chunks: Buffer[] = [];
 		let size = 0;
 		child.stdout?.on("data", (chunk: Buffer) => {
 			size += chunk.length;
-			if (size <= MAX_OUTPUT_BYTES) chunks.push(chunk);
+			if (size <= cap) chunks.push(chunk);
 		});
 		child.on("error", (err: NodeJS.ErrnoException) => {
 			finish({ kind: err.code === "ENOENT" ? "not_installed" : "failed_to_start" });
 		});
 		child.on("close", (code) => {
 			let json: unknown;
-			if (size <= MAX_OUTPUT_BYTES) {
+			let text: string | undefined;
+			if (size <= cap) {
+				text = Buffer.concat(chunks).toString("utf8");
 				try {
-					json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+					json = JSON.parse(text);
 				} catch {
 					json = undefined;
 				}
 			}
-			finish({ kind: "done", code, json });
+			finish({ kind: "done", code, json, text });
 		});
 
 		if (options.stdin !== undefined && child.stdin) {

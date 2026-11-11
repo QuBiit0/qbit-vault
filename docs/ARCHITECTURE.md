@@ -28,6 +28,8 @@
 │  internal/redact      streaming multi-encoding replacer                       │
 │  internal/prompt      tty / osascript / powershell / zenity / kdialog capture │
 │  internal/audit       hash-chained JSONL                                      │
+│  internal/minisign    Minisign ED verifier + pinned release key (embedded)    │
+│  (tools/release-sign: release signer, not in the binary)                      │
 │  internal/mcp         stdio MCP server over the broker                        │
 │  internal/hook        Claude Code hook handlers (scan, redact, block)         │
 │  internal/hosts       Adapter interface, step runner, receipts; adapters in   │

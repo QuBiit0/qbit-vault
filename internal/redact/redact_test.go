@@ -618,3 +618,16 @@ func TestJSONFormsOfInvalidUTF8AreReplaced(t *testing.T) {
 		}
 	}
 }
+
+func TestEmpty(t *testing.T) {
+	var nilR *Redactor
+	none, _ := New(nil)
+	some, _ := New([]secret.Secret{secret.New("A_KEY", []byte("TESTSECRET_empty_0123456789"))})
+	if !nilR.Empty() || !none.Empty() || some.Empty() {
+		t.Fatal("Empty: nil and no values are empty, a redactor with a value is not")
+	}
+	some.Wipe()
+	if some.Empty() {
+		t.Fatal("a wiped redactor must not read as empty: it fails closed")
+	}
+}

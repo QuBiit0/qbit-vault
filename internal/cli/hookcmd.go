@@ -17,8 +17,10 @@ import (
 // plumbing). Each subcommand reads one hook event as JSON on stdin and writes
 // the protocol JSON on stdout, nothing on stderr; none prompts or uses the
 // network, and a broken hook fails open (exit 0 and a warning), so it does not
-// go through the error reporting of the other commands. Only post-bash,
-// post-read and user-prompt read the vault, and only without prompting.
+// go through the error reporting of the other commands, except that the post
+// hooks withhold the output and pre-write denies the edit when the vault
+// cannot be checked. Only post-bash, post-read, pre-write and user-prompt read
+// the vault, and only without prompting. --host picks the output protocol.
 func newHookCmd(g *globals) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "hook",
@@ -40,10 +42,38 @@ func newHookCmd(g *globals) *cobra.Command {
 		})
 	}
 	add("pre-bash", "PreToolUse on Bash/PowerShell: refuse user-only qbit-vault commands", hook.RunPreBash)
-	add("post-bash", "PostToolUse on Bash/PowerShell: redact stored secret values from the output",
-		func(in io.Reader, out, errOut io.Writer) int { return hook.RunPostBash(in, out, errOut, g.hookSource) })
-	add("post-read", "PostToolUse on Read: redact stored secret values from the file content",
-		func(in io.Reader, out, errOut io.Writer) int { return hook.RunPostRead(in, out, errOut, g.hookSource) })
+	addHost := func(use, short string, run func(in io.Reader, out, errOut io.Writer, host hook.Host) int) {
+		var host string
+		c := &cobra.Command{
+			Use:   use,
+			Short: short,
+			Args:  noArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				h, ok := hook.ParseHost(host)
+				if !ok {
+					return usageError{msg: "--host must be claude, codex or pi"}
+				}
+				if code := run(stdinOf(cmd), cmd.OutOrStdout(), cmd.ErrOrStderr(), h); code != 0 {
+					return exitError{code: code}
+				}
+				return nil
+			},
+		}
+		c.Flags().StringVar(&host, "host", "claude", "output protocol: claude, codex or pi")
+		cmd.AddCommand(c)
+	}
+	addHost("post-bash", "PostToolUse on Bash/PowerShell: redact stored secret values from the output",
+		func(in io.Reader, out, errOut io.Writer, host hook.Host) int {
+			return hook.RunPostWith(in, out, errOut, g.hookSource, host)
+		})
+	addHost("post-read", "PostToolUse on Read, Grep and Glob: redact stored secret values from the result",
+		func(in io.Reader, out, errOut io.Writer, host hook.Host) int {
+			return hook.RunPostWith(in, out, errOut, g.hookSource, host)
+		})
+	addHost("pre-write", "PreToolUse on file writes and edits: refuse content that carries a stored secret value",
+		func(in io.Reader, out, errOut io.Writer, host hook.Host) int {
+			return hook.RunPreWrite(in, out, errOut, g.promptSource, host)
+		})
 	add("user-prompt", "UserPromptSubmit: block a prompt that carries a secret",
 		func(in io.Reader, out, errOut io.Writer) int {
 			return hook.RunUserPrompt(in, out, errOut, g.promptSource)

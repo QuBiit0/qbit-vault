@@ -17,7 +17,7 @@ The `UserPromptSubmit` hook blocks a message that carries the value of any store
 | T1 | S1-S5 | inline | 84926ed | done |
 | T2 | S1-S4 verify | gentle-ai-verify | 84926ed | done |
 | T3 | S2-S4 edge tests | inline | b5b3b35 | done |
-| T4 | release 1.2.1 | parent | see L6 | in progress |
+| T4 | release 1.2.1 | parent | v1.2.1 | done |
 
 ## Log
 
@@ -27,3 +27,4 @@ The `UserPromptSubmit` hook blocks a message that carries the value of any store
 - L4. gentle-ai-verify (Risk: item 2) passed S1-S5; gaps: shaped-token case not exact stdout, no project-layer text test, no text/secret shared-value test, no legacy empty-kind test. Owner: "si" to adding them.
 - L5. T3: TestHookUserPromptTextKindEdges (project-layer text, from inside and outside the repository; text sharing a secret's value; empty-kind record blocks) and exact stdout for the shaped case. Mutation check: skipping every non-`secret` kind fails it (entries made by `set` have an empty kind), and disabling the filter fails it.
 - L6. Picked up from the session that built T1-T3 (owner handoff, 2026-11-11: "Abrí el PR de fix/hook-text-kind contra main y prepará la release"). CHANGELOG [1.2.1] (patch: fixes only, this one and the unreleased grant-note fix of PR #48). The tag is pushed after the merge.
+- L7. Released: PR #50 merged (e34e97c), tag v1.2.1 pushed, release workflow run 43027733438 green, 11 assets including checksums.txt; `qbit-vault update --check` on the owner's machine reports `update available: v1.2.0 -> v1.2.1`. Feature closed.

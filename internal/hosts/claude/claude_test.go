@@ -2,6 +2,7 @@ package claude_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"os"
@@ -345,5 +346,142 @@ func TestNoUserHomeIsAnError(t *testing.T) {
 	r.env.UserHome = ""
 	if res := hosts.Apply(r.env, []hosts.Adapter{r.host}); res[0].Err() == nil {
 		t.Fatal("applied without a user home")
+	}
+}
+
+// hookEntry is one hook command of the written settings.
+type hookEntry struct {
+	event, matcher, status string
+	args                   []string
+}
+
+func readHooks(t *testing.T, doc string) []hookEntry {
+	t.Helper()
+	var s struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Args          []string `json:"args"`
+				StatusMessage string   `json:"statusMessage"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal([]byte(doc), &s); err != nil {
+		t.Fatal(err)
+	}
+	var out []hookEntry
+	for ev, list := range s.Hooks {
+		for _, e := range list {
+			for _, h := range e.Hooks {
+				out = append(out, hookEntry{ev, e.Matcher, h.StatusMessage, h.Args})
+			}
+		}
+	}
+	return out
+}
+
+func countHook(es []hookEntry, event, matcher, sub string) int {
+	n := 0
+	for _, e := range es {
+		if e.event == event && e.matcher == matcher && len(e.args) == 2 && e.args[0] == "hook" && e.args[1] == sub {
+			n++
+		}
+	}
+	return n
+}
+
+// S4 of odd/tasks/output-guard.md: search results are redacted and file
+// writes are guarded, besides the hooks of earlier versions.
+func TestRegistersTheOutputAndWriteGuard(t *testing.T) {
+	r := newRig(t)
+	r.apply()
+	es := readHooks(t, r.read(r.settings()))
+	for _, w := range []struct{ event, matcher, sub string }{
+		{"PreToolUse", "Bash|PowerShell", "pre-bash"},
+		{"PostToolUse", "Bash|PowerShell", "post-bash"},
+		{"PostToolUse", "Read", "post-read"},
+		{"PostToolUse", "Grep|Glob", "post-read"},
+		{"PreToolUse", "Write|Edit|MultiEdit|NotebookEdit", "pre-write"},
+		{"UserPromptSubmit", "", "user-prompt"},
+	} {
+		if n := countHook(es, w.event, w.matcher, w.sub); n != 1 {
+			t.Fatalf("%s %q %s: %d entries\n%s", w.event, w.matcher, w.sub, n, r.read(r.settings()))
+		}
+	}
+	if len(es) != 6 {
+		t.Fatalf("%d hooks, want 6: %+v", len(es), es)
+	}
+}
+
+// A settings file written by the previous version (Read only, no write
+// guard) gets the new hooks added with a snapshot; the old ones stay as they
+// are, and a second run changes nothing.
+func TestUpgradeAddsTheGuardHooksOnce(t *testing.T) {
+	r := newRig(t)
+	r.apply()
+	full := r.read(r.settings())
+	old := full
+	for _, marker := range []string{"qbit-vault search output guard", "qbit-vault hook pre-write"} {
+		var removed bool
+		old, removed = dropHookElement(old, marker)
+		if !removed {
+			t.Fatalf("no element with %q in:\n%s", marker, full)
+		}
+	}
+	r.write(r.settings(), old)
+	before := r.backups()
+	res := r.apply()
+	if !res.Changed() {
+		t.Fatal("upgrade wrote nothing")
+	}
+	if es := readHooks(t, r.read(r.settings())); len(es) != 6 ||
+		countHook(es, "PostToolUse", "Grep|Glob", "post-read") != 1 ||
+		countHook(es, "PostToolUse", "Read", "post-read") != 1 ||
+		countHook(es, "PreToolUse", "Write|Edit|MultiEdit|NotebookEdit", "pre-write") != 1 {
+		t.Fatalf("upgrade result:\n%s", r.read(r.settings()))
+	}
+	if r.backups() <= before {
+		t.Fatal("upgrade took no snapshot")
+	}
+	if r.apply().Changed() {
+		t.Fatal("second apply wrote")
+	}
+}
+
+// dropHookElement removes the hooks array element whose JSON mentions marker.
+func dropHookElement(doc, marker string) (string, bool) {
+	var root map[string]any
+	if json.Unmarshal([]byte(doc), &root) != nil {
+		return doc, false
+	}
+	dropped := false
+	hk := root["hooks"].(map[string]any)
+	for ev, v := range hk {
+		var keep []any
+		for _, el := range v.([]any) {
+			b, _ := json.Marshal(el)
+			if strings.Contains(string(b), marker) {
+				dropped = true
+				continue
+			}
+			keep = append(keep, el)
+		}
+		hk[ev] = keep
+	}
+	out, _ := json.MarshalIndent(root, "", "  ")
+	return string(out) + "\n", dropped
+}
+
+func TestCheckFindsDriftWhenTheGuardHooksAreRemoved(t *testing.T) {
+	r := newRig(t)
+	r.apply()
+	doc := r.read(r.settings())
+	cut, ok := dropHookElement(doc, "qbit-vault hook pre-write")
+	if !ok {
+		t.Fatal("no pre-write hook")
+	}
+	r.write(r.settings(), cut)
+	if got := checks(r); !errors.Is(got["hooks"], hosts.ErrDrift) {
+		t.Fatalf("checks: %v", got)
 	}
 }

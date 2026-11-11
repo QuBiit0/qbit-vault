@@ -4,6 +4,14 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Added
+
+- Output and write guard (`odd/tasks/output-guard.md`). `qbit-vault hook pre-write` denies a file write or edit whose input carries the value of a stored `secret` entry in any encoding (`This edit would write the value of the stored secret NAME to a file, so qbit-vault blocked it. Give the value to the command that needs it with secret_exec instead.`, names only). `post-bash`, `post-read` and `pre-write` take `--host claude|codex|pi` (default `claude`) to pick the output protocol; `codex` answers `{"decision":"block","reason":…}` for a changed or withheld output and a `permissionDecision: deny` for a write. Claude Code: `init` and `sync` now also register `post-read` on `Grep` and `Glob` and `pre-write` on `Write`, `Edit`, `MultiEdit` and `NotebookEdit` (snapshot first, removed by `uninstall`, reported by `doctor`). The Codex and Pi registrations follow in later releases.
+
+### Changed
+
+- The post hooks no longer fail open. With no vault, or nothing to redact, output passes unchanged and nothing is printed, as before. When a vault exists but cannot be checked (a locked passphrase vault, an unreadable vault, a panic, an event over 64 MiB) `post-bash` and `post-read` replace the whole output with `output withheld: qbit-vault could not check it for secrets (<reason>)` (`vault locked`, `output too large` or `internal error`; fixed strings), keeping the shape of the tool result, and `pre-write` denies the edit. Before, a locked passphrase vault let the output through unredacted with a warning. The `user-prompt` hook keeps its old behavior. The agent skill describes both messages and what to do.
+
 ## [1.2.1] - 2026-11-11
 
 A visible `text` entry no longer blocks a prompt, and grant notes ignore other sessions.

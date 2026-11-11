@@ -35,6 +35,15 @@ An `exec` that runs but gets `401`, `403`, "invalid token" or "authentication fa
 
 A background job, a script or a subagent command that uses a credential runs through `secret_exec`, so its output and the notification when it ends are redacted. A job that prints a stored value directly (a plain shell command, not `secret_exec`) makes the host drop its completion notice, and the user sees a block naming the secret.
 
+## When qbit-vault replaces an output or blocks an edit
+
+The host runs qbit-vault over what your built-in tools return and over the files you write, not only over `secret_exec`:
+
+- `[REDACTED:NAME]` in the output of a shell command, a file read or a search is a stored value that was removed. Expected; do not try to recover it.
+- `output withheld: qbit-vault could not check it for secrets (<reason>)` replaces a tool output that could not be checked. The command ran but its output is not shown. Do not retry the same command to see it. With `vault locked`, tell the user to run `qbit-vault unlock` in their own terminal (or call `secret_request`, which unlocks); with `output too large`, ask for less output; with `internal error`, tell the user to run `qbit-vault doctor`. If the command needs a credential, run it through `secret_exec`, which redacts instead of withholding.
+- `This edit would write the value of the stored secret NAME to a file, so qbit-vault blocked it` means the content you tried to write holds a stored value. Do not write it in any form. Put the name where the value would go (an environment variable the program reads, or a placeholder) and run the command that needs the value with `secret_exec`.
+- `qbit-vault could not check this edit for secrets (<reason>)` blocks a write the same way when the vault cannot be checked. With `vault locked`, tell the user to run `qbit-vault unlock`, then write again.
+
 ## Rules
 
 - Never print, echo, copy, encode or write a secret value, and never ask the user to paste one into the chat.

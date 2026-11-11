@@ -242,8 +242,8 @@ func TestAgentExecAndListNeverAskThePassphrase(t *testing.T) {
 	}
 }
 
-// Hooks never prompt: pre-bash does not open the vault, the others fail open
-// with a fixed note.
+// Hooks never prompt: pre-bash does not open the vault, post-bash withholds
+// the output and user-prompt fails open, each with a fixed note.
 func TestHooksNeverAskThePassphrase(t *testing.T) {
 	w := lockedWorld(t)
 	f := withBackend(t, answers(val(fxPass), val(fxPass), val(fxPass)))
@@ -251,7 +251,7 @@ func TestHooksNeverAskThePassphrase(t *testing.T) {
 	if code, out, errs := w.run(pre, "hook", "pre-bash"); code != 0 || out != "" || errs != "" {
 		t.Fatalf("pre-bash code=%d out=%q err=%q", code, out, errs)
 	}
-	if code, out, errs := w.run(postBashEvent(t, "k=v"), "hook", "post-bash"); code != 0 || out != wantHookLockedPost || errs != "" {
+	if code, out, errs := w.run(postBashEvent(t, "k=v"), "hook", "post-bash"); code != 0 || out != wantWithheldPost("vault locked") || errs != "" {
 		t.Fatalf("post-bash code=%d out=%q err=%q", code, out, errs)
 	}
 	if code, out, errs := w.run(`{"hook_event_name":"UserPromptSubmit","prompt":"hi"}`, "hook", "user-prompt"); code != 0 || out != wantHookLockedPrompt || errs != "" {

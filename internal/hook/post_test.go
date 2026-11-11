@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -89,7 +88,6 @@ func runPrompt(t testing.TB, src Source, in []byte) (string, string, int) {
 }
 
 const (
-	wantLockedPost   = `{"systemMessage":"qbit-vault could not check this output for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"qbit-vault could not check this output for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
 	wantLockedPrompt = `{"systemMessage":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
 )
 
@@ -185,33 +183,6 @@ func TestPostNothingToRedactIsSilent(t *testing.T) {
 	out, _, code := runPost(t, func() (*redact.Redactor, error) { return nil, nil }, postEvent(t, "posttooluse_bash.json", "x "+tsPlain))
 	if code != 0 || out != "" {
 		t.Fatalf("out=%q code=%d", out, code)
-	}
-}
-
-func TestPostFailsOpen(t *testing.T) {
-	in := postEvent(t, "posttooluse_bash.json", "KEY="+tsPlain)
-	cases := []struct {
-		name string
-		src  Source
-		in   []byte
-		want string
-	}{
-		{"locked", (&source{err: ErrLocked}).get, in, wantLockedPost},
-		{"locked, wrapped", (&source{err: errors.Join(errors.New("x"), ErrLocked)}).get, in, wantLockedPost},
-		{"other error", (&source{err: errors.New("boom " + tsPlain)}).get, in, strings.Replace(wantWarn, "PreToolUse", "PostToolUse", 1)},
-		{"panic", func() (*redact.Redactor, error) { panic(tsPlain) }, in, strings.Replace(wantWarn, "PreToolUse", "PostToolUse", 1)},
-		{"garbage", newSource().get, []byte("{nope"), strings.Replace(wantWarn, "PreToolUse", "PostToolUse", 1)},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			out, errb, code := runPost(t, c.src, c.in)
-			if code != 0 || errb != "" || out != c.want {
-				t.Fatalf("out=%q err=%q code=%d", out, errb, code)
-			}
-			if strings.Contains(out, "TESTSECRET_") {
-				t.Fatal("value leaked")
-			}
-		})
 	}
 }
 

@@ -204,3 +204,20 @@ func TestTheAdaptersInstallTheSkillWhereEachAgentReadsIt(t *testing.T) {
 		t.Fatal("pi got a second copy that would collide with ~/.agents/skills")
 	}
 }
+
+// S7 of odd/tasks/output-guard.md: the model reads the two messages of the
+// output and write guard and must know what to do about each.
+func TestSkillExplainsTheWithheldOutputAndTheWriteBlock(t *testing.T) {
+	s := string(skill.Content)
+	for _, want := range []string{
+		"output withheld: qbit-vault could not check it for secrets",
+		"qbit-vault could not check this edit for secrets",
+		"This edit would write the value of the stored secret",
+		"`qbit-vault unlock`",
+		"`secret_exec`",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("skill does not mention %q", want)
+		}
+	}
+}

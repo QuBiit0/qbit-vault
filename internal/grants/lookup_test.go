@@ -101,3 +101,16 @@ func TestLookupDoesNotSpendAOnceGrant(t *testing.T) {
 		t.Fatalf("a spent once grant is still found: %v", g)
 	}
 }
+
+func TestAnotherSessionsGrantOfAnEarlierRecordSaysNothing(t *testing.T) {
+	for _, sc := range []Scope{ScopeSession, ScopeOnce} {
+		s := &Store{}
+		mustAdd(t, s, Request{Name: "A_KEY", Layer: GlobalLayer, Scope: sc, Session: sessB, RecordID: "old"}, t0)
+		if g, why := Lookup(s, "A_KEY", GlobalLayer, testRec, false, sessA, "", t0); g != nil || why != WhyNone {
+			t.Errorf("%s Lookup: %v %q", sc, g, why)
+		}
+		if d, _ := Check(s, "A_KEY", GlobalLayer, testRec, false, sessA, "", t0); d.Allowed || d.Why != WhyNone {
+			t.Errorf("%s Check: %+v", sc, d)
+		}
+	}
+}

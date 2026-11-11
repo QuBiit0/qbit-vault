@@ -311,14 +311,18 @@ func covers(g Grant, layer string, sensitive bool, session, cwd string) bool {
 }
 
 // explain says why no live grant applies although one is there, over a store
-// that is already purged (or filtered by live).
-func explain(s *Store, name, layer, recordID string, sensitive bool, live func(Grant) bool) Why {
+// that is already purged (or filtered by live). A session or once grant of
+// another session says nothing: it would not apply even for this record.
+func explain(s *Store, name, layer, recordID string, sensitive bool, session string, live func(Grant) bool) Why {
 	if recordID == "" || sensitive {
 		return WhyNone
 	}
 	why := WhyNone
 	for _, g := range s.Grants {
 		if g.Name != name || g.Layer != layer || !live(g) {
+			continue
+		}
+		if g.Scope != ScopeProject && (session == "" || g.Session != session) {
 			continue
 		}
 		switch {
@@ -360,7 +364,7 @@ func Check(s *Store, name, layer, recordID string, sensitive bool, session, cwd 
 			return Decision{Allowed: true, Scope: g.Scope, GrantID: g.ID, Once: &taken}, true
 		}
 	}
-	why := explain(s, name, layer, recordID, sensitive, func(Grant) bool { return true })
+	why := explain(s, name, layer, recordID, sensitive, session, func(Grant) bool { return true })
 	return Decision{Err: ErrGrantRequired, Why: why}, mutated
 }
 
@@ -386,7 +390,7 @@ func Lookup(s *Store, name, layer, recordID string, sensitive bool, session, cwd
 	if best != nil {
 		return best, WhyNone
 	}
-	return nil, explain(s, name, layer, recordID, sensitive, func(g Grant) bool { return !expired(g.ExpiresAt, now) })
+	return nil, explain(s, name, layer, recordID, sensitive, session, func(g Grant) bool { return !expired(g.ExpiresAt, now) })
 }
 
 // Restore undoes the consumption of a once grant that Check returned in

@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+### Fixed
+
+- A `session` or `once` grant of another session no longer makes `secret_list` and the `grant_required` message say the grant is for an earlier value of the entry: it would not apply even for the current value, so they say nothing about it. `secret_list` now refuses, as `secret_exec` does, when the working directory cannot be resolved, instead of comparing grants against the unresolved path.
+
 ## [1.2.0] - 2026-11-11
 
 The Pi / Gentle Shell extension, and a blocked message that says what matched and what to do (#45).

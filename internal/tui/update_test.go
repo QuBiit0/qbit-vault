@@ -176,3 +176,15 @@ func TestUpdateFailedRecheckKeepsKnownReleaseAndSaysSo(t *testing.T) {
 		t.Errorf("a failed re-check shows the error:\n%s", m.View())
 	}
 }
+
+func TestUpdateSuccessfulRecheckShowsTheNewResult(t *testing.T) {
+	b := newReady()
+	b.update = newer
+	m := pressAll(opened(newModelWith(b, tui.Options{})), digit('7'))
+	b.update = tui.UpdateInfo{Current: "1.1.0", Latest: "v1.1.0"}
+	m = pressAll(m, runeKey('c'))
+	wantView(t, m, "current 1.1.0", "up to date")
+	if v := m.View(); strings.Contains(v, "update available") || strings.Contains(v, "update now") || strings.Contains(v, "could not re-check") {
+		t.Errorf("a successful re-check kept the old result:\n%s", v)
+	}
+}

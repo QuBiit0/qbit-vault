@@ -4,6 +4,10 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-11
+
+The Pi / Gentle Shell extension, and a blocked message that says what matched and what to do (#45).
+
 ### Fixed
 
 - A message blocked by the `user-prompt` hook now says what matched and what to do (#45). The reason names every stored secret whose value is in the message (name only, sorted, at most 5 then `and N more`; a `[REDACTED:X]` already in the text is not reported) or the kind of well-known shape (GitHub token, AWS access key, Slack token, JWT, ...), never the text, and ends with fixed advice: store it with `qbit-vault set NAME`, or, when a background job or another agent's report printed it, run the command through `secret_exec`. The block itself stays: the host cannot rewrite a prompt, and letting it through would hand the value to the model. The agent skill now tells the model to run background jobs, scripts and subagent commands that use a credential through `secret_exec`, so their output and completion notice are redacted.

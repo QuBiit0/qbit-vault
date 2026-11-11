@@ -15,10 +15,11 @@ The `UserPromptSubmit` hook blocks a whole message that carries a stored value o
 
 | ID | Specs | Route | Commit | Status |
 |----|-------|-------|--------|--------|
-| T1 | S2-S6 | worker | | done (uncommitted) |
-| T2 | review, PR, CI, merge, reply on #45, release 1.2.0 | parent | | pending |
+| T1 | S2-S6 | worker | bcb3b2b, d686b57 | done |
+| T2 | review, PR, CI, merge, reply on #45, release 1.2.0 | parent | PR #47 | in progress |
 
 ## Log
 
 - L1. Issue #45, "UserPromptSubmit hook blocks harness-generated notifications, so the agent never receives the event" (QuBiit0, 2026-11-10). Owner: "corrige el bug o issue reportado tambien", then "haz todo hasta finalizar ... te autorizo a todo".
 - L2. T1 done, uncommitted: user-prompt reasons name the stored entries (derived from the redacted output, token count above the input's) or the shape kind, both ending in the S4 advice (`BlockAdvice`); `BlockStoredReason`/`BlockShapeReason` replaced by `storedReason`/`shapeReason`; skill section "Background jobs, scripts and subagents"; AGENT_INTEGRATIONS, CLI, CHANGELOG updated; THREAT_MODEL L34 wording unchanged (still accurate).
+- L3. Committed bcb3b2b. Self-review found the mark regex took any text up to `]` as a name (`[REDACTED:typed_text` + value put `typed_text[REDACTED:API_KEY` in the reason): now held to the vault's name syntax, RED test first (d686b57). Native assess: medium, reviewDue false. PR #47 opened; CHANGELOG [1.2.0] heading added in the same PR (as for 1.1.0).

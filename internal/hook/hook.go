@@ -11,7 +11,6 @@
 package hook
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -32,9 +31,10 @@ const FailOpenWarning = "qbit-vault hook failed; the command ran without its che
 // with a warning that names the fix.
 var ErrLocked = errors.New("vault locked")
 
-// lockedWarning is the fail-open text per event when the vault is locked.
+// lockedWarning is the fail-open text per event when the vault is locked. The
+// post and pre-write hooks do not fail open any more: they withhold or deny
+// (guard.go).
 var lockedWarning = map[string]string{
-	postToolUse:      "qbit-vault could not check this output for secrets (vault locked); run 'qbit-vault unlock'",
 	userPromptSubmit: "qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'",
 }
 
@@ -87,15 +87,7 @@ func runEvent(in io.Reader, out io.Writer, eventName string, limit int64, h Hand
 	if err != nil {
 		o = failOpen(eventName, err)
 	}
-	if o != nil {
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		enc.SetEscapeHTML(false)
-		if enc.Encode(o) == nil {
-			_, _ = out.Write(buf.Bytes())
-		}
-	}
-	return 0
+	return emit(out, o)
 }
 
 func safely(in io.Reader, limit int64, h Handler) (o *Output, err error) {

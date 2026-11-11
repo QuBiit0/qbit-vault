@@ -437,3 +437,9 @@ func utf16Form(b []byte, bigEndian bool) []byte {
 	}
 	return out
 }
+
+// Empty reports whether the redactor has nothing to redact. A wiped redactor
+// is not empty: it fails closed, so callers must not treat it as "all clear".
+func (r *Redactor) Empty() bool {
+	return r == nil || (r.s != nil && !r.s.wiped && len(r.s.pats) == 0)
+}

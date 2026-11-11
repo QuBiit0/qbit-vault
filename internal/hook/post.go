@@ -3,8 +3,8 @@ package hook
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
+	"sort"
 
 	"github.com/qbitdevz/qbit-vault/internal/redact"
 )
@@ -20,61 +20,15 @@ const (
 // redactor when done.
 type Source func() (*redact.Redactor, error)
 
-// RunPostBash is `qbit-vault hook post-bash` (Bash and PowerShell).
-func RunPostBash(in io.Reader, out, _ io.Writer, src Source) int {
-	return runEvent(in, out, postToolUse, maxPostEvent, PostTool(src))
+// RunPostBash is `qbit-vault hook post-bash` (Bash and PowerShell) with the claude
+// protocol; the command picks the host with --host.
+func RunPostBash(in io.Reader, out, errOut io.Writer, src Source) int {
+	return RunPostWith(in, out, errOut, src, HostClaude)
 }
 
-// RunPostRead is `qbit-vault hook post-read`.
-func RunPostRead(in io.Reader, out, _ io.Writer, src Source) int {
-	return runEvent(in, out, postToolUse, maxPostEvent, PostTool(src))
-}
-
-// PostTool redacts stored secret values from a tool result before the model
-// sees it (AGENTS.md invariant 5). It rewrites every string inside
-// tool_response and leaves keys, numbers, booleans and nesting alone, so the
-// replacement has exactly the shape of the original whatever the tool (the
-// host silently keeps the original when the shape differs). With nothing to
-// redact it prints nothing; with no text in the result it never calls src.
-func PostTool(src Source) Handler {
-	return func(ev Event) (*Output, error) {
-		v, ok, err := decode(ev.ToolResponse)
-		if err != nil || !ok || !hasText(v) {
-			return nil, err
-		}
-		red, err := src()
-		if err != nil || red == nil {
-			return nil, err
-		}
-		defer red.Wipe()
-		n, failed := 0, false
-		v = mapStrings(v, func(s string) string {
-			r, c := red.Bytes([]byte(s))
-			if r == nil { // a wiped redactor fails closed
-				failed = true
-				return s
-			}
-			n += c
-			return string(r)
-		})
-		if failed {
-			return nil, errRedact
-		}
-		if n == 0 {
-			return nil, nil
-		}
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		enc.SetEscapeHTML(false)
-		if err := enc.Encode(v); err != nil {
-			return nil, err
-		}
-		return &Output{Specific: &Specific{
-			HookEventName:     postToolUse,
-			AdditionalContext: fmt.Sprintf("qbit-vault redacted %d occurrence(s) of stored secrets", n),
-			UpdatedToolOutput: bytes.TrimSpace(buf.Bytes()),
-		}}, nil
-	}
+// RunPostRead is `qbit-vault hook post-read` with the claude protocol.
+func RunPostRead(in io.Reader, out, errOut io.Writer, src Source) int {
+	return RunPostWith(in, out, errOut, src, HostClaude)
 }
 
 type hookError string
@@ -131,8 +85,14 @@ func mapStrings(v any, f func(string) string) any {
 			x[i] = mapStrings(e, f)
 		}
 	case map[string]any:
-		for k, e := range x {
-			x[k] = mapStrings(e, f)
+		// Sorted keys: the order f sees the strings in is deterministic.
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			x[k] = mapStrings(x[k], f)
 		}
 	}
 	return v

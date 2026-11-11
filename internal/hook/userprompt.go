@@ -100,23 +100,27 @@ func matchedNames(in string, out []byte) []string {
 }
 
 func storedReason(names []string) string {
-	var what string
+	return "This message contains the value of " + namesPhrase(names) + ", so qbit-vault blocked it. " + BlockAdvice
+}
+
+// namesPhrase is "a stored secret", "the stored secret A" or "the stored
+// secrets A, B and N more" (at most maxNamed names).
+func namesPhrase(names []string) string {
 	switch len(names) {
 	case 0:
-		what = "a stored secret"
+		return "a stored secret"
 	case 1:
-		what = "the stored secret " + names[0]
-	default:
-		shown := names
-		if len(names) > maxNamed {
-			shown = names[:maxNamed]
-		}
-		what = "the stored secrets " + strings.Join(shown, ", ")
-		if more := len(names) - len(shown); more > 0 {
-			what += " and " + strconv.Itoa(more) + " more"
-		}
+		return "the stored secret " + names[0]
 	}
-	return "This message contains the value of " + what + ", so qbit-vault blocked it. " + BlockAdvice
+	shown := names
+	if len(names) > maxNamed {
+		shown = names[:maxNamed]
+	}
+	what := "the stored secrets " + strings.Join(shown, ", ")
+	if more := len(names) - len(shown); more > 0 {
+		what += " and " + strconv.Itoa(more) + " more"
+	}
+	return what
 }
 
 func shapeReason(label string) string {

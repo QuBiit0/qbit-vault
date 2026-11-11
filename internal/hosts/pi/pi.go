@@ -41,7 +41,7 @@ const Name = "pi"
 // only the built package. A test keeps ExtensionVersion equal to the version
 // in packages/qbit-vault-pi/package.json.
 const (
-	ExtensionVersion = "0.1.0"
+	ExtensionVersion = "0.2.0"
 	ExtensionSource  = "git:github.com/qbitdevz/qbit-vault@pi-v" + ExtensionVersion
 )
 

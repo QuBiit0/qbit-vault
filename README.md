@@ -140,7 +140,7 @@ Every agent gets the MCP server and the `qbit-vault` skill; only Claude Code als
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | yes | `~/.claude/skills` | `pre-bash`, `post-bash`, `post-read`, `user-prompt` | `Read` / `Edit` of the vault directory | `post-*` redact tool output; `user-prompt` blocks a prompt that carries a secret; `pre-bash` keeps user-only commands out of the agent's shell |
 | Codex | yes | `~/.agents/skills` | no | no | `secret_exec` output is already redacted |
-| Pi / Gentle Shell | yes | `~/.agents/skills` (shared with Codex) | no | no | via `mcp.json`; the `qbit-vault-pi` extension (`/vault` commands, footer status, paste interception; [docs](docs/GENTLE_SHELL_EXTENSION.md)) installs from a git tag, not npm: `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.1.0` (Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.1.0`); `init` prints that line for you to run |
+| Pi / Gentle Shell | yes | `~/.agents/skills` (shared with Codex) | no | no | via `mcp.json`; the `qbit-vault-pi` extension (`/vault` commands, footer status, paste interception; [docs](docs/GENTLE_SHELL_EXTENSION.md)) installs from a git tag, not npm: `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0` (Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.0`); `init` prints that line for you to run |
 
 Choose agents yourself with `qbit-vault init --agents claude-code,codex,pi` (or `--agents none`). OpenCode is not supported. Every config file an install touches is backed up first, and `qbit-vault uninstall` reverts it. Per-agent files and the hook protocol: [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md).
 

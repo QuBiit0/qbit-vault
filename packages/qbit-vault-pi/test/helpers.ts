@@ -13,7 +13,7 @@ export const FIXTURE = ["TESTSECRET_", "ghp", "_0123456789", "abcdefghijklmnopqr
 export const SESSION_ID = "11111111-2222-3333-4444-555555555555";
 export const SESSION = `pi:${SESSION_ID}`;
 
-export type Canned = Record<string, { code?: number; stdout?: unknown; raw?: string }>;
+export type Canned = Record<string, { code?: number; stdout?: unknown; raw?: string; mode?: "redact" }>;
 export type Call = { argv: string[]; stdin: string };
 
 const dirs: string[] = [];

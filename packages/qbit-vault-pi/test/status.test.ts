@@ -234,7 +234,8 @@ describe("registered handlers", () => {
 		useFake({});
 		const harness = mockPi();
 		expect(harness.handlerCount("session_start")).toBe(1);
-		expect(harness.handlerCount("tool_result")).toBe(1);
+		expect(harness.handlerCount("tool_result")).toBe(2); // the output guard, then the footer
+		expect(harness.handlerCount("tool_call")).toBe(1);
 		expect(harness.handlerCount("session_shutdown")).toBe(1);
 		expect(harness.handlerCount("input")).toBe(1);
 	});

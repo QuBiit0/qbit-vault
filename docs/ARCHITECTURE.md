@@ -259,4 +259,4 @@ remote/          device.enc, base.enc (only when the vault syncs)
 keys/retired.enc master keys replaced by rekey, revocation or join (keeps old backups restorable)
 ```
 
-`init` adds the whole directory to Claude Code's `permissions.deny` (Read and Edit rules). Codex and Pi have no such registration: the Codex adapter writes only its MCP table and the Pi adapter only its MCP entry, so for those two the control is that no secret is ever in the agent's environment.
+`init` adds the whole directory to Claude Code's `permissions.deny` (Read and Edit rules). Codex and Pi have no such registration: the Codex adapter writes its MCP table and its two guard hooks (`hooks.json`) and the Pi adapter only its MCP entry, so for those two the control is that no secret is ever in the agent's environment.

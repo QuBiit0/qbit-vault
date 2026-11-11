@@ -16,6 +16,7 @@ import (
 	"github.com/qbitdevz/qbit-vault/internal/doctor"
 	"github.com/qbitdevz/qbit-vault/internal/exitcode"
 	"github.com/qbitdevz/qbit-vault/internal/hosts"
+	"github.com/qbitdevz/qbit-vault/internal/hosts/codex"
 	"github.com/qbitdevz/qbit-vault/internal/hosts/pi"
 	"github.com/qbitdevz/qbit-vault/internal/keychain"
 	"github.com/qbitdevz/qbit-vault/internal/prompt"
@@ -175,7 +176,10 @@ func newInit(g *globals) *cobra.Command {
 					if _, err := fmt.Fprintln(out, hostLine(r, body.Hosts[i])); err != nil {
 						return err
 					}
-					if hint := extensionHint(r); hint != "" {
+					for _, hint := range []string{extensionHint(r), codexTrustHint(r)} {
+						if hint == "" {
+							continue
+						}
 						if _, err := fmt.Fprintln(out, hint); err != nil {
 							return err
 						}
@@ -217,6 +221,22 @@ func extensionHint(r hosts.Result) string {
 		return ""
 	}
 	return "  Pi extension (optional, run it yourself): " + pi.ExtensionInstallCommand + "\n  with plain Pi: " + pi.ExtensionInstallCommandPi
+}
+
+// codexTrustHint tells the user to trust the hooks just written: Codex skips
+// a new or changed hook until it is reviewed in /hooks, so without this step
+// the output guard would silently not run. Text only; qbit-vault never writes
+// Codex's trust state.
+func codexTrustHint(r hosts.Result) string {
+	if r.Host != codex.Name || r.Err() != nil {
+		return ""
+	}
+	for _, s := range r.Steps {
+		if s.Name == "hooks" && s.Changed {
+			return "  Codex skips new hooks until you trust them: open /hooks in Codex and trust the qbit-vault hooks."
+		}
+	}
+	return ""
 }
 
 // hostLine is the human line of one host.

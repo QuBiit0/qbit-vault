@@ -2,9 +2,11 @@ package hook
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/qbitdevz/qbit-vault/internal/redact"
 )
@@ -131,5 +133,49 @@ func TestParseHost(t *testing.T) {
 	}
 	if _, ok := ParseHost("vim"); ok {
 		t.Fatal("vim accepted")
+	}
+}
+
+// S5: a Codex block above the model-visible limit is cut after the redaction,
+// on a character boundary and never inside a [REDACTED:...] marker, and ends
+// with the fixed line. Every alignment of the cut against the markers runs.
+func TestCodexBlockIsTruncatedAfterRedaction(t *testing.T) {
+	const line = "\n[output truncated by qbit-vault]"
+	for _, pad := range []string{"", "é", "日本", "😀"} {
+		for shift := 0; shift < 24; shift++ {
+			out := strings.Repeat("x", shift) + pad + strings.Repeat(tsPlain+" "+pad+" ", 2000)
+			ev := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":` + plainJSON(out) + `}`
+			var got, errb bytes.Buffer
+			if code := RunPostWith(strings.NewReader(ev), &got, &errb, newSource().get, HostCodex); code != 0 || errb.Len() != 0 {
+				t.Fatalf("code=%d err=%q", code, errb.String())
+			}
+			var o struct{ Decision, Reason string }
+			if err := json.Unmarshal(got.Bytes(), &o); err != nil || o.Decision != "block" {
+				t.Fatalf("answer %q: %v", got.String(), err)
+			}
+			if len(o.Reason) > CodexReasonLimit || !strings.HasSuffix(o.Reason, line) || len(o.Reason) < CodexReasonLimit-64 {
+				t.Fatalf("pad=%q shift=%d: reason is %d bytes, tail %q", pad, shift, len(o.Reason), o.Reason[max(0, len(o.Reason)-60):])
+			}
+			body := strings.TrimSuffix(o.Reason, line)
+			if !utf8.ValidString(body) || strings.Contains(o.Reason, "TESTSECRET_") {
+				t.Fatalf("pad=%q shift=%d: invalid text or leak", pad, shift)
+			}
+			if strings.Count(body, "[REDACTED:") != strings.Count(body, "[REDACTED:API_KEY]") || strings.HasSuffix(body, "[") || strings.HasSuffix(body, "[REDACTED") {
+				t.Fatalf("pad=%q shift=%d: a marker was split: %q", pad, shift, body[max(0, len(body)-40):])
+			}
+		}
+	}
+}
+
+// A redacted output under the limit is not touched, and neither is a withheld
+// one.
+func TestCodexBlockUnderTheLimitIsNotCut(t *testing.T) {
+	out := strings.Repeat("y", CodexReasonLimit-100) + tsPlain
+	ev := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":` + plainJSON(out) + `}`
+	var got bytes.Buffer
+	RunPostWith(strings.NewReader(ev), &got, &bytes.Buffer{}, newSource().get, HostCodex)
+	want := `{"decision":"block","reason":"` + strings.Repeat("y", CodexReasonLimit-100) + `[REDACTED:API_KEY]"}` + "\n"
+	if got.String() != want {
+		t.Fatalf("got %d bytes: %q", got.Len(), got.String()[len(got.String())-80:])
 	}
 }

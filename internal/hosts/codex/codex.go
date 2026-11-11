@@ -89,7 +89,7 @@ func (a *Adapter) executable() (string, error) {
 	return exe, nil
 }
 
-// Steps lists mcp and skill.
+// Steps lists mcp, hooks and skill, in that order.
 func (a *Adapter) Steps(hosts.Env) []hosts.Step {
 	prepare := func(env hosts.Env) (path, block string, err error) {
 		if env.UserHome == "" {
@@ -123,7 +123,7 @@ func (a *Adapter) Steps(hosts.Env) []hosts.Step {
 			}
 			return hosts.CheckTOML(p, table, b)
 		},
-	}, skill.Step(Name, skill.AgentsPath)}
+	}, a.hooksStep(), skill.Step(Name, skill.AgentsPath)}
 }
 
 // mcpBlock is the text of our table. QBIT_VAULT_HOME is set only for a vault

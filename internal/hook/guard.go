@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"sort"
+	"strings"
+	"unicode/utf8"
 )
 
 // Host selects the output protocol of the post and pre-write hooks
@@ -32,6 +34,16 @@ func ParseHost(s string) (Host, bool) {
 	}
 	return "", false
 }
+
+// CodexReasonLimit is the most bytes of a Codex block reason. Codex shows the
+// model about 2,500 tokens of one hook message and spills the rest to a file
+// in its temp directory (https://learn.chatgpt.com/docs/hooks.md § Large hook
+// output); at about 4 bytes a token that is 10,000 bytes, and the limit sits
+// below it for text that tokenizes worse.
+const CodexReasonLimit = 8000
+
+// truncatedLine ends a reason cut at the limit.
+const truncatedLine = "\n[output truncated by qbit-vault]"
 
 // The reasons a check can fail. They are fixed strings: an error text could
 // carry a value.
@@ -192,7 +204,7 @@ func postOversize(src Source, host Host) (o *Output) {
 // redactedPost is the answer when the output changed.
 func redactedPost(v any, n int, host Host) *Output {
 	if host == HostCodex {
-		return &Output{Decision: "block", Reason: plainText(v)}
+		return &Output{Decision: "block", Reason: cutReason(plainText(v))}
 	}
 	return &Output{Specific: &Specific{
 		HookEventName:     postToolUse,
@@ -303,6 +315,27 @@ func plainText(v any) string {
 		return s
 	}
 	return string(encodeJSON(v))
+}
+
+// cutReason limits a Codex reason to CodexReasonLimit bytes with the fixed
+// truncation line. It runs on the redacted text, so the cut cannot expose a
+// value, and it backs up to a character boundary and out of a
+// [REDACTED:NAME] marker, so no half marker is left behind.
+func cutReason(s string) string {
+	if len(s) <= CodexReasonLimit {
+		return s
+	}
+	cut := CodexReasonLimit - len(truncatedLine)
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	const marker = "[REDACTED:"
+	if i := strings.LastIndexByte(s[:cut], '['); i >= 0 && !strings.Contains(s[i:cut], "]") {
+		if tail := s[i:cut]; strings.HasPrefix(marker, tail) || strings.HasPrefix(tail, marker) {
+			cut = i
+		}
+	}
+	return s[:cut] + truncatedLine
 }
 
 func encodeJSON(v any) json.RawMessage {

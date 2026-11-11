@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 	"unicode/utf16"
+
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 const (
@@ -168,6 +171,94 @@ func TestHookUserPromptBlocksStoredValueWithoutEchoing(t *testing.T) {
 	code, out, errs := w.run(`{"hook_event_name":"UserPromptSubmit","prompt":"fix the build"}`, "hook", "user-prompt")
 	if code != 0 || errs != "" || out != "" {
 		t.Fatalf("clean: code=%d out=%q err=%q", code, out, errs)
+	}
+}
+
+// putText stores a visible (`kind: text`) global entry, as a `text` field of
+// `secret_request` does.
+func (w *world) putText(name, value string) {
+	w.t.Helper()
+	w.putKind(vault.Global(), name, value, "text")
+}
+
+// putKind stores an entry of this kind in layer; an empty kind is a record
+// written before kinds existed.
+func (w *world) putKind(layer vault.Layer, name, value, kind string) {
+	w.t.Helper()
+	g := &globals{getenv: envFrom(nil), home: w.home}
+	s, err := g.openSession()
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	defer s.close()
+	if err := s.v.Put(layer, name, vault.Record{Value: secret.New(name, []byte(value)), Kind: kind}); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+func TestHookUserPromptLetsTextEntriesThrough(t *testing.T) {
+	const url = "TESTSECRET_https://dokploy.example.test"
+	const shaped = "ghp_TESTSECRETtextshaped0123456789abcdefgh"
+	w := hookWorld(t)
+	w.putText("PANEL_URL", url)
+	w.putText("SHAPED_TEXT", shaped)
+	prompt := func(p string) (int, string, string) {
+		ev, _ := json.Marshal(map[string]any{"hook_event_name": "UserPromptSubmit", "prompt": p})
+		return w.run(string(ev), "hook", "user-prompt")
+	}
+	for _, p := range []string{"deploy to " + url, "basic " + base64.StdEncoding.EncodeToString([]byte(url))} {
+		if code, out, errs := prompt(p); code != 0 || errs != "" || out != "" {
+			t.Fatalf("text only %q: code=%d out=%q err=%q", p, code, out, errs)
+		}
+	}
+	code, out, errs := prompt("deploy to " + url + " with " + hkA)
+	if code != 0 || errs != "" || out != fmt.Sprintf(wantHookBlockFmt, "API_KEY") {
+		t.Fatalf("text and secret: code=%d out=%q err=%q", code, out, errs)
+	}
+	noFixtures(t, "hook output", out+errs)
+	wantShaped := strings.Replace(fmt.Sprintf(wantHookBlockFmt, "X"), "contains the value of the stored secret X,", "looks like it contains a GitHub token,", 1)
+	code, out, errs = prompt("token " + shaped)
+	if code != 0 || errs != "" || out != wantShaped {
+		t.Fatalf("shaped text: code=%d out=%q err=%q", code, out, errs)
+	}
+	// Output redaction still covers a text entry.
+	code, out, errs = w.run(postBashEvent(t, "url="+url), "hook", "post-bash")
+	if code != 0 || errs != "" || out != postBashWant(t, "url=[REDACTED:PANEL_URL]", 1) {
+		t.Fatalf("post-bash: code=%d out=%q err=%q", code, out, errs)
+	}
+}
+
+func TestHookUserPromptTextKindEdges(t *testing.T) {
+	const projURL = "TESTSECRET_https://project.example.test"
+	const legacy = "TESTSECRET_legacy_kindless_0123456789"
+	w := hookWorld(t)
+	layer, err := vault.ProjectLayer(w.repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.putKind(layer, "PROJECT_URL", projURL, "text")
+	w.putText("SAME_AS_KEY", hkA)
+	w.putKind(vault.Global(), "LEGACY_KEY", legacy, "")
+	prompt := func(p string) (int, string, string) {
+		ev, _ := json.Marshal(map[string]any{"hook_event_name": "UserPromptSubmit", "prompt": p})
+		return w.run(string(ev), "hook", "user-prompt")
+	}
+	for _, dir := range []func(){w.inRepo, w.outRepo} {
+		dir()
+		if code, out, errs := prompt("open " + projURL); code != 0 || errs != "" || out != "" {
+			t.Fatalf("project text: code=%d out=%q err=%q", code, out, errs)
+		}
+	}
+	// A secret entry with the same value as a text entry still blocks, by its own name.
+	code, out, errs := prompt("key " + hkA)
+	if code != 0 || errs != "" || out != fmt.Sprintf(wantHookBlockFmt, "API_KEY") {
+		t.Fatalf("shared value: code=%d out=%q err=%q", code, out, errs)
+	}
+	noFixtures(t, "hook output", out+errs)
+	// A record with no kind is a secret.
+	code, out, errs = prompt("legacy " + legacy)
+	if code != 0 || errs != "" || out != fmt.Sprintf(wantHookBlockFmt, "LEGACY_KEY") || strings.Contains(out, legacy) {
+		t.Fatalf("legacy: code=%d out=%q err=%q", code, out, errs)
 	}
 }
 

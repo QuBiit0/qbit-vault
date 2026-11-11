@@ -46,7 +46,7 @@ func newHookCmd(g *globals) *cobra.Command {
 		func(in io.Reader, out, errOut io.Writer) int { return hook.RunPostRead(in, out, errOut, g.hookSource) })
 	add("user-prompt", "UserPromptSubmit: block a prompt that carries a secret",
 		func(in io.Reader, out, errOut io.Writer) int {
-			return hook.RunUserPrompt(in, out, errOut, g.hookSource)
+			return hook.RunUserPrompt(in, out, errOut, g.promptSource)
 		})
 	return cmd
 }
@@ -61,6 +61,18 @@ func newHookCmd(g *globals) *cobra.Command {
 // left alone because redacting a few characters would mangle ordinary text.
 // The values are wiped before it returns; the redactor holds its own copies.
 func (g *globals) hookSource() (*redact.Redactor, error) {
+	return g.buildHookRedactor(true)
+}
+
+// promptSource is hookSource for the user-prompt hook: it leaves out `text`
+// entries. A visible value (a URL, a host, a region) is stored so commands
+// can use it, not because it is secret, and the person types it in the chat;
+// blocking it would block ordinary prompts. Output redaction keeps it.
+func (g *globals) promptSource() (*redact.Redactor, error) {
+	return g.buildHookRedactor(false)
+}
+
+func (g *globals) buildHookRedactor(withText bool) (*redact.Redactor, error) {
 	s, err := g.openSessionQuiet()
 	switch {
 	case errors.Is(err, errSessionLocked):
@@ -93,6 +105,9 @@ func (g *globals) hookSource() (*redact.Redactor, error) {
 
 	var values []secret.Secret
 	for _, e := range all {
+		if !withText && e.Record.Kind == "text" {
+			continue
+		}
 		if e.Record.Value.Len() >= redact.ShortLen || granted[[2]string{e.Name, e.Layer.Key()}] {
 			values = append(values, e.Record.Value)
 		}

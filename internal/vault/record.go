@@ -17,7 +17,8 @@ type Record struct {
 	ID    string
 	Value secret.Secret
 	// Kind is "secret" (masked at capture) or "text" (visible at capture);
-	// empty means secret. Both are stored, injected and redacted alike.
+	// empty means secret. Both are stored, injected and redacted alike; only
+	// the user-prompt hook lets a text value through.
 	Kind        string
 	Description string
 	Sensitive   bool

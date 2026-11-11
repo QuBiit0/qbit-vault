@@ -15,10 +15,13 @@ The `UserPromptSubmit` hook blocks a message that carries the value of any store
 | ID | Specs | Route | Commit | Status |
 |----|-------|-------|--------|--------|
 | T1 | S1-S5 | inline | 84926ed | done |
-| T2 | S1-S4 verify | inline (verifier not admitted) | 84926ed | done |
+| T2 | S1-S4 verify | gentle-ai-verify | 84926ed | done |
+| T3 | S2-S4 edge tests | inline | see L5 | done |
 
 ## Log
 
 - L1. Owner (2026-11-11): every prompt was blocked with "This message contains the value of the stored secret DOKPLOY_URL, so qbit-vault blocked it." DOKPLOY_URL is `kind: text`, `sensitive: false`. Skipping `sensitive: false` was rejected (it is the default for every credential). Owner chose to keep `text` entries stored and stop them from blocking prompts: "y yo creo que estaria bueno que guarde porque muchas veces se necesita que este almacenado".
 - L2. T1: RED observed (TestHookUserPromptLetsTextEntriesThrough blocked PANEL_URL), then GREEN: `user-prompt` uses `promptSource`, which skips `Kind == "text"` (an empty kind stays secret); post hooks keep `hookSource`. Docs: PRD R-VAULT-06/R-CAP-06, AGENT_INTEGRATIONS, THREAT_MODEL L34, CLI hook row, CHANGELOG, record.go comment. `go vet ./...` and `go test ./...` green (internal/cli needs the CI `-timeout 30m`; the default 10m timed out). Commit 84926ed.
 - L3. T2: the independent verifier was not admitted; checked inline that `Kind` is only set from a validated `text` field or import/export, legacy empty kinds still block, and a prompt with text and secret names only the secret. Native assess: medium, reviewDue false.
+- L4. gentle-ai-verify (Risk: item 2) passed S1-S5; gaps: shaped-token case not exact stdout, no project-layer text test, no text/secret shared-value test, no legacy empty-kind test. Owner: "si" to adding them.
+- L5. T3: TestHookUserPromptTextKindEdges (project-layer text, from inside and outside the repository; text sharing a secret's value; empty-kind record blocks) and exact stdout for the shaped case. Mutation check: skipping every non-`secret` kind fails it (entries made by `set` have an empty kind), and disabling the filter fails it.

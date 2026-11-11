@@ -267,3 +267,67 @@ describe("S6 tool_call write guard", () => {
 		expect(result).toEqual({ block: true, reason: unchecked("timeout") });
 	});
 });
+
+// The binary cannot be started, exits non-zero or answers more than the cap: the guard fails closed with
+// the fixed reason, never with the answer, and never with what the failing process printed.
+describe("S10.6 the guard's failure branches", () => {
+	const OVER_CAP = String(16 * 1024 * 1024 + 1);
+	const redactAnswer = {
+		hookSpecificOutput: { hookEventName: "PostToolUse", updatedToolOutput: { stdout: "k=[REDACTED:API_KEY]" } },
+	};
+	const denyAnswer = {
+		hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: DENY },
+	};
+
+	it("withholds the output when the binary cannot be started (a relative QBIT_VAULT_BIN)", async () => {
+		useFake(REDACT);
+		process.env.QBIT_VAULT_BIN = "./qbit-vault";
+		const pi = mockPi();
+		const { ctx } = mockCtx();
+		const result = await pi.emit("tool_result", resultEvent("bash", [text(`k=${FIXTURE}`)]), ctx);
+		expect(result).toEqual({ content: [text(withheld("internal error"))] });
+		expect(vi.mocked(spawn)).not.toHaveBeenCalled();
+	});
+
+	it("blocks the edit when the binary cannot be started", async () => {
+		useFake(REDACT);
+		process.env.QBIT_VAULT_BIN = "./qbit-vault";
+		const pi = mockPi();
+		const { ctx } = mockCtx();
+		const result = await pi.emit("tool_call", callEvent("write", { path: "a", content: FIXTURE }), ctx);
+		expect(result).toEqual({ block: true, reason: unchecked("internal error") });
+		expect(vi.mocked(spawn)).not.toHaveBeenCalled();
+	});
+
+	it("withholds the output on a non-zero exit even when stdout holds a valid answer", async () => {
+		useFake({ hook: { code: 1, stdout: redactAnswer } });
+		const pi = mockPi();
+		const { ctx } = mockCtx();
+		const result = await pi.emit("tool_result", resultEvent("bash", [text(`k=${FIXTURE}`)]), ctx);
+		expect(result).toEqual({ content: [text(withheld("internal error"))] });
+	});
+
+	it("blocks the edit on a non-zero exit even when stdout holds a deny", async () => {
+		useFake({ hook: { code: 1, stdout: denyAnswer } });
+		const pi = mockPi();
+		const { ctx } = mockCtx();
+		const result = await pi.emit("tool_call", callEvent("write", { path: "a", content: FIXTURE }), ctx);
+		expect(result).toEqual({ block: true, reason: unchecked("internal error") });
+	});
+
+	it("withholds the output when the answer is longer than the cap", async () => {
+		useFake(REDACT, { FAKE_QV_FLOOD_BYTES: OVER_CAP });
+		const pi = mockPi();
+		const { ctx } = mockCtx();
+		const result = await pi.emit("tool_result", resultEvent("bash", [text(`k=${FIXTURE}`)]), ctx);
+		expect(result).toEqual({ content: [text(withheld("internal error"))] });
+	});
+
+	it("blocks the edit when the answer is longer than the cap", async () => {
+		useFake(REDACT, { FAKE_QV_FLOOD_BYTES: OVER_CAP });
+		const pi = mockPi();
+		const { ctx } = mockCtx();
+		const result = await pi.emit("tool_call", callEvent("write", { path: "a", content: FIXTURE }), ctx);
+		expect(result).toEqual({ block: true, reason: unchecked("internal error") });
+	});
+});

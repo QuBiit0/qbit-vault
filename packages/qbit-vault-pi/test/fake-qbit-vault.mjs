@@ -1,6 +1,7 @@
 // A stand-in for the qbit-vault binary. It records its argv and stdin to FAKE_QV_LOG (JSON lines)
 // and answers from FAKE_QV_RESPONSES, a JSON object keyed by the first argument:
 //   { "grants": { "code": 0, "stdout": { "ok": true, "grants": [] } } }
+// FAKE_QV_FLOOD_BYTES prints that many bytes of "x" instead of the response (output cap tests).
 // FAKE_QV_SLEEP_MS delays the answer (timeout tests); "raw" in a response prints that text as is.
 // A response with "mode": "redact" under "hook" answers hook events like the real binary does for
 // a stored value matching /TESTSECRET_\w+/: post-bash/post-read print the PostToolUse
@@ -52,6 +53,11 @@ if (argv[0] === "hook" && response.mode === "redact") response = hookAnswer();
 const sleep = Number(process.env.FAKE_QV_SLEEP_MS ?? 0);
 
 setTimeout(() => {
+	const flood = Number(process.env.FAKE_QV_FLOOD_BYTES ?? 0);
+	if (flood > 0) {
+		process.stdout.write("x".repeat(flood));
+		return;
+	}
 	process.stdout.write(response.raw ?? JSON.stringify(response.stdout ?? {}));
 	process.exitCode = response.code ?? 0;
 }, sleep);

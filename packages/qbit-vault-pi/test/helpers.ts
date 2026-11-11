@@ -44,6 +44,7 @@ export function cleanupFake(): void {
 	delete process.env.FAKE_QV_LOG;
 	delete process.env.FAKE_QV_RESPONSES;
 	delete process.env.FAKE_QV_SLEEP_MS;
+	delete process.env.FAKE_QV_FLOOD_BYTES;
 }
 
 export const ok = (stdout: unknown, code = 0) => ({ code, stdout });

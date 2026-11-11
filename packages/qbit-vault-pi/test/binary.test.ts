@@ -85,7 +85,7 @@ describe("binary resolution (never from the working directory)", () => {
 		expect(resolveBinary(env({ QBIT_VAULT_BIN: file, PATH: "" }), tmp())).toEqual({ ok: true, path: file });
 	});
 
-	it.each(["qbit-vault", "./qbit-vault", "..\qbit-vault.exe", "bin/qbit-vault"])("refuses the relative override %s", (value) => {
+	it.each(["qbit-vault", "./qbit-vault", "..\\qbit-vault.exe", "bin/qbit-vault"])("refuses the relative override %s", (value) => {
 		expect(resolveBinary(env({ QBIT_VAULT_BIN: value }), tmp())).toEqual({ ok: false, reason: "relative_override" });
 	});
 });

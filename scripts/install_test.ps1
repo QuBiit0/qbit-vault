@@ -47,14 +47,14 @@ function New-Fake($file, $ver, $arch) {
     if ($LASTEXITCODE -ne 0) { throw 'could not build the fake binary' }
 }
 
-function New-Release($dir) {
-    $rel = Join-Path $dir 'v0.0.0-test'
+function New-Release($dir, $ver = 'v0.0.0-test') {
+    $rel = Join-Path $dir $ver
     New-Item -ItemType Directory -Force -Path $rel | Out-Null
     $sums = @()
     foreach ($arch in 'amd64', 'arm64') {
         $src = Join-Path $work "src-$arch"
         New-Item -ItemType Directory -Force -Path $src | Out-Null
-        New-Fake (Join-Path $src 'qbit-vault.exe') 'v0.0.0-test' $arch
+        New-Fake (Join-Path $src 'qbit-vault.exe') $ver $arch
         $zip = Join-Path $rel "qbit-vault_windows_$arch.zip"
         Compress-Archive -Path (Join-Path $src 'qbit-vault.exe') -DestinationPath $zip -Force
         $sums += "$((Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant())  qbit-vault_windows_$arch.zip"
@@ -89,6 +89,70 @@ function Installed($dest) {
 }
 
 function SyncLog { (Get-Content -Raw -LiteralPath $env:QBV_TEST_SYNC_LOG -ErrorAction SilentlyContinue | Out-String).Trim() }
+
+# A stub minisign.exe: logs its arguments to $env:QBV_TEST_MINISIGN_LOG and exits
+# 0 only when -P is $env:QBV_TEST_KEY, -m exists and the -x file starts with
+# STUB-VALID.
+$msSrc = Join-Path $work 'ms'
+New-Item -ItemType Directory -Path $msSrc | Out-Null
+Set-Content -LiteralPath (Join-Path $msSrc 'go.mod') -Value 'module stub'
+Set-Content -LiteralPath (Join-Path $msSrc 'main.go') -Value @'
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+)
+
+func main() {
+	f, _ := os.OpenFile(os.Getenv("QBV_TEST_MINISIGN_LOG"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	fmt.Fprintln(f, strings.Join(os.Args[1:], " "))
+	f.Close()
+	var k, x, m string
+	for i := 1; i+1 < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "-P":
+			k = os.Args[i+1]
+		case "-x":
+			x = os.Args[i+1]
+		case "-m":
+			m = os.Args[i+1]
+		}
+	}
+	if _, err := os.Stat(m); err != nil || k != os.Getenv("QBV_TEST_KEY") {
+		os.Exit(1)
+	}
+	sf, err := os.Open(x)
+	if err != nil {
+		os.Exit(1)
+	}
+	line, _ := bufio.NewReader(sf).ReadString('\n')
+	if strings.TrimSpace(line) != "STUB-VALID" {
+		os.Exit(1)
+	}
+}
+'@
+$msBin = Join-Path $work 'bin-ms'
+New-Item -ItemType Directory -Path $msBin | Out-Null
+Push-Location $msSrc
+try { go build -o (Join-Path $msBin 'minisign.exe') . } finally { Pop-Location }
+if ($LASTEXITCODE -ne 0) { throw 'could not build the minisign stub' }
+$key = (Get-Content -LiteralPath (Join-Path $PSScriptRoot '../defaults/release-key.pub'))[1]
+$env:QBV_TEST_KEY = $key
+$env:QBV_TEST_MINISIGN_LOG = Join-Path $work 'minisign.log'
+$warning = "minisign not found: checksums.txt was checked with SHA-256 only. Verify the signature with: minisign -V -P $key -m checksums.txt -x checksums.txt.minisig"
+$hostHasMinisign = [bool](Get-Command minisign -CommandType Application -ErrorAction SilentlyContinue)
+
+function New-SignedRelease($dir, $ver, $sig = $null) {
+    New-Release $dir $ver
+    if ($null -ne $sig) { Set-Content -LiteralPath (Join-Path $dir "$ver\checksums.txt.minisig") -Value $sig }
+}
+function Invoke-MsInstall($release, $dest, $ver, $withStub = $true) {
+    Set-Content -LiteralPath $env:QBV_TEST_MINISIGN_LOG -Value $null
+    Invoke-Install 'AMD64' $release $dest $(if ($withStub) { $msBin } else { $null }) $null $ver
+}
 
 $realArch = $env:PROCESSOR_ARCHITECTURE
 try {
@@ -230,10 +294,57 @@ try {
     Check 'API failure exits non-zero' ($r.Code -ne 0)
     Check 'API failure names the way out' (($r.Out -replace '[\s|]+', ' ') -match [regex]::Escape('could not reach the GitHub API (rate limit or network); set QBIT_VAULT_VERSION=vX.Y.Z and try again'))
     Check 'API failure installs nothing' (-not (Test-Path -LiteralPath (Join-Path $work 'dest14')))
+
+    # 15. Minisign (S6): the stub stands in for the real tool.
+    New-SignedRelease (Join-Path $work 's-valid') 'v1.4.0' 'STUB-VALID'
+    $r = Invoke-MsInstall (Join-Path $work 's-valid') (Join-Path $work 'dest15a') 'v1.4.0'
+    Check 'signed release with minisign exits 0' ($r.Code -eq 0)
+    Check 'signed release is installed' ((Installed (Join-Path $work 'dest15a')) -eq 'fake-qbit-vault-amd64')
+    Check 'signed release says it verified' ($r.Out -match [regex]::Escape('checksums.txt signature verified with minisign'))
+    Check 'minisign gets the pinned key and files' ((Get-Content -Raw -LiteralPath $env:QBV_TEST_MINISIGN_LOG) -match ('(?m)^-V -q -P ' + [regex]::Escape($key) + ' -m .*checksums\.txt -x .*checksums\.txt\.minisig\s*$'))
+    Check 'signed release prints no SHA-256-only warning' ($r.Out -notmatch 'minisign not found')
+
+    New-SignedRelease (Join-Path $work 's-bad') 'v1.4.0' 'STUB-BAD'
+    $r = Invoke-MsInstall (Join-Path $work 's-bad') (Join-Path $work 'dest15b') 'v1.4.0'
+    Check 'bad signature exits non-zero' ($r.Code -ne 0)
+    Check 'bad signature is reported' (($r.Out -replace '[\s|]+', ' ') -match [regex]::Escape('the signature of checksums.txt for v1.4.0 does not verify with the QBit Vault'))
+    Check 'bad signature installs nothing' (-not (Test-Path -LiteralPath (Join-Path $work 'dest15b\qbit-vault.exe')))
+
+    New-SignedRelease (Join-Path $work 's-missing') 'v1.4.0'
+    $r = Invoke-MsInstall (Join-Path $work 's-missing') (Join-Path $work 'dest15c') 'v1.4.0'
+    Check 'missing signature of a signed version exits non-zero' ($r.Code -ne 0)
+    Check 'missing signature is reported' (($r.Out -replace '[\s|]+', ' ') -match [regex]::Escape('the release v1.4.0 has no checksums.txt.minisig'))
+    Check 'missing signature installs nothing' (-not (Test-Path -LiteralPath (Join-Path $work 'dest15c\qbit-vault.exe')))
+
+    # Without minisign: the exact warning, and the install goes on. A host that
+    # has the real minisign cannot play this case.
+    if ($hostHasMinisign) {
+        Write-Host 'skip minisign absent (minisign is installed on this host)'
+    } else {
+        $r = Invoke-MsInstall (Join-Path $work 's-valid') (Join-Path $work 'dest15d') 'v1.4.0' $false
+        Check 'no minisign: install goes on' ($r.Code -eq 0 -and (Installed (Join-Path $work 'dest15d')) -eq 'fake-qbit-vault-amd64')
+        Check 'no minisign: the warning is printed exactly' (($r.Out -split '[\r\n]+') -contains $warning)
+    }
+
+    # Below the first signed version the release says it is unsigned; at or
+    # above it a missing .minisig is refused (numeric compare).
+    New-SignedRelease (Join-Path $work 's-old') 'v1.3.9'
+    $r = Invoke-MsInstall (Join-Path $work 's-old') (Join-Path $work 'dest15f') 'v1.3.9'
+    Check 'older release without .minisig installs' ($r.Code -eq 0 -and (Installed (Join-Path $work 'dest15f')) -eq 'fake-qbit-vault-amd64')
+    Check 'older release says it is unsigned' (($r.Out -replace '[\s|]+', ' ') -match [regex]::Escape('v1.3.9 predates signed releases (first signed: v1.4.0)'))
+    New-SignedRelease (Join-Path $work 's-old2') 'v0.0.0-test' 'STUB-BAD'
+    $r = Invoke-MsInstall (Join-Path $work 's-old2') (Join-Path $work 'dest15g') 'v0.0.0-test'
+    Check 'older release with a bad .minisig is still refused' ($r.Code -ne 0 -and -not (Test-Path -LiteralPath (Join-Path $work 'dest15g\qbit-vault.exe')))
+    New-SignedRelease (Join-Path $work 's-ten') 'v1.10.0'
+    $r = Invoke-MsInstall (Join-Path $work 's-ten') (Join-Path $work 'dest15h') 'v1.10.0'
+    Check 'v1.10.0 counts as signed (numeric compare)' ($r.Code -ne 0 -and -not (Test-Path -LiteralPath (Join-Path $work 'dest15h\qbit-vault.exe')))
+    New-SignedRelease (Join-Path $work 's-beta') 'v1.4.0-beta.1'
+    $r = Invoke-MsInstall (Join-Path $work 's-beta') (Join-Path $work 'dest15i') 'v1.4.0-beta.1'
+    Check 'a pre-release of the first signed version counts as signed' ($r.Code -ne 0 -and -not (Test-Path -LiteralPath (Join-Path $work 'dest15i\qbit-vault.exe')))
 } finally {
     $env:Path = $realPath
     $env:PROCESSOR_ARCHITECTURE = $realArch
-    'QBIT_VAULT_USER_PATH', 'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASES_API', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH', 'QBIT_VAULT_NO_SYNC', 'QBIT_VAULT_HOME', 'QBV_TEST_SYNC_LOG' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+    'QBIT_VAULT_USER_PATH', 'QBIT_VAULT_VERSION', 'QBIT_VAULT_RELEASES_API', 'QBIT_VAULT_RELEASE_URL', 'QBIT_VAULT_INSTALL_DIR', 'QBIT_VAULT_NO_PATH', 'QBIT_VAULT_NO_SYNC', 'QBIT_VAULT_HOME', 'QBV_TEST_SYNC_LOG', 'QBV_TEST_KEY', 'QBV_TEST_MINISIGN_LOG' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
 

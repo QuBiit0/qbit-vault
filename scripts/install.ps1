@@ -11,7 +11,9 @@
 #   QBIT_VAULT_USER_PATH    user PATH to compare against (default: the real one; for tests)
 #   QBIT_VAULT_NO_SYNC      set to 1 to skip `qbit-vault sync` after an upgrade
 #
-# It downloads one archive and checksums.txt, verifies the SHA-256, copies the
+# It downloads one archive and checksums.txt, verifies the SHA-256 and, when
+# minisign is installed, the Minisign signature of checksums.txt against the
+# release key pinned below (docs/INSTALL.md § Verify a download), copies the
 # binary and adds its directory to the user PATH. An existing install is
 # upgraded in place, and when the vault is already set up it runs
 # `qbit-vault sync` so your agents use the new binary. It never asks for, reads
@@ -28,6 +30,12 @@ function Install-QBitVault {
     $version = $env:QBIT_VAULT_VERSION
     $vaultHome = if ($env:QBIT_VAULT_HOME) { $env:QBIT_VAULT_HOME } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.qbit-vault' }
 
+    # The release public key (key id BEEE762E58A69B2B; the second line of
+    # defaults/release-key.pub, which a test keeps equal to this) and the first
+    # release whose checksums.txt is signed.
+    $minisignKey = 'RWQrm6ZYLnbuvsS0Px4nVFDMnfj6QG4sqbwDkmelqS9njb/q577zkLt8'
+    $firstSigned = 'v1.4.0'
+
     function Say($msg) { Write-Host "qbit-vault install: $msg" }
     function Fetch($url, $file) {
         if ($url -match '^https://') {
@@ -35,6 +43,14 @@ function Install-QBitVault {
         } else {
             Copy-Item -LiteralPath $url -Destination $file
         }
+    }
+
+    # True when $v is at or above $firstSigned (a pre-release suffix is
+    # ignored). A version that does not parse counts as signed.
+    function Test-SignedRelease($v) {
+        $core = ($v -replace '^v', '') -replace '[-+].*$', ''
+        if ($core -notmatch '^\d+\.\d+\.\d+$') { return $true }
+        return ([version]$core) -ge ([version]($firstSigned -replace '^v', ''))
     }
 
     switch ($env:PROCESSOR_ARCHITECTURE) {
@@ -77,6 +93,33 @@ function Install-QBitVault {
         try { $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($stream) } finally { $stream.Dispose() }
         $got = -join ($hash | ForEach-Object { $_.ToString('x2') })
         if ($want -ne $got) { throw "qbit-vault install: checksum mismatch for ${archive}: nothing was installed" }
+
+        # The signature of checksums.txt, before anything is extracted or written.
+        $signedRelease = Test-SignedRelease $version
+        $unsignedNote = "$version predates signed releases (first signed: $firstSigned): checksums.txt was checked with SHA-256 only"
+        $minisign = (Get-Command minisign -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+        if ($minisign) {
+            $sigFile = Join-Path $tmp 'checksums.txt.minisig'
+            $haveSig = $true
+            try { Fetch "$releaseUrl/$version/checksums.txt.minisig" $sigFile } catch { $haveSig = $false }
+            if ($haveSig) {
+                $verified = $false
+                try {
+                    & $minisign -V -q -P $minisignKey -m (Join-Path $tmp 'checksums.txt') -x $sigFile *> $null
+                    $verified = ($LASTEXITCODE -eq 0)
+                } catch { $verified = $false }
+                if (-not $verified) { throw "qbit-vault install: the signature of checksums.txt for $version does not verify with the QBit Vault release key: nothing was installed" }
+                Say 'checksums.txt signature verified with minisign'
+            } elseif ($signedRelease) {
+                throw "qbit-vault install: the release $version has no checksums.txt.minisig, so it is not signed with the QBit Vault release key: nothing was installed"
+            } else {
+                Say $unsignedNote
+            }
+        } elseif ($signedRelease) {
+            Write-Host "minisign not found: checksums.txt was checked with SHA-256 only. Verify the signature with: minisign -V -P $minisignKey -m checksums.txt -x checksums.txt.minisig"
+        } else {
+            Say $unsignedNote
+        }
 
         Expand-Archive -LiteralPath (Join-Path $tmp $archive) -DestinationPath (Join-Path $tmp 'x')
         $exe = Join-Path $tmp 'x\qbit-vault.exe'

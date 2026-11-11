@@ -31,15 +31,16 @@ EOF
 	chmod 755 "$1"
 }
 
-# A release v0.0.0-test with one archive per arch, each holding a fake binary.
-mkrelease() { # mkrelease DIR
-	local rel="$1/v0.0.0-test"
+# A release (v0.0.0-test unless VERSION is given) with one archive per arch,
+# each holding a fake binary.
+mkrelease() { # mkrelease DIR [VERSION]
+	local rel="$1/${2:-v0.0.0-test}"
 	mkdir -p "$rel"
 	: >"$rel/checksums.txt"
 	for arch in amd64 arm64; do
 		local src="$work/src-$arch"
 		mkdir -p "$src"
-		fakebin "$src/qbit-vault" v0.0.0-test "$arch"
+		fakebin "$src/qbit-vault" "${2:-v0.0.0-test}" "$arch"
 		tar -czf "$rel/qbit-vault_linux_$arch.tar.gz" -C "$src" qbit-vault
 		echo "$(sha "$rel/qbit-vault_linux_$arch.tar.gz")  qbit-vault_linux_$arch.tar.gz" >>"$rel/checksums.txt"
 	done
@@ -185,6 +186,87 @@ check "the one-line fixture is one line" test "$(wc -l <"$work/releases-min.json
 run "$work/bin-x86" "$work/good" "$work/dest13" QBIT_VAULT_VERSION= QBIT_VAULT_RELEASES_API="$(fileurl "$work/releases-min.json")"
 check "newest release is chosen from one-line JSON" grep -q "installing qbit-vault v0.0.0-test (linux/amd64)" <<<"$out"
 check "newest release from one-line JSON installs" test "$("$work/dest13/qbit-vault" 2>/dev/null)" = fake-qbit-vault-amd64
+
+# 14. Minisign (S6). The pinned key is the second line of defaults/release-key.pub.
+# A stub `minisign` on PATH stands in for the real one: it logs its arguments and
+# exits 0 only when -P is the pinned key, -m exists and the -x file starts with
+# STUB-VALID.
+key="$(sed -n 2p "$here/../defaults/release-key.pub")"
+export QBV_TEST_MINISIGN_LOG="$work/minisign.log" QBV_TEST_KEY="$key"
+mkdir -p "$work/bin-ms"
+cat >"$work/bin-ms/minisign" <<'STUB'
+#!/bin/sh
+echo "$*" >>"$QBV_TEST_MINISIGN_LOG"
+while [ $# -gt 0 ]; do
+	case "$1" in -P) k="$2"; shift ;; -x) x="$2"; shift ;; -m) m="$2"; shift ;; esac
+	shift
+done
+[ "$k" = "$QBV_TEST_KEY" ] && [ -f "$m" ] && [ "$(head -n 1 "$x")" = STUB-VALID ]
+STUB
+chmod 755 "$work/bin-ms/minisign"
+warning="minisign not found: checksums.txt was checked with SHA-256 only. Verify the signature with: minisign -V -P $key -m checksums.txt -x checksums.txt.minisig"
+
+signed() { # signed DIR VERSION [SIGFILE_CONTENT]: a release; the .minisig is written when content is given
+	mkrelease "$1" "$2"
+	[ $# -lt 3 ] || printf '%s
+' "$3" >"$1/$2/checksums.txt.minisig"
+}
+msrun() { # msrun RELEASE_DIR INSTALL_DIR VERSION [stub|none]
+	: >"$QBV_TEST_MINISIGN_LOG"
+	if [ "${4:-stub}" = stub ]; then run "$work/bin-ms:$work/bin-x86" "$1" "$2" QBIT_VAULT_VERSION="$3"; else run "$work/bin-x86" "$1" "$2" QBIT_VAULT_VERSION="$3"; fi
+}
+
+signed "$work/s-valid" v1.4.0 STUB-VALID
+msrun "$work/s-valid" "$work/dest14a" v1.4.0
+check "signed release with minisign exits 0" test "$code" -eq 0
+check "signed release is installed" test -x "$work/dest14a/qbit-vault"
+check "signed release says it verified" grep -q "checksums.txt signature verified with minisign" <<<"$out"
+check "minisign gets the pinned key and files" grep -Eq -e "^-V -q -P $key -m .*checksums.txt -x .*checksums.txt.minisig\$" "$QBV_TEST_MINISIGN_LOG"
+check "signed release prints no SHA-256-only warning" eval '! grep -q "minisign not found" <<<"$out"'
+
+signed "$work/s-bad" v1.4.0 STUB-BAD
+msrun "$work/s-bad" "$work/dest14b" v1.4.0
+check "bad signature exits non-zero" test "$code" -ne 0
+check "bad signature is reported" grep -q "the signature of checksums.txt for v1.4.0 does not verify with the QBit Vault release key: nothing was installed" <<<"$out"
+check "bad signature installs nothing" test ! -e "$work/dest14b"
+
+signed "$work/s-missing" v1.4.0
+msrun "$work/s-missing" "$work/dest14c" v1.4.0
+check "missing signature of a signed version exits non-zero" test "$code" -ne 0
+check "missing signature is reported" grep -q "the release v1.4.0 has no checksums.txt.minisig" <<<"$out"
+check "missing signature installs nothing" test ! -e "$work/dest14c"
+
+# Without minisign: the exact warning, and the install goes on. A host that has
+# the real minisign cannot play this case.
+if PATH="$work/bin-x86:$PATH" command -v minisign >/dev/null 2>&1; then
+	echo "skip minisign absent (minisign is installed on this host)"
+else
+	msrun "$work/s-valid" "$work/dest14d" v1.4.0 none
+	check "no minisign: install goes on" test "$code" -eq 0 -a -x "$work/dest14d/qbit-vault"
+	check "no minisign: the warning is printed exactly" grep -qxF "$warning" <<<"$out"
+	msrun "$work/s-missing" "$work/dest14e" v1.4.0 none
+	check "no minisign, no .minisig: install goes on with the warning" test "$code" -eq 0 -a -x "$work/dest14e/qbit-vault"
+fi
+
+# Versions below the first signed one say they are unsigned; at or above it a
+# missing .minisig is refused (compared numerically: 1.10.0 > 1.4.0 > 1.3.9).
+signed "$work/s-old" v1.3.9
+msrun "$work/s-old" "$work/dest14f" v1.3.9
+check "older release without .minisig installs" test "$code" -eq 0 -a -x "$work/dest14f/qbit-vault"
+check "older release says it is unsigned" grep -q "v1.3.9 predates signed releases (first signed: v1.4.0)" <<<"$out"
+signed "$work/s-old2" v0.0.0-test STUB-BAD
+msrun "$work/s-old2" "$work/dest14g" v0.0.0-test
+check "older release with a bad .minisig is still refused" test "$code" -ne 0 -a ! -e "$work/dest14g"
+signed "$work/s-ten" v1.10.0
+msrun "$work/s-ten" "$work/dest14h" v1.10.0
+check "v1.10.0 counts as signed (numeric compare)" test "$code" -ne 0 -a ! -e "$work/dest14h"
+signed "$work/s-beta" v1.4.0-beta.1
+msrun "$work/s-beta" "$work/dest14i" v1.4.0-beta.1
+check "a pre-release of the first signed version counts as signed" test "$code" -ne 0 -a ! -e "$work/dest14i"
+if ! PATH="$work/bin-x86:$PATH" command -v minisign >/dev/null 2>&1; then
+	msrun "$work/s-old" "$work/dest14j" v1.3.9 none
+	check "older release, no minisign: unsigned note, no warning" test "$code" -eq 0 && eval '! grep -q "minisign not found" <<<"$out"'
+fi
 
 if [ "$fails" -ne 0 ]; then
 	echo "$fails check(s) failed"

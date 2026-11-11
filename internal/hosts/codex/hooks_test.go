@@ -9,13 +9,12 @@ import (
 	"testing"
 
 	"github.com/qbitdevz/qbit-vault/internal/hosts"
-	"github.com/qbitdevz/qbit-vault/internal/hosts/codex"
 )
 
 func (r *rig) hooksFile() string { return filepath.Join(r.env.UserHome, ".codex", "hooks.json") }
 
 // hookCmd is one command hook of the written hooks.json.
-type hookCmd struct{ event, matcher, command, status string }
+type hookCmd struct{ event, matcher, command, windows, status string }
 
 func readHooks(t *testing.T, doc string) []hookCmd {
 	t.Helper()
@@ -23,8 +22,9 @@ func readHooks(t *testing.T, doc string) []hookCmd {
 		Hooks map[string][]struct {
 			Matcher string `json:"matcher"`
 			Hooks   []struct {
-				Command       string `json:"command"`
-				StatusMessage string `json:"statusMessage"`
+				Command        string `json:"command"`
+				CommandWindows string `json:"commandWindows"`
+				StatusMessage  string `json:"statusMessage"`
 			} `json:"hooks"`
 		} `json:"hooks"`
 	}
@@ -35,7 +35,7 @@ func readHooks(t *testing.T, doc string) []hookCmd {
 	for ev, list := range s.Hooks {
 		for _, e := range list {
 			for _, h := range e.Hooks {
-				out = append(out, hookCmd{ev, e.Matcher, h.Command, h.StatusMessage})
+				out = append(out, hookCmd{ev, e.Matcher, h.Command, h.CommandWindows, h.StatusMessage})
 			}
 		}
 	}
@@ -71,8 +71,8 @@ func TestRegistersTheCodexGuards(t *testing.T) {
 	r := newRig(t)
 	r.apply()
 	want := []hookCmd{
-		{"PostToolUse", "Bash", fakeExe + " hook post-bash --host codex", "qbit-vault hook post-bash"},
-		{"PreToolUse", "apply_patch", fakeExe + " hook pre-write --host codex", "qbit-vault hook pre-write"},
+		{"PostToolUse", "Bash", fakeExe + " hook post-bash --host codex", "& '" + fakeExe + "' hook post-bash --host codex", "qbit-vault hook post-bash"},
+		{"PreToolUse", "apply_patch", fakeExe + " hook pre-write --host codex", "& '" + fakeExe + "' hook pre-write --host codex", "qbit-vault hook pre-write"},
 	}
 	es := readHooks(t, r.read(r.hooksFile()))
 	if len(es) != len(want) {
@@ -181,27 +181,6 @@ func TestCheckFindsMissingAndDriftedHooks(t *testing.T) {
 		r.apply()
 		if err := checks(r)["hooks"]; err != nil {
 			t.Fatalf("%s: not repaired: %v", name, err)
-		}
-	}
-}
-
-func TestHookCommandQuoting(t *testing.T) {
-	r := newRig(t)
-	r.host = codex.NewWithExe("/opt/Q Bit/qbit-vault")
-	r.apply()
-	if es := ours(readHooks(t, r.read(r.hooksFile()))); len(es) != 2 || es[0].command == "" ||
-		!strings.HasPrefix(es[0].command, `"/opt/Q Bit/qbit-vault" hook `) {
-		t.Fatalf("hooks: %+v", es)
-	}
-	for _, bad := range []string{`/opt/a"b/qbit-vault`, "/opt/$HOME/qbit-vault", "/opt/`x`/qbit-vault", "/opt/%PATH%/qbit-vault"} {
-		r2 := newRig(t)
-		r2.host = codex.NewWithExe(bad)
-		res := hosts.Apply(r2.env, []hosts.Adapter{r2.host})
-		if res[0].Err() == nil {
-			t.Fatalf("%q written", bad)
-		}
-		if _, err := os.Stat(r2.hooksFile()); err == nil {
-			t.Fatalf("%q: hooks.json created", bad)
 		}
 	}
 }

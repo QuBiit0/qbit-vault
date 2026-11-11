@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/qbitdevz/qbit-vault/internal/filemerge"
 	"github.com/qbitdevz/qbit-vault/internal/hosts"
@@ -14,6 +15,12 @@ import (
 // hooksTimeout is the seconds Codex gives a qbit-vault hook; both open the
 // vault without prompting. Codex' own default is 600.
 const hooksTimeout = 30
+
+// ErrHookPath: the qbit-vault executable path cannot be written into a Codex
+// hook command (it is not valid UTF-8 or holds a NUL, so hooks.json cannot
+// carry it). init, sync and doctor report it by name; the Codex output guard
+// is then not installed.
+var ErrHookPath = errors.New("codex: the qbit-vault executable path cannot be written into a hook command")
 
 // hooksPath is ~/.codex/hooks.json, one of the places Codex reads hooks from
 // (https://learn.chatgpt.com/docs/hooks.md § Where Codex looks for hooks).
@@ -66,11 +73,26 @@ func (a *Adapter) hooksStep() hosts.Step {
 	}
 }
 
+// ExecutableProblem is read-only and says, for `doctor`, why the Codex hooks
+// cannot be registered with the running executable: the empty string when
+// they can.
+func (a *Adapter) ExecutableProblem(hosts.Env) string {
+	exe, err := a.executable()
+	if err != nil {
+		return ""
+	}
+	if _, err := hookEdits(exe); errors.Is(err, ErrHookPath) {
+		return "the qbit-vault path cannot be written into a Codex hook command (not valid UTF-8), so the output guard is not installed; reinstall qbit-vault in another folder and run 'qbit-vault sync'"
+	}
+	return ""
+}
+
 type hookCommand struct {
-	Type          string `json:"type"`
-	Command       string `json:"command"`
-	Timeout       int    `json:"timeout"`
-	StatusMessage string `json:"statusMessage"`
+	Type           string `json:"type"`
+	Command        string `json:"command"`
+	CommandWindows string `json:"commandWindows"`
+	Timeout        int    `json:"timeout"`
+	StatusMessage  string `json:"statusMessage"`
 }
 
 type hookEntry struct {
@@ -81,12 +103,12 @@ type hookEntry struct {
 // hookEdits owns one array element per hook. The marker is the statusMessage
 // (`qbit-vault hook <sub>`), which Codex shows while the hook runs, so the
 // element is found again whatever the binary is called. Codex hooks take a
-// shell command line, not an argv, so the executable is written as one word
-// (shellWord).
+// shell command line, not an argv, and `commandWindows` overrides `command`
+// on Windows, so the executable is written once as a word of an sh command
+// line and once as a PowerShell call (posixWord, powershellCall).
 func hookEdits(exe string) ([]filemerge.JSONEdit, error) {
-	word, err := shellWord(exe)
-	if err != nil {
-		return nil, err
+	if !utf8.ValidString(exe) || strings.ContainsRune(exe, 0) {
+		return nil, ErrHookPath
 	}
 	defs := []struct{ event, matcher, sub string }{
 		{"PostToolUse", "Bash", "post-bash"},
@@ -95,32 +117,54 @@ func hookEdits(exe string) ([]filemerge.JSONEdit, error) {
 	var edits []filemerge.JSONEdit
 	for _, d := range defs {
 		marker := "qbit-vault hook " + d.sub
+		args := " hook " + d.sub + " --host codex"
 		edits = append(edits, filemerge.JSONEdit{
 			Path:   []string{"hooks", d.event},
 			Marker: marker,
 			Value: marshal(hookEntry{Matcher: d.matcher, Hooks: []hookCommand{{
-				Type: "command", Command: word + " hook " + d.sub + " --host codex", Timeout: hooksTimeout, StatusMessage: marker,
+				Type: "command", Command: posixWord(exe) + args, CommandWindows: powershellCall(exe) + args,
+				Timeout: hooksTimeout, StatusMessage: marker,
 			}}}),
 		})
 	}
 	return edits, nil
 }
 
-// shellWord renders the executable path as one word of a command line that
-// sh, cmd.exe and PowerShell all read the same way: forward slashes (a
-// backslash is an escape in sh), bare when it has only plain characters,
-// double-quoted when it has a space. A path with a character any of those
-// shells treats as syntax inside double quotes is refused rather than
-// guessed. Which shell Codex uses for hooks on Windows is not documented.
-func shellWord(exe string) (string, error) {
-	p := filepath.ToSlash(exe)
-	if strings.ContainsAny(p, "\"$`%!^&|<>;'()\r\n\t\x00") {
-		return "", errors.New("codex: the qbit-vault executable path has a character a hook command line cannot carry safely")
+// posixWord renders the executable path as one word of an sh command line:
+// bare when it has only characters sh reads literally, else in single quotes,
+// inside which only the quote itself needs an escape (close the quote, an
+// escaped quote, reopen). Backslashes stay as they are (literal in single
+// quotes), so a Windows path survives.
+func posixWord(exe string) string {
+	plain := exe != ""
+	for _, r := range exe {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/._-+:@=,", r)) {
+			plain = false
+			break
+		}
 	}
-	if strings.ContainsAny(p, " ") {
-		return `"` + p + `"`, nil
+	if plain {
+		return exe
 	}
-	return p, nil
+	return "'" + strings.ReplaceAll(exe, "'", `'\''`) + "'"
+}
+
+// powershellCall renders the executable path as a PowerShell call: the call
+// operator and a single-quoted string, which takes everything literally ($,
+// backtick, %, &, parentheses) except the quote characters. PowerShell reads
+// the typographic single quotes U+2018 to U+201B as quotes too, so each is
+// doubled like the ASCII one.
+func powershellCall(exe string) string {
+	var b strings.Builder
+	b.WriteString("& '")
+	for _, r := range exe {
+		b.WriteRune(r)
+		if r == '\'' || r >= '\u2018' && r <= '\u201b' {
+			b.WriteRune(r)
+		}
+	}
+	b.WriteString("'")
+	return b.String()
 }
 
 // marshal is json.Marshal without HTML escaping.

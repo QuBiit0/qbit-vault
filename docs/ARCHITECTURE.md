@@ -53,7 +53,7 @@
 └─────────────────────────────────────────┘   └─────────────────────────────────┘
 ```
 
-Built today: the Go binary, the MCP server, the Claude Code hooks and the registration of Claude Code, Codex and Pi / Gentle Shell (Pi through its MCP entry). Releases are published (archives, SHA-256 `checksums.txt`, build provenance, the server image). Not built: the Pi extension (Phase 4), the npm launcher, the Homebrew formula and Minisign-signed checksums (see `ROADMAP.md`); OpenCode was dropped.
+Built today: the Go binary, the MCP server, the Claude Code hooks and the registration of Claude Code, Codex and Pi / Gentle Shell (Pi through its MCP entry). Releases are published (archives, SHA-256 `checksums.txt` with its Minisign signature, build provenance, the server image). Not built: the Pi extension (Phase 4), the npm launcher, and the Homebrew formula (see `ROADMAP.md`); OpenCode was dropped.
 
 With sync enabled, `internal/remote` talks HTTPS to **`qbit-vault-server`** (`cmd/qbit-vault-server`, `internal/server`): a self-hosted, zero-knowledge store of sealed vault versions, key envelopes, device public keys and audit anchors (`REMOTE_SYNC.md`). It is a separate deployment; the client stays daemon-free.
 

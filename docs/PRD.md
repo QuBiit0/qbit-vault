@@ -8,9 +8,9 @@ Built and tested on `main` (evidence in `ROADMAP.md`): the vault, layers, grants
 
 - the Pi extension `qbit-vault-pi` (Phase 4): R-HOST-01, the Pi parts of R-CAP-01 and R-CAP-06, R-RED-04 and R-EXEC-02 on Pi; `set --stdin --fields` and `prompt --field` (R-CAP-08 is met by the broker for MCP hosts);
 - the Claude Code `PreToolUse` rewrite of secret references into `exec` (R-EXEC-02) and its `grant_required` / `dump_command` denials; today `pre-bash` only keeps user-only commands out of the agent's shell;
-- the npm launcher, Minisign-signed checksums and Homebrew (Phase 5, not built): R-INS-01 as worded, R-INS-02, R-NFR-03 (releases do carry SHA-256 `checksums.txt` and a build-provenance attestation), the binary-signature part of R-INS-07;
+- the npm launcher and Homebrew (Phase 5, not built): R-INS-01 as worded, R-INS-02, the npm-package and version-pinning parts of R-NFR-03 (releases do carry SHA-256 `checksums.txt`, its Minisign signature and a build-provenance attestation), the binary-signature part of R-INS-07;
 - OpenCode (R-HOST-04): dropped by a recorded decision (`odd/tasks/hosts.md` S8);
-- Minisign verification of self-update: `qbit-vault update` and the TUI update notice (open-time check, `update available` in the header, `u` to update) are built with the SHA-256 of `checksums.txt` over HTTPS; Minisign comes later.
+- Minisign verification of self-update: `qbit-vault update` and the TUI update notice (open-time check, `update available` in the header, `u` to update) are built; `update` verifies the SHA-256 of `checksums.txt` over HTTPS and its Minisign signature against the key pinned in the binary (from `v1.4.0`, `odd/tasks/minisign.md`).
 
 Also built, outside the numbered requirements of this document: the interactive TUI (`qbit-vault tui`, and `qbit-vault` with no arguments on a terminal; `CLI.md` § TUI, `ROADMAP.md`). It is a front end over the existing commands and keeps their invariants (no value shown, values typed only in the prompt backend, grants revoke-only). Not exercised: its suspend and resume around the masked prompt on a real terminal.
 
@@ -187,7 +187,7 @@ Normative protocol: `REMOTE_SYNC.md`.
 
 - R-NFR-01 *Portability*: macOS (arm64, amd64), Linux (amd64, arm64, including WSL2 and headless without Secret Service), Windows 10+ (amd64). Headless Linux uses the passphrase fallback.
 - R-NFR-02 *Latency*: `exec` overhead ≤ 50 ms over running the command directly on a warm keychain; prompt round-trip is user-bound.
-- R-NFR-03 *Supply chain* (*Phase 5, partly built: SHA-256 `checksums.txt` and a build-provenance attestation exist; Minisign signatures, npm packages and version pinning in the configs `init` writes do not*): releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
+- R-NFR-03 *Supply chain* (*Phase 5, partly built: SHA-256 `checksums.txt`, its Minisign signature and a build-provenance attestation exist; npm packages and version pinning in the configs `init` writes do not*): releases signed (Minisign) with `checksums.txt`; npm packages published with provenance; version pinning in every config `init` writes; no postinstall; dependency set listed in `AGENTS.md` and enforced by a CI check.
 - R-NFR-04 *Observability*: `--json` on every command for host adapters; human output otherwise.
 - R-NFR-05 *Compatibility*: contract `qbit-vault.secrets-broker/v1` is frozen on first stable release; additive changes bump the minor capability version; consumers refuse unknown major versions.
 - R-NFR-06 *Testing*: leak tests on every tier (see `TESTING.md`); a PR touching exec/redact/prompt/mcp/hooks/remote/server without extending the leak test is rejected by CI.

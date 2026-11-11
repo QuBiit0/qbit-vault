@@ -12,7 +12,7 @@ Sliced so every PR stays ≤ 400 changed lines (the review budget), each with co
 | 2S remote sync | done |
 | 3 hosts | done as scoped: Claude Code, Codex, Pi / Gentle Shell through MCP; OpenCode dropped; packaging moved to Phase 5 |
 | 4 Gentle Shell / Pi extension | not built (Pi uses its MCP entry) |
-| 5 hardening and release 1.0.0 | 1.0.0 is the first stable release: archives, installers, provenance and the server image are done; npm, Homebrew and Minisign are not built; `qbit-vault update` is built after 1.0.0 (`odd/tasks/self-update.md`) |
+| 5 hardening and release 1.0.0 | 1.0.0 is the first stable release: archives, installers, provenance and the server image are done; npm and Homebrew are not built (Minisign-signed checksums are built, first signed release 1.4.0); `qbit-vault update` is built after 1.0.0 (`odd/tasks/self-update.md`) |
 | TUI | done (`odd/tasks/tui.md`); the Update section checks for a newer release on open and updates from there (`odd/tasks/self-update.md`) |
 
 ## Phase 0 — alignment (no code)
@@ -118,8 +118,8 @@ Done:
 Not built (stated plainly, nothing here is promised for a date):
 
 - The npm launcher and platform packages (`npx qbit-vault init`), the Homebrew formula, and reserving the npm names.
-- Minisign-signed checksums (the SHA-256 `checksums.txt` and the provenance attestation exist).
-- Minisign verification of `update` (`qbit-vault update` and the TUI update notice are built: the release's SHA-256 is verified over HTTPS and the binary swapped; Minisign is added later without changing the command).
+- Minisign-signed checksums: *built* (`odd/tasks/minisign.md`; the first signed release is `v1.4.0`, once the owner has generated the key, `docs/INSTALL.md` § Releasing).
+- Minisign verification of `update`: *built* (`qbit-vault update` verifies `checksums.txt.minisig` with the key pinned in the binary, after the SHA-256, and refuses an unsigned release).
 - A cross-agent battery (Tier 3 in `TESTING.md`) and Docker batteries for macOS and Windows.
 
 ## TUI — done

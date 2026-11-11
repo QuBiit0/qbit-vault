@@ -1,0 +1,37 @@
+# Output and write guard for every agent host (Claude Code, Codex, Pi)
+
+One rule in the binary, wired into each host's own mechanism: the agent's built-in tool output is redacted for every active grant value (AGENTS.md invariant 5), file writes that carry an active value are blocked, and when the check cannot run while it may matter, the output is withheld instead of passed through. Today only Claude Code redacts (Bash, PowerShell, Read) and every hook fails open.
+
+## Specs
+
+- S1. User (verbatim, 2026-11-11): "marca como hecha y sigamps con los pendientes.. arranca por lo que recomiendes"; on the recommendation (read/write guard first): "recuerda que esto debe funcionar para cualquier agente (claude, codex y pi)"; on the fail mode below: "vamos con eso".
+- S2. Fail mode (proposed by the parent, accepted verbatim "vamos con eso"):
+  - S2.1 No vault, or no active grant: everything passes unchanged, nothing is printed (no prompt, no warning).
+  - S2.2 Active grants but the check fails (locked vault, timeout, error, more than 64 MiB): the output is replaced with exactly `output withheld: qbit-vault could not check it for secrets (<reason>)`. A locked vault cannot tell whether grants are active, so it counts as this case.
+- S3. Binary (host-neutral core, `internal/hook`, `internal/cli/hookcmd.go`):
+  - S3.1 Post-tool redaction (`hook post-bash`, `hook post-read`): S2.1 pass-through when no vault exists or no grant is active; otherwise every string of `tool_response` is redacted for every active value and its encodings, as today; S2.2 withheld (replacing the whole tool output, never adding the original) for: vault locked (`vault locked`), event over 64 MiB once grants are known to be active or unknowable (`output too large`), any other error or panic (`internal error`). Reasons are fixed strings, never an error text that could carry a value.
+  - S3.2 New `hook pre-write`: reads the tool input of a file write or edit and scans every string in it for every active value and its encodings. A hit denies the call with exactly `This edit would write the value of the stored secret NAME to a file, so qbit-vault blocked it. Give the value to the command that needs it with secret_exec instead.` (several names: sorted, joined `A, B`, at most 5 then `and N more`, with "secrets"; names only). No vault or no active grant: allow, print nothing. Active or unknowable grants and the check fails: deny with exactly `qbit-vault could not check this edit for secrets (<reason>)`.
+  - S3.3 `--host claude|codex|pi` selects the output protocol (default `claude`, so existing registrations keep working): `claude` and `pi` answer `hookSpecificOutput.updatedToolOutput` / `permissionDecision: deny` as today; `codex` answers PostToolUse with `{"decision":"block","reason":"<redacted or withheld output>"}` and PreToolUse with `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"<message>"}}`. No change: no output at all.
+  - S3.4 The `user-prompt` hook keeps its current behavior.
+- S4. Claude Code (`internal/hosts/claude`): besides today's hooks, `PostToolUse` matcher `Grep|Glob` runs `hook post-read`, and `PreToolUse` matcher `Write|Edit|MultiEdit|NotebookEdit` runs `hook pre-write`. `init` and `sync` add them with a snapshot and an atomic write (invariant 7); `uninstall` removes them; receipts updated; `doctor` reports them.
+- S5. Codex (`internal/hosts/codex`): registers hooks in `~/.codex/hooks.json` (merged, never replacing other tools' hooks, snapshot first): `PostToolUse` matcher `Bash` → `qbit-vault hook post-bash --host codex`; `PreToolUse` matcher `apply_patch` → `qbit-vault hook pre-write --host codex` (the patch text is `tool_input.command`). The model-visible hook message limit of Codex (about 2,500 tokens per the Codex hooks docs) is verified: a redacted output above it is cut with a fixed `[output truncated by qbit-vault]` line, never raising the value. Whether Codex needs the user to trust a new hook is checked and documented. `uninstall` removes them; `doctor` reports them.
+- S6. Pi (`packages/qbit-vault-pi`): a `tool_result` handler for the built-in `bash`, `powershell`, `read`, `grep`, `find`, `ls` runs `qbit-vault hook post-read --host pi` with the result text over stdin and replaces `content` (and drops or redacts `structuredContent`) with what it answers; a `tool_call` handler for `write` (`content`) and `edit` (`edits[].newText`) runs `hook pre-write --host pi` and blocks with its reason. A missing binary passes (S2.1); a spawn timeout or crash withholds (S2.2). Values only over stdin, never argv, never logged.
+- S7. Model-facing skill (`internal/hosts/skill/SKILL.md`): the withheld output and the write block are described with what to do (use `secret_exec`; unlock with `qbit-vault unlock`).
+- S8. Tests (RED first), through the public interface (the `hook` commands with JSON on stdin, the adapters' written files, the extension's handlers): every S2-S6 case with exact stdout/stderr/exit code; leak battery extended with a `TESTSECRET_` value in post outputs, the withheld path and write inputs; existing Claude registrations and outputs keep passing.
+- S9. Docs: AGENT_INTEGRATIONS (per-host table, fail mode, Codex section), THREAT_MODEL (L5, L26, R15 fail-open), PRD (R-RED-04, R-HOST-02/03, R-INS-05), CLI (`hook pre-write`, `--host`), GENTLE_SHELL_EXTENSION ("Not in v1" read/write guard moves to shipped), CHANGELOG [Unreleased].
+
+## Tasks
+
+| ID | Specs | Route | Commit | Status |
+| --- | --- | --- | --- | --- |
+| T1 | S2, S3, S4, S7, S8, S9 (core + Claude parts) | worker | | pending |
+| T2 | S5, S8, S9 (Codex parts) | worker | | pending |
+| T3 | S6, S8, S9 (Pi parts) | worker | | pending |
+| T4 | verify S1-S9 (Risk: items 2 and 3) | gentle-ai-verify | | pending |
+| T5 | PRs, owner check | parent + owner | | pending |
+
+## Log
+
+- L1. User (verbatim): "marca como hecha y sigamps con los pendientes.. arranca por lo que recomiendes"; "recuerda que esto debe funcionar para cualquier agente (claude, codex y pi)"; "vamos con eso".
+- L2. Research: Pi `tool_result` handlers can replace `content` (replacing without `structuredContent` drops it) and `tool_call` can block (`dist/core/extensions/types.d.ts`); Pi `write` input `{path, content}`, `edit` `{path, edits[{oldText,newText}]}`. Codex 0.166 hooks (learn.chatgpt.com/docs/hooks): PostToolUse `decision: "block"` replaces the tool result with the reason; `updatedMCPToolOutput` is parsed but unsupported; PreToolUse matches Bash, `apply_patch` (also as Edit/Write; `tool_input.command`) and MCP tools, denies with `permissionDecision: "deny"`; errors fail open on Codex's side; "Treat tool hooks as a useful guardrail, not a complete enforcement boundary". Claude: no Grep/Glob redaction and no Write/Edit guard today; `hook.go` fails open (`failOpen`, `lockedWarning`, `maxPostEvent = 64 MiB`), pinned by `TestHookPostLockedPassphraseVaultFailsOpen`.
+- L3. Residual (documented, not fixed): a host's own hook timeout or crash fails open on Claude and Codex; streaming partial output in Pi is not covered; a value split across two tool results is not caught.

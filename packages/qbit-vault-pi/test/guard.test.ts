@@ -214,7 +214,7 @@ describe("S6 tool_call write guard", () => {
 		};
 		expect(await pi.emit("tool_call", callEvent("edit", input), ctx)).toEqual({ block: true, reason: DENY });
 		const [call] = fake.calls();
-		expect(JSON.parse(call!.stdin).tool_input).toEqual({ edits: [{ newText: "fine" }, { newText: `x ${FIXTURE}` }] });
+		expect(JSON.parse(call!.stdin).tool_input).toEqual({ path: "a.txt", edits: [{ newText: "fine" }, { newText: `x ${FIXTURE}` }] });
 		expect(call!.stdin).not.toContain("OLD_");
 	});
 
@@ -240,9 +240,20 @@ describe("S6 tool_call write guard", () => {
 		const { ctx } = mockCtx();
 		expect(await pi.emit("tool_call", callEvent("bash", { command: `echo ${FIXTURE}` }), ctx)).toBeUndefined();
 		expect(await pi.emit("tool_call", callEvent("read", { path: "a" }), ctx)).toBeUndefined();
-		expect(await pi.emit("tool_call", callEvent("write", { path: "a", content: "" }), ctx)).toBeUndefined();
-		expect(await pi.emit("tool_call", callEvent("edit", { path: "a", edits: [] }), ctx)).toBeUndefined();
+		expect(await pi.emit("tool_call", callEvent("write", { content: "" }), ctx)).toBeUndefined();
+		expect(await pi.emit("tool_call", callEvent("edit", { edits: [] }), ctx)).toBeUndefined();
 		expect(vi.mocked(spawn)).not.toHaveBeenCalled();
+	});
+
+	it("checks the file name too, so an empty write to a file named by a value is blocked", async () => {
+		const fake = useFake(REDACT);
+		const pi = mockPi();
+		const { ctx } = mockCtx();
+		const input = { path: `dir/${FIXTURE}.txt`, content: "" };
+		expect(await pi.emit("tool_call", callEvent("write", input), ctx)).toEqual({ block: true, reason: DENY });
+		const [call] = fake.calls();
+		expect(JSON.parse(call!.stdin).tool_input).toEqual(input);
+		expect(call!.argv.join(" ")).not.toContain(FIXTURE);
 	});
 
 	it.each([

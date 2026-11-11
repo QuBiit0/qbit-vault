@@ -207,6 +207,14 @@ func TestHookPreWriteScansOnlyWhatIsAdded(t *testing.T) {
 		{"unknown tool scans everything", "mcp__files__rewrite", map[string]any{"old_string": hkA, "new_string": "z"}, "API_KEY"},
 		{"unknown key scans everything", "Edit", map[string]any{"file_path": "/p/x", "old_string": "a", "new_string": "b", "insert": hkA}, "API_KEY"},
 		{"command that is not a patch scans everything", "apply_patch", map[string]any{"command": "echo " + hkA}, "API_KEY"},
+		// A file name is written to disk too.
+		{"Write path holds the value", "Write", map[string]any{"file_path": "/p/" + hkA + ".txt", "content": "x"}, "API_KEY"},
+		{"Edit path holds the value", "Edit", map[string]any{"file_path": "/p/" + hkA, "old_string": "a", "new_string": "b"}, "API_KEY"},
+		{"NotebookEdit path holds the value", "NotebookEdit", map[string]any{"notebook_path": "/p/" + hkA + ".ipynb", "new_source": "x"}, "API_KEY"},
+		{"Pi write path holds the value", "write", map[string]any{"path": "/p/" + hkA, "content": "x"}, "API_KEY"},
+		{"patch adds a file named by the value", "apply_patch", patch("*** Add File: /p/"+hkA+".txt", "+x"), "API_KEY"},
+		{"patch updates a file named by the value", "apply_patch", patch("*** Update File: /p/"+hkA, "@@", "+x"), "API_KEY"},
+		{"patch moves a file to the value", "apply_patch", patch("*** Update File: /p/x", "*** Move to: /p/"+hkA, "@@", "+x"), "API_KEY"},
 	}
 	for _, c := range cases {
 		for _, host := range []string{"claude", "pi", "codex"} {

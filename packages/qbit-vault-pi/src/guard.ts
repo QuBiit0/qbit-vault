@@ -127,14 +127,20 @@ export function createGuard(options: { timeoutMs?: number } = {}): Guard {
 		const block = (reason: string): ToolCallEventResult => ({ block: true, reason });
 		try {
 			const edited = writtenStrings(event);
-			if (edited === undefined || edited.every((s) => s === "")) return undefined;
+			// The file name is written to disk too.
+			const input: unknown = event.input;
+			const path = isRecord(input) && typeof input.path === "string" ? input.path : "";
+			if (edited === undefined || (path === "" && edited.every((s) => s === ""))) return undefined;
 			const verdict = await check(
 				"pre-write",
 				{
 					hook_event_name: "PreToolUse",
 					tool_name: event.toolName,
 					cwd: ctx.cwd,
-					tool_input: event.toolName === "write" ? { content: edited[0] } : { edits: edited.map((newText) => ({ newText })) },
+					tool_input:
+						event.toolName === "write"
+							? { path, content: edited[0] }
+							: { path, edits: edited.map((newText) => ({ newText })) },
 				},
 				ctx,
 				timeoutMs,

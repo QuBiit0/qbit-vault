@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/minisign/minisigntest"
 )
 
 const (
@@ -37,6 +38,7 @@ type updWorld struct {
 	latest    string
 	assets    map[string][]byte
 	checksums string
+	sig       []byte // checksums.txt.minisig; nil means the release has none
 	dir       string
 	target    string
 	home      string
@@ -47,11 +49,12 @@ type updWorld struct {
 func newUpdWorld(t *testing.T, current, latest string) *updWorld {
 	t.Helper()
 	w := &updWorld{t: t, latest: latest, assets: map[string][]byte{}}
-	oldV, oldT, oldOS, oldArch, oldR := Version, updateTarget, updateGOOS, updateGOARCH, updateResync
+	oldV, oldT, oldOS, oldArch, oldR, oldK := Version, updateTarget, updateGOOS, updateGOARCH, updateResync, updateKey
 	t.Cleanup(func() {
-		Version, updateTarget, updateGOOS, updateGOARCH, updateResync = oldV, oldT, oldOS, oldArch, oldR
+		Version, updateTarget, updateGOOS, updateGOARCH, updateResync, updateKey = oldV, oldT, oldOS, oldArch, oldR, oldK
 	})
 	Version, updateGOOS, updateGOARCH = current, "linux", "amd64"
+	updateKey = updSigner.Pub
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api", func(rw http.ResponseWriter, r *http.Request) {
@@ -62,6 +65,10 @@ func newUpdWorld(t *testing.T, current, latest string) *updWorld {
 		name := strings.TrimPrefix(r.URL.Path, "/dl/")
 		if name == "checksums.txt" {
 			fmt.Fprint(rw, w.checksums)
+			return
+		}
+		if name == "checksums.txt.minisig" && w.sig != nil {
+			rw.Write(w.sig)
 			return
 		}
 		b, ok := w.assets[name]
@@ -100,9 +107,21 @@ func (w *updWorld) releaseJSON() string {
 		as = append(as, asset{n, w.srv.URL + "/dl/" + n})
 	}
 	as = append(as, asset{"checksums.txt", w.srv.URL + "/dl/checksums.txt"})
+	if w.sig != nil {
+		as = append(as, asset{"checksums.txt.minisig", w.srv.URL + "/dl/checksums.txt.minisig"})
+	}
 	b, _ := json.Marshal(map[string]any{"tag_name": w.latest, "draft": false, "prerelease": false,
 		"published_at": "2026-02-01T00:00:00Z", "html_url": w.srv.URL + "/notes", "assets": as})
 	return string(b)
+}
+
+// updSigner stands in for the release key: the binary under test is pointed
+// at its throwaway public key through the updateKey seam, so these tests keep
+// working whichever release key is pinned.
+var updSigner = minisigntest.New(1)
+
+func (w *updWorld) signChecksums() {
+	w.sig = updSigner.Sign([]byte(w.checksums), "timestamp:1 file:checksums.txt version:"+w.latest)
 }
 
 func updSum(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
@@ -110,6 +129,7 @@ func updSum(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(
 func (w *updWorld) setArchive(name string, data []byte) {
 	w.assets[name] = data
 	w.checksums = updSum(data) + "  " + name + "\n" + strings.Repeat("0", 64) + "  other.zip\n"
+	w.signChecksums()
 }
 
 func updTarGz(t *testing.T, name, body string) []byte {
@@ -269,6 +289,75 @@ func TestUpdateStopsOnBadDownload(t *testing.T) {
 			w.onlyBinary()
 			w.noVault()
 		})
+	}
+}
+
+const updNotSigned = "error: the release v1.1.0 is not signed with the QBit Vault release key; nothing was changed\n"
+
+func TestUpdateSignedReleaseUpdates(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	withBackend(t, answers(yes()))
+	code, _, errs := w.run()
+	if code != exitcode.OK || errs != "" || w.binary() != updNew {
+		t.Fatalf("code=%d err=%q binary=%q", code, errs, w.binary())
+	}
+	w.onlyBinary()
+}
+
+// A release without a valid signature is refused with one message, however it
+// is wrong, and the SHA-256 alone never lets it through.
+func TestUpdateRefusesWithoutValidSignature(t *testing.T) {
+	other := minisigntest.New(2)
+	for name, mutate := range map[string]func(w *updWorld){
+		"no minisig": func(w *updWorld) { w.sig = nil },
+		"signed by another key": func(w *updWorld) {
+			w.sig = other.Sign([]byte(w.checksums), "timestamp:1 file:checksums.txt version:v1.1.0")
+		},
+		"checksums changed after signing": func(w *updWorld) {
+			// The archive still matches its line, so the SHA-256 check passes.
+			w.checksums += strings.Repeat("1", 64) + "  extra.zip\n"
+		},
+		"malformed signature": func(w *updWorld) { w.sig = []byte("not a signature\n") },
+		"empty signature":     func(w *updWorld) { w.sig = []byte{} },
+		"tampered signature": func(w *updWorld) {
+			w.sig = bytes.Replace(w.sig, []byte("trusted comment: timestamp:1"), []byte("trusted comment: timestamp:2"), 1)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+			mutate(w)
+			withBackend(t, answers(yes()))
+			code, out, errs := w.run()
+			if code != exitcode.Failure || out != "" || errs != updNotSigned {
+				t.Fatalf("code=%d out=%q err=%q", code, out, errs)
+			}
+			if w.binary() != updOld || len(w.resyncs) != 0 {
+				t.Fatal("the installed binary must stay byte-identical")
+			}
+			w.onlyBinary()
+			w.noVault()
+		})
+	}
+}
+
+// With no test key injected the binary trusts only its pinned key.
+func TestUpdateDefaultKeyIsThePinnedOne(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	updateKey = nil
+	w.sig = minisigntest.New(3).Sign([]byte(w.checksums), "timestamp:1 file:checksums.txt version:v1.1.0")
+	withBackend(t, answers(yes()))
+	code, _, errs := w.run()
+	if code != exitcode.Failure || errs != updNotSigned || w.binary() != updOld {
+		t.Fatalf("code=%d err=%q", code, errs)
+	}
+}
+
+func TestUpdateCheckNeedsNoSignature(t *testing.T) {
+	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
+	w.sig = nil
+	code, out, errs := w.run("--check")
+	if code != exitcode.OK || out != "update available: v1.0.0 -> v1.1.0\n" || errs != "" || w.hits.Load() != 0 {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
 }
 

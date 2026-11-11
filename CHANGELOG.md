@@ -6,6 +6,7 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ### Fixed
 
+- The `user-prompt` hook no longer blocks a message that carries the value of a `kind: text` entry (a URL, a host, a region captured as a visible field). Such a value is stored so commands can use it, not because it is secret, and every message that mentioned it was blocked (`This message contains the value of the stored secret DOKPLOY_URL ...`). It is still stored, injected by `exec` and redacted by `post-bash` / `post-read`; a message that also carries a `secret` entry is still blocked and names only that entry, and a well-known secret shape still blocks.
 - A `session` or `once` grant of another session no longer makes `secret_list` and the `grant_required` message say the grant is for an earlier value of the entry: it would not apply even for the current value, so they say nothing about it. `secret_list` now refuses, as `secret_exec` does, when the working directory cannot be resolved, instead of comparing grants against the unresolved path.
 
 ## [1.2.0] - 2026-11-11

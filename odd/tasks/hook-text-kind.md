@@ -1,0 +1,22 @@
+# A visible `text` entry does not block a prompt
+
+The `UserPromptSubmit` hook blocks a message that carries the value of any stored entry, `kind: text` included. A `text` entry (a URL, a host, a region) is stored so commands can use it, not because it is secret, and the person types it in the chat all the time, so every such message is blocked. Output redaction keeps covering it; only the prompt block skips it.
+
+## Specs
+
+- S1. Owner, verbatim: "estaria bueno que guarde porque muchas veces se necesita que este almacenado". A `text` entry stays stored, injected by `exec` and redacted by `post-bash` / `post-read` exactly as today.
+- S2. `hook user-prompt` does not block a prompt whose only stored match is the value of a `kind: text` entry (any encoding): it prints nothing and exits 0, as for a clean prompt.
+- S3. A prompt that also carries the value of a `kind: secret` entry is still blocked, and the reason names only the `secret` entries (`This message contains the value of the stored secret API_KEY, so qbit-vault blocked it. ...`); a `text` entry is never named.
+- S4. Well-known secret shapes still block whatever the entry kind (a `text` value shaped like a GitHub token still blocks).
+- S5. Docs: PRD R-VAULT-06 and R-CAP-06, AGENT_INTEGRATIONS.md § user-prompt, THREAT_MODEL L34, CLI.md hook row if it describes the block, CHANGELOG [Unreleased] ### Fixed.
+
+## Tasks
+
+| ID | Specs | Route | Commit | Status |
+|----|-------|-------|--------|--------|
+| T1 | S1-S5 | inline | | in progress |
+| T2 | S1-S4 verify | gentle-ai-verify | | pending |
+
+## Log
+
+- L1. Owner (2026-11-11): every prompt was blocked with "This message contains the value of the stored secret DOKPLOY_URL, so qbit-vault blocked it." DOKPLOY_URL is `kind: text`, `sensitive: false`. Skipping `sensitive: false` was rejected (it is the default for every credential). Owner chose to keep `text` entries stored and stop them from blocking prompts: "y yo creo que estaria bueno que guarde porque muchas veces se necesita que este almacenado".

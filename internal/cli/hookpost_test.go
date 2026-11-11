@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 	"unicode/utf16"
+
+	"github.com/qbitdevz/qbit-vault/internal/secret"
+	"github.com/qbitdevz/qbit-vault/internal/vault"
 )
 
 const (
@@ -168,6 +171,52 @@ func TestHookUserPromptBlocksStoredValueWithoutEchoing(t *testing.T) {
 	code, out, errs := w.run(`{"hook_event_name":"UserPromptSubmit","prompt":"fix the build"}`, "hook", "user-prompt")
 	if code != 0 || errs != "" || out != "" {
 		t.Fatalf("clean: code=%d out=%q err=%q", code, out, errs)
+	}
+}
+
+// putText stores a visible (`kind: text`) global entry, as a `text` field of
+// `secret_request` does.
+func (w *world) putText(name, value string) {
+	w.t.Helper()
+	g := &globals{getenv: envFrom(nil), home: w.home}
+	s, err := g.openSession()
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	defer s.close()
+	if err := s.v.Put(vault.Global(), name, vault.Record{Value: secret.New(name, []byte(value)), Kind: "text"}); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+func TestHookUserPromptLetsTextEntriesThrough(t *testing.T) {
+	const url = "TESTSECRET_https://dokploy.example.test"
+	const shaped = "ghp_TESTSECRETtextshaped0123456789abcdefgh"
+	w := hookWorld(t)
+	w.putText("PANEL_URL", url)
+	w.putText("SHAPED_TEXT", shaped)
+	prompt := func(p string) (int, string, string) {
+		ev, _ := json.Marshal(map[string]any{"hook_event_name": "UserPromptSubmit", "prompt": p})
+		return w.run(string(ev), "hook", "user-prompt")
+	}
+	for _, p := range []string{"deploy to " + url, "basic " + base64.StdEncoding.EncodeToString([]byte(url))} {
+		if code, out, errs := prompt(p); code != 0 || errs != "" || out != "" {
+			t.Fatalf("text only %q: code=%d out=%q err=%q", p, code, out, errs)
+		}
+	}
+	code, out, errs := prompt("deploy to " + url + " with " + hkA)
+	if code != 0 || errs != "" || out != fmt.Sprintf(wantHookBlockFmt, "API_KEY") {
+		t.Fatalf("text and secret: code=%d out=%q err=%q", code, out, errs)
+	}
+	noFixtures(t, "hook output", out+errs)
+	code, out, errs = prompt("token " + shaped)
+	if code != 0 || errs != "" || !strings.Contains(out, `"reason":"This message looks like it contains a GitHub token, so qbit-vault blocked it.`) {
+		t.Fatalf("shaped text: code=%d out=%q err=%q", code, out, errs)
+	}
+	// Output redaction still covers a text entry.
+	code, out, errs = w.run(postBashEvent(t, "url="+url), "hook", "post-bash")
+	if code != 0 || errs != "" || out != postBashWant(t, "url=[REDACTED:PANEL_URL]", 1) {
+		t.Fatalf("post-bash: code=%d out=%q err=%q", code, out, errs)
 	}
 }
 

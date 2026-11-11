@@ -77,6 +77,9 @@ release:
   # Regular releases, never pre-releases: releases/latest/download/install.sh
   # skips pre-releases, and the -beta in the version already says what it is.
   prerelease: "false"
+  # Published as a draft: the sign job of release.yml adds
+  # checksums.txt.minisig and only then makes the release public.
+  draft: true
   # The installers are attached to every release (and listed in checksums.txt).
   extra_files:
     - glob: scripts/install.sh
@@ -101,3 +104,12 @@ release:
     With Go 1.26+: `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@{{ .Tag }}`
 
     Then run `qbit-vault` (guided setup) or `qbit-vault init`. Verify an archive's provenance with `gh attestation verify <file> --repo qbitdevz/qbit-vault`.
+
+    ## Verify
+
+    checksums.txt is signed with Minisign. Download `checksums.txt` and `checksums.txt.minisig`, then:
+
+    ```bash
+    minisign -V -P RWQrm6ZYLnbuvsS0Px4nVFDMnfj6QG4sqbwDkmelqS9njb/q577zkLt8 -m checksums.txt -x checksums.txt.minisig
+    sha256sum --check --ignore-missing checksums.txt
+    ```

@@ -1,8 +1,10 @@
 name: release
 
 # Runs on a pushed version tag (v0.1.0, v0.1.0-beta.1). It tests, builds the
-# archives with GoReleaser, publishes the GitHub release with checksums.txt,
-# and attests the build provenance of every archive.
+# archives with GoReleaser, creates the GitHub release as a draft with
+# checksums.txt, and attests the build provenance of every archive. The sign
+# job then signs checksums.txt with Minisign and only then publishes the
+# release; the server image is built after that.
 on:
   push:
     tags: ["v*"]
@@ -25,7 +27,11 @@ jobs:
         with:
           go-version-file: go.mod
       # Logs go outside the checkout: GoReleaser refuses a dirty work tree.
+      # QBIT_VAULT_RELEASE_CHECK makes the tests fail while the pinned release
+      # key is still the test key, so such a release cannot be built.
       - name: test
+        env:
+          QBIT_VAULT_RELEASE_CHECK: "1"
         run: |
           mkdir -p "$RUNNER_TEMP/ci-logs"
           set -o pipefail
@@ -46,10 +52,75 @@ jobs:
             dist/*.zip
             dist/checksums.txt
 
-  # The sync server image (docs/REMOTE_SYNC.md § 10). Runs after the release
-  # job passed its tests; it only needs to push to ghcr.io and read the code.
-  server-image:
+  # Signs checksums.txt of the draft release and publishes it. The job waits
+  # for a reviewer of the release-signing environment, which also holds the
+  # signing seed. It can only write release assets: no tokens for attestations
+  # or packages. Any failing step leaves the release a draft.
+  sign:
     needs: release
+    runs-on: ubuntu-latest
+    environment: release-signing
+    permissions:
+      contents: write  # upload the signature to the draft and publish it
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          cd "$RUNNER_TEMP/release"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt
+          while read -r _ name; do
+            case "$name" in ""|*/*) echo "unexpected name in checksums.txt" >&2; exit 1;; esac
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name"
+          done < checksums.txt
+      - name: check checksums
+        run: |
+          cd "$RUNNER_TEMP/release"
+          sha256sum --check --strict checksums.txt
+      - name: build signer
+        run: go build -o "$RUNNER_TEMP/release-sign" ./tools/release-sign
+      - name: sign
+        env:
+          QBIT_VAULT_SIGNING_KEY: ${{ secrets.QBIT_VAULT_SIGNING_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: '"$RUNNER_TEMP/release-sign" sign "$RUNNER_TEMP/release/checksums.txt" --version "$TAG"'
+      - name: verify with the pinned key
+        run: '"$RUNNER_TEMP/release-sign" verify "$RUNNER_TEMP/release/checksums.txt"'
+      - name: upload signature
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP/release/checksums.txt.minisig" --repo "$GITHUB_REPOSITORY"
+      # Download the signature back and check it again, so what is published
+      # is what was verified.
+      - name: verify the upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/uploaded"
+          cd "$RUNNER_TEMP/uploaded"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt --pattern checksums.txt.minisig
+          cmp checksums.txt "$RUNNER_TEMP/release/checksums.txt"
+          "$RUNNER_TEMP/release-sign" verify "$RUNNER_TEMP/uploaded/checksums.txt"
+      - name: publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
+  # The sync server image (docs/REMOTE_SYNC.md § 10). Runs after the release
+  # is signed and published; it only needs to push to ghcr.io and read the code.
+  server-image:
+    needs: sign
     runs-on: ubuntu-latest
     permissions:
       contents: read   # check out the tagged commit

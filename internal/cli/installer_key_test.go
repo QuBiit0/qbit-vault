@@ -49,3 +49,20 @@ func TestInstallersAgreeOnFirstSignedAndWarning(t *testing.T) {
 		}
 	}
 }
+
+// The release notes footer shows the same verify command as the installers,
+// with the key of defaults/release-key.pub (S8).
+func TestReleaseNotesShowTheMinisignVerifyCommand(t *testing.T) {
+	lines := strings.Split(strings.TrimSpace(repoFile(t, "defaults", "release-key.pub")), "\n")
+	want := "minisign -V -P " + lines[1] + " -m checksums.txt -x checksums.txt.minisig"
+	g := repoFile(t, ".goreleaser.yaml")
+	if !strings.Contains(g, want) {
+		t.Errorf(".goreleaser.yaml footer lacks %q", want)
+	}
+	if !strings.Contains(g, "gh attestation verify") {
+		t.Error("the footer must keep the gh attestation verify command")
+	}
+	if found := regexp.MustCompile(`RW[A-Za-z0-9+/]{54}`).FindAllString(g, -1); len(found) != 1 {
+		t.Errorf(".goreleaser.yaml carries %d key-like strings, want 1", len(found))
+	}
+}

@@ -78,7 +78,7 @@ jobs:
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt
           while read -r _ name; do
             case "$name" in ""|*/*) echo "unexpected name in checksums.txt" >&2; exit 1;; esac
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" < /dev/null
           done < checksums.txt
       - name: check checksums
         run: |

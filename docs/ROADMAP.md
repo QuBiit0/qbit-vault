@@ -2,7 +2,7 @@
 
 Sliced so every PR stays ≤ 400 changed lines (the review budget), each with code + tests + docs. Phases are sequential; slices within a phase are mostly parallelizable. IDs refer to `docs/PRD.md`.
 
-**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *not built* = not implemented. Releases are published from the `v*` tags (`CHANGELOG.md`): archives for Linux, macOS and Windows, `checksums.txt`, the two installers, a build-provenance attestation and the server image `ghcr.io/qbitdevz/qbit-vault-server`. 1.0.0 is the first stable release. **Not built:** the npm package, the Homebrew formula, the Pi / Gentle Shell native extension, and Minisign-signed checksums; `qbit-vault update` is built (CLI); Pi and Gentle Shell work through MCP in the meantime.
+**Status.** *done* = built, tested and merged to `main` (evidence: commit hashes from `odd/tasks/*.md`); *dropped* = removed from scope by a recorded decision; *moved* = scheduled in another phase; *not built* = not implemented. Releases are published from the `v*` tags (`CHANGELOG.md`): archives for Linux, macOS and Windows, `checksums.txt`, the two installers, a build-provenance attestation and the server image `ghcr.io/qbitdevz/qbit-vault-server`. 1.0.0 is the first stable release. **Not built:** the npm package and the Homebrew formula. Built since 1.0.0: `qbit-vault update`, the Pi / Gentle Shell extension (`qbit-vault-pi`, git tags `pi-v*`) and Minisign-signed checksums (`odd/tasks/minisign.md`).
 
 | Phase | Status |
 | --- | --- |
@@ -128,7 +128,7 @@ User request (2026-11-05, `odd/tasks/polish.md` S5): an interactive terminal app
 
 - **Built.** `qbit-vault tui`, and `qbit-vault` with no arguments on a terminal (not with `--json` or `QBIT_VAULT_NO_TUI=1`). First-run splash and setup wizard (`init` with the chosen key storage and hosts). Three-pane home: Secrets (add, edit info, remove, unlock), Grants (list, revoke, revoke all; it cannot grant), Hosts (status, repair, uninstall, register), Audit (recent records, verify the local chain), Sync (status only), Doctor, and Update. Every action runs the real command path in-process; no value is ever shown and values and passphrases are typed only in the suspended prompt.
 - **Not exercised.** The suspend and resume of the TUI around the masked prompt on a real terminal: tests replace that step. Leak tests use a fake host adapter, not real host config files.
-- **Self-update (after 1.0.0).** The Update section checks for a newer release in the background every time the TUI opens (5 s, opt out with `QBIT_VAULT_NO_UPDATE_CHECK=1`), shows `update available <latest>` in the header, and `u` runs `qbit-vault update` with the TUI suspended. No secret value, no grant. Not built: Minisign verification.
+- **Self-update (after 1.0.0).** The Update section checks for a newer release in the background every time the TUI opens (5 s, opt out with `QBIT_VAULT_NO_UPDATE_CHECK=1`), shows `update available <latest>` in the header, and `u` runs `qbit-vault update` with the TUI suspended. No secret value, no grant. `update` requires the Minisign signature of `checksums.txt` (`odd/tasks/minisign.md` S5).
 
 ## v2 candidates (not scheduled)
 

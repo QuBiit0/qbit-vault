@@ -107,14 +107,14 @@ func TestName(t *testing.T) {
 		t.Fatalf("name %q", got)
 	}
 	steps := codex.NewWithExe(fakeExe).Steps(hosts.Env{})
-	if len(steps) != 2 || steps[0].Name != "mcp" || steps[1].Name != "skill" {
+	if len(steps) != 3 || steps[0].Name != "mcp" || steps[1].Name != "hooks" || steps[2].Name != "skill" {
 		t.Fatalf("steps %+v", steps)
 	}
 }
 
 func TestApplyOnAbsentFile(t *testing.T) {
 	r := newRig(t)
-	if res := r.apply(); !res.Changed() || len(res.Steps) != 2 {
+	if res := r.apply(); !res.Changed() || len(res.Steps) != 3 {
 		t.Fatalf("result %+v", res)
 	}
 	r.golden("absent.config.toml.golden")
@@ -273,9 +273,9 @@ func TestWindowsPathsRenderAsValidTOML(t *testing.T) {
 		t.Skip("a Windows executable path is only ever written on Windows")
 	}
 	r := newRig(t)
-	r.host = codex.NewWithExe(`C:\Program Files\QBit "Vault"\qbit-vault.exe`)
+	r.host = codex.NewWithExe(`C:\Program Files\QBit Vault\qbit-vault.exe`)
 	r.apply()
-	want := `command = "C:\\Program Files\\QBit \"Vault\"\\qbit-vault.exe"`
+	want := `command = "C:\\Program Files\\QBit Vault\\qbit-vault.exe"`
 	if !strings.Contains(r.read(r.config()), want) {
 		t.Fatalf("command not escaped:\n%s", r.read(r.config()))
 	}

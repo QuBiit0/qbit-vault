@@ -64,6 +64,7 @@ sha() { sha256sum "$1" | cut -d' ' -f1; }
 CLAUDE_JSON=$HOME/.claude.json
 SETTINGS=$HOME/.claude/settings.json
 CODEX=$HOME/.codex/config.toml
+CODEX_HOOKS=$HOME/.codex/hooks.json
 PI_MCP=$HOME/.pi/agent/mcp.json
 
 # ---- step 1: the fake home, with user configs that must survive ----
@@ -74,8 +75,10 @@ mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.pi/agent"
 printf '{\n\t"numStartups": 42,\n\t"theme": "dark",\n\t"mcpServers": {\n\t\t"other-mcp": { "command": "npx", "args": ["-y", "other-mcp"] }\n\t},\n\t"projects": { "/work/x": { "allowedTools": [] } }\n}\n' >"$CLAUDE_JSON"
 printf '{\n\t"model": "opus",\n\t"permissions": { "deny": ["Read(./.env)"], "allow": ["Bash(git status)"] },\n\t"hooks": {\n\t\t"PreToolUse": [\n\t\t\t{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "gentle-ai hook guard" }] }\n\t\t],\n\t\t"Stop": [ { "hooks": [{ "type": "command", "command": "notify-send done" }] } ]\n\t}\n}\n' >"$SETTINGS"
 printf '# my codex config\r\nmodel = "gpt-5"   # keep me\r\n\r\n[mcp_servers.x]\r\ncommand = "x-server"\r\nargs = ["--flag"]\r\n\r\n[profiles.fast]\r\nmodel = "small"\r\n' >"$CODEX"
+# another tool's Codex hooks (shaped like Orca's): ours are merged next to them
+printf '{\n  "hooks": {\n    "PostToolUse": [\n      { "hooks": [{ "type": "command", "command": "node /opt/other/codex-hook.cjs post", "timeout": 5 }] }\n    ],\n    "Stop": [\n      { "hooks": [{ "type": "command", "command": "node /opt/other/codex-hook.cjs stop" }] }\n    ]\n  }\n}\n' >"$CODEX_HOOKS"
 printf '{\n  "mcpServers": {\n    "pi-other": { "command": "pi-other", "args": [] }\n  }\n}\n' >"$PI_MCP"
-ORIG_CLAUDE=$(sha "$CLAUDE_JSON") ORIG_SETTINGS=$(sha "$SETTINGS") ORIG_CODEX=$(sha "$CODEX") ORIG_PI=$(sha "$PI_MCP")
+ORIG_CLAUDE=$(sha "$CLAUDE_JSON") ORIG_SETTINGS=$(sha "$SETTINGS") ORIG_CODEX=$(sha "$CODEX") ORIG_CODEX_HOOKS=$(sha "$CODEX_HOOKS") ORIG_PI=$(sha "$PI_MCP")
 cp "$CLAUDE_JSON" "$WORK/claude.json.orig"
 if ! command -v claude >/dev/null && ! command -v codex >/dev/null && ! command -v pi >/dev/null && ! command -v gentle-shell >/dev/null; then
   pass "no real claude, codex or pi binary in the image (detection is by directory)"
@@ -94,14 +97,14 @@ qbv init --passphrase
 expect_rc "init exits 0" 0
 expect_empty_err "init writes nothing to stderr"
 expect_out "init: claude-code line" $'host claude-code: registered (mcp, hooks, deny, skill)\n'
-expect_out "init: codex line" $'host codex: registered (mcp, skill)\n'
+expect_out "init: codex line" $'host codex: registered (mcp, hooks, skill)\n'
 # Pi shares ~/.agents/skills with Codex, which already wrote the skill.
 expect_out "init: pi line (no extension line while it is unpublished)" $'host pi: registered (mcp)\n'
 CLAUDE_SKILL="$HOME/.claude/skills/qbit-vault/SKILL.md"
 AGENTS_SKILL="$HOME/.agents/skills/qbit-vault/SKILL.md"
 if [[ -f $CLAUDE_SKILL && -f $AGENTS_SKILL ]] && grep -q '^name: qbit-vault$' "$CLAUDE_SKILL" && cmp -s "$CLAUDE_SKILL" "$AGENTS_SKILL"; then pass "init installs the same skill for claude-code and for codex + pi"; else fail "init installs the same skill for claude-code and for codex + pi"; fi
 if [[ ! -e $HOME/.pi/agent/skills/qbit-vault ]]; then pass "pi gets no second copy of the skill"; else fail "pi gets no second copy of the skill"; fi
-if [[ $OUT == *healthy ]]; then pass "init ends with a healthy doctor report"; else fail "init ends with a healthy doctor report" "$(snippet "$OUT")"; fi
+if grep -qx healthy <<<"$OUT"; then pass "init ends with a healthy doctor report"; else fail "init ends with a healthy doctor report" "$(snippet "$OUT")"; fi
 expect_no_out "init output holds no passphrase" "$PASSPHRASE"
 
 jqt "claude.json: our MCP entry" "$CLAUDE_JSON" '.mcpServers["qbit-vault"].args == ["mcp"] and (.mcpServers["qbit-vault"].command | startswith("/"))'
@@ -109,7 +112,7 @@ jqt "claude.json: points the MCP server at our vault home" "$CLAUDE_JSON" ".mcpS
 jqt "claude.json: the user's other MCP server is intact" "$CLAUDE_JSON" '.mcpServers["other-mcp"] == {"command":"npx","args":["-y","other-mcp"]}'
 jqt "claude.json: unrelated keys intact" "$CLAUDE_JSON" '.numStartups == 42 and .theme == "dark" and (.projects["/work/x"].allowedTools == [])'
 jqt "claude.json: the user's key order is kept" "$CLAUDE_JSON" '(keys_unsorted | .[0:2]) == ["numStartups","theme"]'
-jqt "settings.json: four qbit-vault hook entries" "$SETTINGS" '[.hooks[][] | .hooks[] | select(.statusMessage? // "" | startswith("qbit-vault hook "))] | length == 4'
+jqt "settings.json: five qbit-vault hook entries" "$SETTINGS" '[.hooks[][] | .hooks[] | select(.statusMessage? // "" | startswith("qbit-vault hook "))] | length == 5'
 jqt "settings.json: pre-bash is a PreToolUse hook on Bash|PowerShell" "$SETTINGS" '[.hooks.PreToolUse[] | select(.matcher == "Bash|PowerShell") | .hooks[] | select(.args == ["hook","pre-bash"])] | length == 1'
 jqt "settings.json: the user's Gentle AI-looking hook is intact" "$SETTINGS" '[.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[] | select(.command == "gentle-ai hook guard")] | length == 1'
 jqt "settings.json: the user's Stop hook is intact" "$SETTINGS" '[.hooks.Stop[].hooks[] | select(.command == "notify-send done")] | length == 1'
@@ -138,20 +141,22 @@ b = open(sys.argv[1], "rb").read()
 head = b.split(b"[mcp_servers.qbit-vault]")[0]
 assert b"\r\n" in head and head.count(b"\n") == head.count(b"\r\n"), head
 PY
+jqt "codex hooks.json: post-bash and pre-write with the codex protocol" "$CODEX_HOOKS" '([.hooks.PostToolUse[] | select(.matcher == "Bash") | .hooks[].command | endswith(" hook post-bash --host codex")] == [true]) and ([.hooks.PreToolUse[] | select(.matcher == "apply_patch") | .hooks[].command | endswith(" hook pre-write --host codex")] == [true])'
+jqt "codex hooks.json: the other tool's hooks are intact" "$CODEX_HOOKS" '([.hooks.PostToolUse[].hooks[].command | select(startswith("node "))] == ["node /opt/other/codex-hook.cjs post"]) and ([.hooks.Stop[].hooks[].command] == ["node /opt/other/codex-hook.cjs stop"])'
 jqt "pi mcp.json: our MCP entry" "$PI_MCP" '.mcpServers["qbit-vault"].args == ["mcp"]'
 jqt "pi mcp.json: the user's other server is intact" "$PI_MCP" '.mcpServers["pi-other"] == {"command":"pi-other","args":[]}'
 
 qbv doctor
 expect_rc "doctor exits 0 after init" 0
 if [[ $OUT == *healthy ]]; then pass "doctor says healthy"; else fail "doctor says healthy" "$(snippet "$OUT")"; fi
-for chk in host.claude-code.mcp host.claude-code.hooks host.claude-code.deny host.codex.mcp host.pi.mcp; do
+for chk in host.claude-code.mcp host.claude-code.hooks host.claude-code.deny host.codex.mcp host.codex.hooks host.pi.mcp; do
   if grep -qE "^ok +$chk " <<<"$OUT"; then pass "doctor: $chk ok"; else fail "doctor: $chk ok" "$(snippet "$OUT")"; fi
 done
 
 # ---- step 3: idempotence ----
 
 step "3. second init and sync change nothing"
-snap() { sha256sum "$CLAUDE_JSON" "$SETTINGS" "$CODEX" "$PI_MCP" "$VAULT/state.json" | sha256sum | cut -d' ' -f1; }
+snap() { sha256sum "$CLAUDE_JSON" "$SETTINGS" "$CODEX" "$CODEX_HOOKS" "$PI_MCP" "$VAULT/state.json" | sha256sum | cut -d' ' -f1; }
 BEFORE=$(snap)
 BACKUPS_BEFORE=$(ls "$VAULT/backups" | wc -l)
 answers
@@ -203,6 +208,17 @@ EV=$(jq -cn --arg s "line: $SECRET" '{session_id:"s1",hook_event_name:"PostToolU
 runin "$EV" qbit-vault hook post-read
 expect_no_out "post-read output does not hold the value" "$SECRET"
 
+EV=$(jq -cn --arg s "API_KEY=$SECRET and more" '{session_id:"s1",hook_event_name:"PostToolUse",tool_name:"Bash",tool_input:{command:"cat .env"},tool_response:{stdout:$s,stderr:"",interrupted:false,isImage:false}}')
+runin "$EV" qbit-vault hook post-bash --host codex
+expect_rc "codex post-bash exits 0" 0
+expect_out "codex post-bash blocks with the redacted output as the reason" '"decision":"block"'
+expect_no_out "codex post-bash answer does not hold the value" "$SECRET"
+jqt "codex post-bash: the reason is the redacted output" "$WORK/o" '.decision == "block" and (.reason | contains("[REDACTED:") and (contains("TESTSECRET_") | not))'
+PATCH=$(jq -cn --arg c "*** Begin Patch\n*** Add File: x.env\n+KEY=$SECRET\n*** End Patch" '{session_id:"s1",hook_event_name:"PreToolUse",tool_name:"apply_patch",tool_input:{command:$c}}')
+runin "$PATCH" qbit-vault hook pre-write --host codex
+expect_rc "codex pre-write exits 0" 0
+expect_out "codex pre-write denies a patch that holds a stored value" '"permissionDecision":"deny"'
+expect_no_out "codex pre-write answer does not hold the value" "$SECRET"
 runin "$(jq -cn --arg p "my key is $SECRET please use it" '{session_id:"s1",hook_event_name:"UserPromptSubmit",prompt:$p}')" qbit-vault hook user-prompt
 expect_rc "user-prompt exits 0" 0
 expect_out "user-prompt blocks a prompt holding a stored value" '"decision":"block"'
@@ -213,8 +229,9 @@ expect_eq "user-prompt lets an ordinary prompt through" "$OUT$ERR" ""
 qbv lock
 expect_rc "lock drops the unlock cache" 0
 runin "$EV" qbit-vault hook post-read
-expect_rc "post-read with a locked vault exits 0 (fail open)" 0
+expect_rc "post-read with a locked vault exits 0 (and withholds the output)" 0
 expect_out "locked vault: the agent is told the vault is locked" "vault locked"
+expect_out "locked vault: the output is withheld" "output withheld: qbit-vault could not check it for secrets (vault locked)"
 expect_no_out "locked vault: output holds no value" "$SECRET"
 answers
 qbv unlock
@@ -353,6 +370,7 @@ jqt "settings.json: every user entry is intact" "$SETTINGS" '.model == "opus" an
 expect_eq "settings.json byte-identical to the original after drift + sync + uninstall" "$(sha "$SETTINGS")" "$ORIG_SETTINGS"
 SETTINGS_BASE=$(sha "$SETTINGS")
 expect_eq "codex config.toml byte-identical to the original (CRLF, comments)" "$(sha "$CODEX")" "$ORIG_CODEX"
+expect_eq "codex hooks.json byte-identical to the original (the other tool's hooks only)" "$(sha "$CODEX_HOOKS")" "$ORIG_CODEX_HOOKS"
 expect_eq "pi mcp.json byte-identical to the original" "$(sha "$PI_MCP")" "$ORIG_PI"
 jqt "claude.json: the later user key is kept" "$CLAUDE_JSON" '.addedLater == "user-edit"'
 jqt "claude.json: our entry is gone, the user's server is not" "$CLAUDE_JSON" '(.mcpServers | has("qbit-vault") | not) and .mcpServers["other-mcp"].command == "npx"'
@@ -383,11 +401,12 @@ qbv uninstall --purge
 expect_rc "purge with the word exits 0" 0
 expect_out "purge reports the vault deleted" "vault purged: $VAULT"
 if [[ ! -e $VAULT ]]; then pass "the vault home is gone"; else fail "the vault home is gone" "$(ls -A "$VAULT" | tr '\n' ' ')"; fi
-for f in "$CLAUDE_JSON" "$SETTINGS" "$CODEX" "$PI_MCP"; do
+for f in "$CLAUDE_JSON" "$SETTINGS" "$CODEX" "$CODEX_HOOKS" "$PI_MCP"; do
   if [[ -f $f ]]; then pass "kept: ${f#$HOME/}"; else fail "kept: ${f#$HOME/}"; fi
 done
 expect_eq "settings.json byte-identical to its state before the second init (init -> purge round trip)" "$(sha "$SETTINGS")" "$SETTINGS_BASE"
 expect_eq "codex config.toml byte-identical to the original after purge" "$(sha "$CODEX")" "$ORIG_CODEX"
+expect_eq "codex hooks.json byte-identical to the original after purge" "$(sha "$CODEX_HOOKS")" "$ORIG_CODEX_HOOKS"
 expect_eq "pi mcp.json byte-identical to the original after purge" "$(sha "$PI_MCP")" "$ORIG_PI"
 jqt "claude.json: the later user key is kept after purge" "$CLAUDE_JSON" '.addedLater == "user-edit" and (.mcpServers | has("qbit-vault") | not)'
 if [[ -d $HOME/.claude && -d $HOME/.codex && -d $HOME/.pi/agent ]]; then pass "the host directories are intact"; else fail "the host directories are intact"; fi

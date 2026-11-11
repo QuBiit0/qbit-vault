@@ -10,6 +10,8 @@ import (
 	"github.com/qbitdevz/qbit-vault/internal/hosts/codex"
 )
 
+const codexTrust = "  Codex skips new hooks until you trust them: open /hooks in Codex and trust the qbit-vault hooks."
+
 func codexHost(uh string) *codex.Adapter {
 	return codex.NewWithExe(filepath.Join(uh, "bin", "qbit-vault")).WithLookPath(noClaudeBinary)
 }
@@ -26,12 +28,21 @@ func TestInitRegistersCodexAndDoctorIsHealthy(t *testing.T) {
 	w := newBareWorld(t)
 	withHosts(t, codexHost(uh))
 	code, out, errs := w.run("", "init", "--agents", "codex")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp, skill)\n") || !strings.HasSuffix(out, "healthy\n"+restartAgentsLine+"\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp, hooks, skill)\n"+codexTrust+"\n") || !strings.HasSuffix(out, "healthy\n"+restartAgentsLine+"\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out, errs)
 	}
-	if s := doctorStatus(out, "host.codex.mcp"); s != "ok" {
-		t.Fatalf("host.codex.mcp is %q:\n%s", s, out)
+	for _, c := range []string{"host.codex.mcp", "host.codex.hooks"} {
+		if s := doctorStatus(out, c); s != "ok" {
+			t.Fatalf("%s is %q:\n%s", c, s, out)
+		}
 	}
+	hooks := readFile(t, uh, ".codex", "hooks.json")
+	for _, want := range []string{`"matcher": "Bash"`, `qbit-vault hook post-bash --host codex`, `"matcher": "apply_patch"`, `qbit-vault hook pre-write --host codex`} {
+		if !strings.Contains(hooks, want) {
+			t.Fatalf("hooks.json lacks %q:\n%s", want, hooks)
+		}
+	}
+	noFixtures(t, "codex hooks", hooks)
 	cfg := readFile(t, uh, ".codex", "config.toml")
 	for _, want := range []string{"[mcp_servers.qbit-vault]\n", "args = [\"mcp\"]\n", "[mcp_servers.qbit-vault.env]\n", "QBIT_VAULT_HOME = "} {
 		if !strings.Contains(cfg, want) {
@@ -46,7 +57,7 @@ func TestInitRegistersCodexAndDoctorIsHealthy(t *testing.T) {
 	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: up to date\n") {
 		t.Fatalf("second run: code=%d out=%q err=%q", code, out, errs)
 	}
-	if readFile(t, uh, ".codex", "config.toml") != cfg || readFile(t, w.home, "state.json") != state ||
+	if readFile(t, uh, ".codex", "config.toml") != cfg || readFile(t, uh, ".codex", "hooks.json") != hooks || readFile(t, uh, ".codex", "hooks.json") != hooks || readFile(t, w.home, "state.json") != state ||
 		strings.Join(dirNames(t, filepath.Join(w.home, "backups")), ",") != strings.Join(backups, ",") {
 		t.Fatal("the second run wrote something")
 	}
@@ -67,6 +78,28 @@ func TestInitRegistersCodexAndDoctorIsHealthy(t *testing.T) {
 	}
 }
 
+// The user deletes hooks.json entries: doctor warns about the hooks only, and
+// init puts them back and asks for the trust review again.
+func TestDoctorReportsMissingCodexHooksAndInitRepairsThem(t *testing.T) {
+	uh := isolateUserHome(t)
+	w := newBareWorld(t)
+	withHosts(t, codexHost(uh))
+	if code, out, errs := w.run("", "init", "--agents", "codex"); code != exitcode.OK {
+		t.Fatalf("init: code=%d out=%q err=%q", code, out, errs)
+	}
+	if err := os.WriteFile(filepath.Join(uh, ".codex", "hooks.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := w.run("", "doctor")
+	if code != exitcode.Failure || doctorStatus(out, "host.codex.hooks") != "warn" || doctorStatus(out, "host.codex.mcp") != "ok" {
+		t.Fatalf("drift: code=%d\n%s", code, out)
+	}
+	code, out, errs := w.run("", "init", "--agents", "codex")
+	if code != exitcode.OK || !strings.Contains(out, "host codex: registered (hooks)\n"+codexTrust+"\n") {
+		t.Fatalf("repair: code=%d out=%q err=%q", code, out, errs)
+	}
+}
+
 func TestInitDetectsCodexByItsConfigDirectory(t *testing.T) {
 	uh := isolateUserHome(t)
 	w := newBareWorld(t)
@@ -82,7 +115,7 @@ func TestInitDetectsCodexByItsConfigDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs = w.run("", "init")
-	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp, skill)\n") {
+	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: registered (mcp, hooks, skill)\n") {
 		t.Fatalf("installed: code=%d out=%q err=%q", code, out, errs)
 	}
 }

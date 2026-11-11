@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/qbit/bin/qbit-vault hook post-bash --host codex",
+            "timeout": 30,
+            "statusMessage": "qbit-vault hook post-bash"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/qbit/bin/qbit-vault hook pre-write --host codex",
+            "timeout": 30,
+            "statusMessage": "qbit-vault hook pre-write"
+          }
+        ]
+      }
+    ]
+  }
+}

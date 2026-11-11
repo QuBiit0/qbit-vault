@@ -16,7 +16,7 @@
 │                                  ├── broker --op (hidden: raw contract call)  │
 │                                  ├── remote / link (opt-in multi-device sync) │
 │                                  ├── hook pre-bash|post-bash|post-read|       │
-│                                  │        user-prompt   (Claude Code hooks)   │
+│                                  │     pre-write|user-prompt (host hooks)     │
 │                                  └── mcp      (stdio MCP server)              │
 │                                                                               │
 │  internal/broker      contract v1 handlers; the only module hosts talk to     │
@@ -113,7 +113,9 @@ model ──Bash(cmd)──▶ Claude Code ──PreToolUse hook──▶ qbit-v
 hook: denies user-only qbit-vault subcommands in the agent's shell (everything except
       version, help, list, describe, grants, audit, doctor and exec); fails open.
 Claude Code ──PostToolUse hook──▶ qbit-vault hook post-bash | post-read
-      (redacts every stored value in tool_response, re-emitted as updatedToolOutput)
+      (redacts every stored value in tool_response, re-emitted as updatedToolOutput;
+       withholds the output when the vault cannot be checked)
+Claude Code ──PreToolUse hook──▶ qbit-vault hook pre-write  (denies a write carrying a stored value)
 Claude Code ──UserPromptSubmit hook──▶ qbit-vault hook user-prompt  (blocks a pasted secret)
 Secrets are used through MCP: model ──secret_exec──▶ qbit-vault mcp (Flow D).
 

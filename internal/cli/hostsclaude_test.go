@@ -72,7 +72,7 @@ func TestInitRegistersClaudeCodeAndDoctorIsHealthy(t *testing.T) {
 			t.Fatalf("mcp entry lacks %s:\n%s", want, mcp)
 		}
 	}
-	for _, sub := range []string{"pre-bash", "post-bash", "post-read", "user-prompt"} {
+	for _, sub := range []string{"pre-bash", "post-bash", "post-read", "pre-write", "user-prompt"} {
 		if !strings.Contains(settings, `"statusMessage": "qbit-vault hook `+sub+`"`) {
 			t.Fatalf("hook %s missing:\n%s", sub, settings)
 		}

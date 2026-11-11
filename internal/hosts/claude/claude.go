@@ -3,7 +3,7 @@
 // one file through internal/filemerge:
 //
 //	mcp    ~/.claude.json            mcpServers.qbit-vault (user scope MCP server)
-//	hooks  ~/.claude/settings.json   four hook entries running `qbit-vault hook …`
+//	hooks  ~/.claude/settings.json   six hook entries running `qbit-vault hook …`
 //	deny   ~/.claude/settings.json   permissions.deny entries for the vault home
 //	skill  ~/.claude/skills/qbit-vault/SKILL.md   the agent skill (internal/hosts/skill)
 //
@@ -31,10 +31,12 @@ import (
 const Name = "claude-code"
 
 const (
-	serverName  = "qbit-vault"
-	hookMarker  = "qbit-vault hook"
-	preTimeout  = 10 // seconds; the pre hook never opens the vault
-	postTimeout = 30 // seconds; the other hooks open the vault without prompting
+	serverName = "qbit-vault"
+	hookMarker = "qbit-vault hook"
+	// searchMarker is the statusMessage of the Grep|Glob output guard.
+	searchMarker = "qbit-vault search output guard"
+	preTimeout   = 10 // seconds; pre-bash never opens the vault
+	postTimeout  = 30 // seconds; the other hooks open the vault without prompting
 )
 
 var errNoUserHome = errors.New("claude-code: the user home directory is unknown")
@@ -200,6 +202,14 @@ type hookEntry struct {
 // latter exists.
 const shellTools = "Bash|PowerShell"
 
+// searchTools and writeTools are the other built-in tools the guards watch:
+// the results of Grep and Glob can carry a stored value like a file read, and
+// the write tools put their input into a file (odd/tasks/output-guard.md S4).
+const (
+	searchTools = "Grep|Glob"
+	writeTools  = "Write|Edit|MultiEdit|NotebookEdit"
+)
+
 // hookEdits owns one array element per hook. The element carries its marker
 // (`qbit-vault hook <sub>`) in statusMessage, which Claude Code shows as the
 // spinner text, because the command is in exec form (command = the binary,
@@ -210,15 +220,24 @@ func (a *Adapter) hookEdits(hosts.Env) ([]filemerge.JSONEdit, error) {
 	if err != nil {
 		return nil, err
 	}
-	defs := []struct{ event, matcher, sub string }{
-		{"PreToolUse", shellTools, "pre-bash"},
-		{"PostToolUse", shellTools, "post-bash"},
-		{"PostToolUse", "Read", "post-read"},
-		{"UserPromptSubmit", "", "user-prompt"},
+	// An empty marker is "qbit-vault hook <sub>". The Grep and Glob entry
+	// runs the same subcommand as the Read one, so it has its own marker, one
+	// that does not contain the Read marker: markers match by substring, and
+	// the Read entry would own this element too.
+	defs := []struct{ event, matcher, sub, marker string }{
+		{"PreToolUse", shellTools, "pre-bash", ""},
+		{"PostToolUse", shellTools, "post-bash", ""},
+		{"PostToolUse", "Read", "post-read", ""},
+		{"PostToolUse", searchTools, "post-read", searchMarker},
+		{"PreToolUse", writeTools, "pre-write", ""},
+		{"UserPromptSubmit", "", "user-prompt", ""},
 	}
 	var edits []filemerge.JSONEdit
 	for _, d := range defs {
-		marker := hookMarker + " " + d.sub
+		marker := d.marker
+		if marker == "" {
+			marker = hookMarker + " " + d.sub
+		}
 		timeout := postTimeout
 		if d.sub == "pre-bash" {
 			timeout = preTimeout

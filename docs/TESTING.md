@@ -31,7 +31,7 @@ Built: three Linux batteries, items 7, 9 and 10 below (items 3, 4 and 6 of this 
 
 1. *Planned (Phase 5, needs the npm package):* `npx qbit-vault init` from the packed npm tarball; assert zero prompts with keychain, exactly one without.
 2. `set` via stdin, `list`, `describe`, `exec` with a script that prints `$NAME` in every encoding the redactor knows and several it does not (hex, reversed) — the latter are expected leaks and are reported, not failed, to track R2.
-3. Hooks: feed recorded Claude Code hook JSON to `hook pre-bash`/`post-bash`/`post-read`/`user-prompt`; assert denials and redactions (rewrites once `pre-bash` rewrites; built as part of item 9).
+3. Hooks: feed recorded Claude Code hook JSON to `hook pre-bash`/`post-bash`/`post-read`/`pre-write`/`user-prompt`; assert denials and redactions (rewrites once `pre-bash` rewrites; built as part of item 9).
 4. MCP: drive `qbit-vault mcp` with a minimal MCP client; assert the four tools, their descriptions, the `policy` text as server `instructions`, refusal on `grant`.
 5. Leaked directory: after storing fixtures in global and project layers, copy `$QBIT_VAULT_HOME`; assert no file except `audit.jsonl` contains any fixture value, secret name or project root (R-VAULT-09), and `audit.jsonl` contains no value.
 6. `uninstall`: configs byte-identical to the pre-init snapshot.
@@ -80,6 +80,8 @@ The Docker batteries are not in CI. Run them locally before a change that touche
 ## Leak battery (every tier)
 
 `exec` leak test (`TestExecLeakBattery`, `internal/cli`): a child prints its secret in raw, base64, base64url, percent, JSON-escaped and split-across-writes form on stdout and stderr; the test runs it in human, `--stream`, `--json` and `--json --stream` modes plus a dump attempt, then scans all captured output and every file under the vault home for the value in the raw, base64, base64url, percent and UTF-16 (LE and BE) encodings; the battery also runs a child that writes the value as UTF-16LE (`TestExecRedactsUTF16Output`), and the post-read hook redacts a file written that way (`TestHookPostReadRedactsUTF16`).
+
+`TestHookGuardLeakBattery` (`internal/cli`) does the same for the output and write guard: `hook post-bash`, `post-read` and `pre-write` run for every `--host` with fixtures in the input (redacted, denied, and withheld by a locked passphrase vault), and every captured byte is scanned for the fixtures in the raw, base64, base64url and percent-encoded forms. The other guard tests assert exact stdout, stderr and exit code, so a withheld or denied answer that echoed a value fails twice.
 
 `TestExportImportLeakBattery` (`internal/cli`) does the same for the backup path: `export` (done, refused, forced, with a short passphrase, human and `--json`) and `import --from-export` (wrong passphrase, success in human and `--json`) are captured, and stdout, stderr, both audit logs, the export file and every file under both vault homes are scanned for the fixtures and for the export passphrase.
 

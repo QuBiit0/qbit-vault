@@ -485,3 +485,125 @@ func TestCheckFindsDriftWhenTheGuardHooksAreRemoved(t *testing.T) {
 		t.Fatalf("checks: %v", got)
 	}
 }
+
+// previousHooks is an adapter that registers the hooks of the version before
+// the output guard: every hook element of the full registration except the
+// two guard ones.
+type previousHooks struct {
+	hosts.Adapter
+	edits []filemerge.JSONEdit
+}
+
+func (p previousHooks) Steps(env hosts.Env) []hosts.Step {
+	steps := p.Adapter.Steps(env)
+	for i, s := range steps {
+		if s.Name != "hooks" {
+			continue
+		}
+		steps[i].Apply = func(env hosts.Env, prev *filemerge.Receipt) (filemerge.Receipt, error) {
+			return filemerge.MergeJSONFile(env.VaultHome, filepath.Join(env.UserHome, ".claude", "settings.json"), p.edits, prev)
+		}
+	}
+	return steps
+}
+
+func previousEdits(t *testing.T) []filemerge.JSONEdit {
+	t.Helper()
+	r := newRig(t)
+	r.apply()
+	var doc struct {
+		Hooks map[string][]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal([]byte(r.read(r.settings())), &doc); err != nil {
+		t.Fatal(err)
+	}
+	var edits []filemerge.JSONEdit
+	for event, list := range doc.Hooks {
+		for _, el := range list {
+			var e struct {
+				Hooks []struct {
+					StatusMessage string `json:"statusMessage"`
+				} `json:"hooks"`
+			}
+			if err := json.Unmarshal(el, &e); err != nil {
+				t.Fatal(err)
+			}
+			marker := e.Hooks[0].StatusMessage
+			if marker == "qbit-vault hook pre-write" || marker == "qbit-vault search output guard" {
+				continue
+			}
+			edits = append(edits, filemerge.JSONEdit{Path: []string{"hooks", event}, Marker: marker, Value: el})
+		}
+	}
+	if len(edits) != 4 {
+		t.Fatalf("%d previous hooks, want 4", len(edits))
+	}
+	return edits
+}
+
+// A settings file registered by the previous version, upgraded by `sync`
+// (which adds the write guard) and then uninstalled, is back byte for byte as
+// the user had it before qbit-vault first touched it (S10.3).
+func TestRevertAfterUpgradeRestoresTheOriginalSettings(t *testing.T) {
+	for _, existing := range []bool{true, false} {
+		r := newRig(t)
+		orig := ""
+		if existing {
+			orig = fixture(t, "existing.settings.json")
+			r.write(r.settings(), orig)
+		}
+		res := hosts.Apply(r.env, []hosts.Adapter{previousHooks{r.host, previousEdits(t)}})
+		if res[0].Err() != nil {
+			t.Fatal(res[0].Err())
+		}
+		if strings.Contains(r.read(r.settings()), "qbit-vault hook pre-write") {
+			t.Fatal("the previous registration already has the write guard")
+		}
+		r.apply()
+		if !strings.Contains(r.read(r.settings()), "qbit-vault hook pre-write") {
+			t.Fatal("the upgrade did not add the write guard")
+		}
+		if err := hosts.Revert(r.env, r.host); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(r.settings())
+		switch {
+		case existing && (err != nil || string(got) != orig):
+			t.Fatalf("existing: settings.json not restored exactly (%v): %q", err, got)
+		case !existing && err == nil:
+			t.Fatalf("a settings.json we created is still there: %q", got)
+		}
+	}
+}
+
+// An upgrade that cannot add the write guard (the user's PreToolUse is not an
+// array) fails on the hooks step and leaves settings.json exactly as it was
+// (S10.3).
+func TestFailedUpgradeLeavesSettingsAsTheyWere(t *testing.T) {
+	r := newRig(t)
+	orig := fixture(t, "existing.settings.json")
+	r.write(r.settings(), orig)
+	if res := hosts.Apply(r.env, []hosts.Adapter{previousHooks{r.host, previousEdits(t)}}); res[0].Err() != nil {
+		t.Fatal(res[0].Err())
+	}
+	before := r.read(r.settings())
+	broken := strings.Replace(before, `"PreToolUse": [`, `"PreToolUse": {"x": [`, 1)
+	if broken == before {
+		t.Fatal("fixture has no PreToolUse array to break")
+	}
+	// Close the object where the array ended: the first "]" after the key.
+	i := strings.Index(broken, `"PreToolUse": {"x": [`)
+	j := strings.Index(broken[i:], "\n\t\t]")
+	if j < 0 {
+		t.Fatalf("no array end in:\n%s", broken)
+	}
+	broken = broken[:i+j] + "\n\t\t]}" + broken[i+j+len("\n\t\t]"):]
+	r.write(r.settings(), broken)
+	res := hosts.Apply(r.env, []hosts.Adapter{r.host})
+	if res[0].Err() == nil || res[0].FailedStep() != "hooks" {
+		t.Fatalf("want the hooks step to fail, got %+v", res[0])
+	}
+	if got := r.read(r.settings()); got != broken {
+		t.Fatalf("a failed apply changed settings.json:\n%s", got)
+	}
+}

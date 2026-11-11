@@ -176,7 +176,7 @@ func newInit(g *globals) *cobra.Command {
 					if _, err := fmt.Fprintln(out, hostLine(r, body.Hosts[i])); err != nil {
 						return err
 					}
-					for _, hint := range []string{extensionHint(r), codexTrustHint(r)} {
+					for _, hint := range []string{extensionHint(r), codexTrustHint(r), codexPathHint(r)} {
 						if hint == "" {
 							continue
 						}
@@ -234,6 +234,18 @@ func codexTrustHint(r hosts.Result) string {
 	for _, s := range r.Steps {
 		if s.Name == "hooks" && s.Changed {
 			return "  Codex skips new hooks until you trust them: open /hooks in Codex and trust the qbit-vault hooks."
+		}
+	}
+	return ""
+}
+
+// codexPathHint names the problem when the Codex hooks step failed because
+// the qbit-vault path cannot be written into a hook command: the host line
+// alone ("failed at hooks") would not say why the output guard is missing.
+func codexPathHint(r hosts.Result) string {
+	for _, s := range r.Steps {
+		if s.Name == "hooks" && errors.Is(s.Err, codex.ErrHookPath) {
+			return "  Codex output guard not installed: the qbit-vault path cannot be written into a hook command (it is not valid UTF-8). Reinstall qbit-vault in another folder and run 'qbit-vault sync'."
 		}
 	}
 	return ""

@@ -164,6 +164,11 @@ func hostChecks(in Inputs) []Check {
 			out = append(out, Check{"host." + n, Warn, "registered, but this build has no adapter for it"})
 			continue
 		}
+		if p, ok := a.(interface{ ExecutableProblem(hosts.Env) string }); ok {
+			if detail := p.ExecutableProblem(in.Env); detail != "" {
+				out = append(out, Check{"host." + n + ".executable", Warn, detail})
+			}
+		}
 		for _, c := range hosts.Verify(in.Env, a, recorded[n]) {
 			name := "host." + n + "." + c.Step
 			switch {

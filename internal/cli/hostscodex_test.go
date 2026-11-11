@@ -37,7 +37,7 @@ func TestInitRegistersCodexAndDoctorIsHealthy(t *testing.T) {
 		}
 	}
 	hooks := readFile(t, uh, ".codex", "hooks.json")
-	for _, want := range []string{`"matcher": "Bash"`, `qbit-vault hook post-bash --host codex`, `"matcher": "apply_patch"`, `qbit-vault hook pre-write --host codex`} {
+	for _, want := range []string{`"matcher": "Bash"`, ` hook post-bash --host codex`, `"matcher": "apply_patch"`, ` hook pre-write --host codex`} {
 		if !strings.Contains(hooks, want) {
 			t.Fatalf("hooks.json lacks %q:\n%s", want, hooks)
 		}
@@ -57,7 +57,7 @@ func TestInitRegistersCodexAndDoctorIsHealthy(t *testing.T) {
 	if code != exitcode.OK || errs != "" || !strings.Contains(out, "host codex: up to date\n") {
 		t.Fatalf("second run: code=%d out=%q err=%q", code, out, errs)
 	}
-	if readFile(t, uh, ".codex", "config.toml") != cfg || readFile(t, uh, ".codex", "hooks.json") != hooks || readFile(t, uh, ".codex", "hooks.json") != hooks || readFile(t, w.home, "state.json") != state ||
+	if readFile(t, uh, ".codex", "config.toml") != cfg || readFile(t, uh, ".codex", "hooks.json") != hooks || readFile(t, w.home, "state.json") != state ||
 		strings.Join(dirNames(t, filepath.Join(w.home, "backups")), ",") != strings.Join(backups, ",") {
 		t.Fatal("the second run wrote something")
 	}

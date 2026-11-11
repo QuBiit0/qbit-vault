@@ -1,11 +1,22 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LOCKED, NOT_INSTALLED } from "../src/messages.js";
 import { STATUS_KEY, statusText } from "../src/status.js";
 import { cleanupFake, err, mockCtx, mockPi, ok, SESSION, useFake } from "./helpers.js";
 
-afterEach(cleanupFake);
+// A pass-through spy: a refresh spawns the binary synchronously, so "not spawned" can be checked
+// right after the handler returns, with no wait.
+vi.mock("node:child_process", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("node:child_process")>();
+	return { ...actual, spawn: vi.fn(actual.spawn) };
+});
+
+afterEach(() => {
+	cleanupFake();
+	vi.mocked(spawn).mockClear();
+});
 
 const grantsOf = (...sessions: Array<string | null>) =>
 	ok({
@@ -13,8 +24,6 @@ const grantsOf = (...sessions: Array<string | null>) =>
 		grants: sessions.map((session, i) => ({ name: `N${i}`, layer: "global", scope: "session", session, expires_at: null })),
 	});
 const statusCalls = (ui: ReturnType<typeof mockCtx>["ui"]) => ui.setStatus.mock.calls;
-// Long enough for a spawned fake binary to have answered, so "nothing happened" is a real observation.
-const flush = () => new Promise((resolve) => setTimeout(resolve, 700));
 
 describe("S5 status text", () => {
 	it("uses the exact footer texts", () => {
@@ -148,9 +157,18 @@ describe("S5 refresh after a QBit Vault MCP tool result", () => {
 		const harness = mockPi();
 		const { ctx, ui } = mockCtx();
 		await harness.emit("tool_result", { type: "tool_result", toolName: tool }, ctx);
-		await flush();
+		expect(spawn).not.toHaveBeenCalled();
 		expect(fake.calls()).toEqual([]);
 		expect(ui.setStatus).not.toHaveBeenCalled();
+	});
+
+	it("spawns the refresh before the handler returns, so an ignored tool is observed without waiting", async () => {
+		useFake({ grants: grantsOf() });
+		const harness = mockPi();
+		const { ctx, ui } = mockCtx();
+		await harness.emit("tool_result", { type: "tool_result", toolName: "mcp__qbit_vault__secret_exec" }, ctx);
+		expect(spawn).toHaveBeenCalledTimes(1);
+		await vi.waitFor(() => expect(statusCalls(ui)).toEqual([["qbit-vault", "🔐 vault"]]));
 	});
 
 	it("does not wait for the refresh before returning", async () => {

@@ -1,7 +1,9 @@
-import { LOCKED, NOT_INSTALLED } from "./messages.js";
+import { LOCKED, NOT_INSTALLED, OUTDATED_BINARY } from "./messages.js";
 import { runJson } from "./qbitvault.js";
 import { sessionId } from "./session.js";
 export const STATUS_KEY = "qbit-vault";
+/** Footer for a qbit-vault older than 1.4.0, which does not know `grants --no-prompt`. */
+export const OUTDATED_FOOTER = "🔐 update qbit-vault";
 const STATUS_TIMEOUT_MS = 10_000;
 export function statusText(grants) {
     if (grants === null)
@@ -51,11 +53,18 @@ export function createStatusRefresher() {
                     return session === null || session === undefined || session === own;
                 }).length;
                 text = statusText(count);
-                if (mine === latest)
+                if (mine === latest) {
                     announced.delete("locked");
+                    announced.delete("outdated");
+                }
             }
             else if (outcome.reason === "not_installed") {
                 problem = "not_installed";
+            }
+            else if (outcome.error?.code === "usage") {
+                // A binary older than 1.4.0 rejects --no-prompt. Never retry without it: that call can open the unlock dialog.
+                text = OUTDATED_FOOTER;
+                problem = "outdated";
             }
             else if (outcome.error?.code === "vault_locked") {
                 text = statusText(null);
@@ -69,7 +78,7 @@ export function createStatusRefresher() {
                 }
                 if (options.announce && problem && !announced.has(problem)) {
                     announced.add(problem);
-                    ctx.ui.notify(problem === "locked" ? LOCKED : NOT_INSTALLED, "warning");
+                    ctx.ui.notify(problem === "locked" ? LOCKED : problem === "outdated" ? OUTDATED_BINARY : NOT_INSTALLED, "warning");
                 }
             }
             catch {

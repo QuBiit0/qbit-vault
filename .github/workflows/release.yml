@@ -97,7 +97,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
-        run: gh release upload "$TAG" "$RUNNER_TEMP/release/checksums.txt.minisig" --repo "$GITHUB_REPOSITORY"
+        # --clobber: a re-run of this job replaces the signature on the draft instead of failing.
+        run: gh release upload "$TAG" "$RUNNER_TEMP/release/checksums.txt.minisig" --repo "$GITHUB_REPOSITORY" --clobber
       # Download the signature back and check it again, so what is published
       # is what was verified.
       - name: verify the upload

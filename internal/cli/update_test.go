@@ -44,6 +44,7 @@ type updWorld struct {
 	home      string
 	env       map[string]string
 	resyncs   []string
+	syncText  string // what the fake sync prints on stdout
 }
 
 func newUpdWorld(t *testing.T, current, latest string) *updWorld {
@@ -87,8 +88,9 @@ func newUpdWorld(t *testing.T, current, latest string) *updWorld {
 		t.Fatal(err)
 	}
 	updateTarget = func() (string, error) { return w.target, nil }
-	updateResync = func(_ context.Context, _ *globals, target string, _ io.Writer) error {
+	updateResync = func(_ context.Context, _ *globals, target string, stdout, _ io.Writer) error {
 		w.resyncs = append(w.resyncs, target)
+		io.WriteString(stdout, w.syncText)
 		return nil
 	}
 	w.home = filepath.Join(t.TempDir(), "no-vault-here")
@@ -492,7 +494,7 @@ func TestUpdateResyncFailureKeepsTheUpdate(t *testing.T) {
 	w := newUpdWorld(t, "v1.0.0", "v1.1.0")
 	os.MkdirAll(w.home, 0o700)
 	os.WriteFile(filepath.Join(w.home, "state.json"), []byte("{}"), 0o600)
-	updateResync = func(context.Context, *globals, string, io.Writer) error { return fmt.Errorf("boom") }
+	updateResync = func(context.Context, *globals, string, io.Writer, io.Writer) error { return fmt.Errorf("boom") }
 	withBackend(t, answers(yes()))
 	code, out, errs := w.run()
 	if code != exitcode.OK || !strings.HasPrefix(out, "updated qbit-vault v1.0.0 -> v1.1.0;") {

@@ -236,6 +236,14 @@ func (r apiRelease) release() Release {
 	return out
 }
 
+var errTooLarge = errors.New("response is larger than allowed")
+
+// statusError is a non-200 answer; a 404 is told apart from the other
+// failures (a release without a signature file vs a download that failed).
+type statusError int
+
+func (e statusError) Error() string { return fmt.Sprintf("server answered %d", int(e)) }
+
 func (c *Client) get(ctx context.Context, raw string, limit int64, accept string) ([]byte, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -262,14 +270,14 @@ func (c *Client) get(ctx context.Context, raw string, limit int64, accept string
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server answered %d", resp.StatusCode)
+		return nil, statusError(resp.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, errors.New("download interrupted")
 	}
 	if int64(len(b)) > limit {
-		return nil, errors.New("response is larger than allowed")
+		return nil, errTooLarge
 	}
 	return b, nil
 }
@@ -331,8 +339,18 @@ func (notSignedError) Is(target error) bool { return target == ErrNotSigned }
 
 func notSigned(tag string) error { return notSignedError{tag} }
 
+// sigFetchError is a signature file that could not be downloaded: the
+// release may well be signed, so this is not ErrNotSigned. Nothing is
+// installed and there is no fallback to the SHA-256 alone.
+type sigFetchError struct{ tag, reason string }
+
+func (e sigFetchError) Error() string {
+	return "could not download the signature of the release " + e.tag + ": " + e.reason + "; nothing was changed"
+}
+
 // verifySignature checks checksums.txt.minisig of rel against sums with the
-// pinned key. Every failure, including a missing file, is the same refusal.
+// pinned key. A missing, oversized or invalid signature is the "not signed"
+// refusal; one that could not be downloaded says so.
 func (c *Client) verifySignature(ctx context.Context, rel Release, sums []byte) error {
 	key := c.Key
 	if key == nil {
@@ -347,7 +365,13 @@ func (c *Client) verifySignature(ctx context.Context, rel Release, sums []byte) 
 	}
 	sig, err := c.get(ctx, sigURL, maxSignature, "")
 	if err != nil {
-		return notSigned(rel.Tag)
+		if se, ok := err.(statusError); ok && se == http.StatusNotFound {
+			return notSigned(rel.Tag)
+		}
+		if errors.Is(err, errTooLarge) {
+			return notSigned(rel.Tag)
+		}
+		return sigFetchError{rel.Tag, err.Error()}
 	}
 	if _, err := minisign.Verify(key, sums, sig); err != nil {
 		return notSigned(rel.Tag)

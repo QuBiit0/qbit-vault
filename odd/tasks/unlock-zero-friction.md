@@ -16,10 +16,11 @@ When a vault is locked, every agent-callable QBit Vault tool opens the native pa
 
 | ID | Specs | Route | Commit | Status |
 | --- | --- | --- | --- | --- |
-| T1 | S2-S7 | worker | | in progress |
+| T1 | S2-S7 | worker | 14eb04f, f3c4bd3, 6217ec7 | done |
 | T2 | verify, then ship with 1.4.0 | parent | | pending |
 
 ## Log
 
 - L1. User (verbatim): see S1.
 - L2. Research: the dialog path exists (`agentunlock.go:79-102`, routed by `passphraseSource` for broker calls); `secret_request` and `secret_manage` ask; `secret_exec` and `secret_list` set `g.unlock.never` (`brokercmd.go:156, 222`) and refuse with `vault is locked; call secret_request to ask the user to unlock it`; `SKILL.md:43,45` (added by output-guard 1.3.0) tell the model to have the user run `qbit-vault unlock`; Pi `messages.ts:5` says `run 'qbit-vault unlock' in a terminal`; hooks never prompt by spec (`AGENT_INTEGRATIONS.md:115`).
+- L3. T1 (S2-S7) done. S2: `secret_exec` and `secret_list` use `agentPassphrase` (names set from the exec secrets; list has none); a cancel on those two is `vault_locked`, not `user_declined` (`lockOnCancel`); the ctx of both calls reaches the dialog. Locked with no dialog (no backend or `QBIT_VAULT_NO_PROMPT_UNLOCK=1`): message `vault is locked and no unlock dialog could be shown; ask the user to run 'qbit-vault unlock' in their terminal`; a cancel or wrong passphrase keeps the plain `vault is locked`. S3: only the `user-prompt` hook text named a command; now `...(vault locked); a QBit Vault tool call such as secret_list opens the unlock dialog`; the withheld/blocked-edit texts name none. S4: SKILL.md and a test. S5: Pi 0.2.2: `LOCKED` text; the footer refresh found to prompt via `grants` (openSession, native dialog on WSL/Linux), so it now runs the new hidden `grants --no-prompt`. S6/S7: tests in `internal/cli/agentunlock_test.go`, `internal/hosts/skill/skill_test.go`, Pi status/commands tests; docs and CHANGELOG [1.4.0]. Checks: gofmt, go vet, `QBIT_VAULT_RELEASE_CHECK=1 go test ./... -timeout 30m`, Pi typecheck/build/test (201) pass.

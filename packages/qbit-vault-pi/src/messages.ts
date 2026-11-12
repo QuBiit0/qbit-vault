@@ -3,6 +3,7 @@ import type { Outcome } from "./qbitvault.js";
 export const NOT_INSTALLED =
 	"qbit-vault was not found; install it from https://github.com/qbitdevz/qbit-vault and make sure it is on PATH";
 export const LOCKED = "vault is locked; QBit Vault asks for the passphrase when a tool or a /vault command needs it";
+export const OUTDATED_BINARY = "qbit-vault-pi needs qbit-vault 1.4.0 or newer; run 'qbit-vault update'";
 export const NOT_INITIALIZED = "no vault here; run 'qbit-vault init'";
 export const TIMEOUT = "qbit-vault did not answer in time";
 

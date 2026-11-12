@@ -2,8 +2,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LOCKED, NOT_INSTALLED } from "../src/messages.js";
-import { STATUS_KEY, statusText } from "../src/status.js";
+import { LOCKED, NOT_INSTALLED, OUTDATED_BINARY } from "../src/messages.js";
+import { OUTDATED_FOOTER, STATUS_KEY, statusText } from "../src/status.js";
 import { cleanupFake, err, mockCtx, mockPi, ok, SESSION, useFake } from "./helpers.js";
 
 // A pass-through spy: a refresh spawns the binary synchronously, so "not spawned" can be checked
@@ -50,6 +50,61 @@ describe("zero-friction unlock (odd/tasks/unlock-zero-friction.md S5)", () => {
 		const calls = fake.calls().map((c) => c.argv);
 		expect(calls.length).toBeGreaterThan(0);
 		for (const argv of calls) expect(argv).toEqual(["grants", "--no-prompt", "--json"]);
+	});
+});
+
+describe("a binary older than 1.4.0 (polish-1.4.1 S5)", () => {
+	// 1.3.x does not know `grants --no-prompt`: it answers a usage error. The footer says what to do
+	// instead of staying blank, and never falls back to a call that could open a dialog.
+	const unknownFlag = () => useFake({ grants: err("usage", "unknown flag; see 'qbit-vault grants --help'", 2) });
+
+	it("uses the exact texts", () => {
+		expect(OUTDATED_FOOTER).toBe("🔐 update qbit-vault");
+		expect(OUTDATED_BINARY).toBe("qbit-vault-pi needs qbit-vault 1.4.0 or newer; run 'qbit-vault update'");
+	});
+
+	it("shows the footer hint and notifies once", async () => {
+		unknownFlag();
+		const harness = mockPi();
+		const { ctx, ui } = mockCtx();
+		await harness.emit("session_start", {}, ctx);
+		await harness.emit("session_start", {}, ctx);
+		expect(statusCalls(ui)).toEqual([
+			["qbit-vault", "🔐 update qbit-vault"],
+			["qbit-vault", "🔐 update qbit-vault"],
+		]);
+		expect(ui.notify.mock.calls).toEqual([[OUTDATED_BINARY, "warning"]]);
+	});
+
+	it("never retries without --no-prompt", async () => {
+		const fake = unknownFlag();
+		const harness = mockPi();
+		const { ctx } = mockCtx();
+		await harness.emit("session_start", {}, ctx);
+		await harness.emit("tool_result", { toolName: "mcp__qbit_vault__secret_request" }, ctx);
+		const calls = fake.calls().map((c) => c.argv);
+		expect(calls.length).toBeGreaterThan(0);
+		for (const argv of calls) expect(argv).toEqual(["grants", "--no-prompt", "--json"]);
+	});
+
+	it("goes back to the normal footer once the binary is updated", async () => {
+		useFake({ grants: err("usage", "unknown flag; see 'qbit-vault grants --help'", 2) });
+		const harness = mockPi();
+		const { ctx, ui } = mockCtx();
+		await harness.emit("session_start", {}, ctx);
+		cleanupFake();
+		useFake({ grants: grantsOf() });
+		await harness.emit("session_start", {}, ctx);
+		expect(statusCalls(ui).at(-1)).toEqual(["qbit-vault", "🔐 vault"]);
+	});
+
+	it("does not announce anything when the context has no UI", async () => {
+		unknownFlag();
+		const harness = mockPi();
+		const { ctx, ui } = mockCtx({ hasUI: false });
+		await harness.emit("session_start", {}, ctx);
+		expect(ui.notify).not.toHaveBeenCalled();
+		expect(ui.setStatus).not.toHaveBeenCalled();
 	});
 });
 

@@ -88,7 +88,7 @@ func runPrompt(t testing.TB, src Source, in []byte) (string, string, int) {
 }
 
 const (
-	wantLockedPrompt = `{"systemMessage":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
+	wantLockedPrompt = `{"systemMessage":"qbit-vault could not check this prompt for secrets (vault locked); a QBit Vault tool call such as secret_list opens the unlock dialog","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"qbit-vault could not check this prompt for secrets (vault locked); a QBit Vault tool call such as secret_list opens the unlock dialog"}}` + "\n"
 )
 
 func bashOut(stdout string, n int) string {

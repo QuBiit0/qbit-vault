@@ -35,7 +35,7 @@ var ErrLocked = errors.New("vault locked")
 // post and pre-write hooks do not fail open any more: they withhold or deny
 // (guard.go).
 var lockedWarning = map[string]string{
-	userPromptSubmit: "qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'",
+	userPromptSubmit: "qbit-vault could not check this prompt for secrets (vault locked); a QBit Vault tool call such as secret_list opens the unlock dialog",
 }
 
 // Event is the part of a host hook event the hooks use. ToolInput stays raw:

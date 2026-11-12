@@ -46,14 +46,15 @@
           ▲ MCP stdio                          ▲ CLI (--json) — planned
           │                                    │
 ┌─────────┴───────────────────────────────┐   ┌┴────────────────────────────────┐
-│ Claude Code / Codex / Pi (MCP)          │   │ packages/qbit-vault-pi (Phase 4,│
-│ tools: secret_request, secret_list,     │   │ not built): Pi / Gentle Shell   │
-│        secret_exec, secret_manage       │   │ extension, masked UI, bash      │
-│ hooks: Claude Code only                 │   │ override, redaction, paste guard│
+│ Claude Code / Codex / Pi (MCP)          │   │ packages/qbit-vault-pi (built,  │
+│ tools: secret_request, secret_list,     │   │ git tag): /vault commands,      │
+│        secret_exec, secret_manage       │   │ footer status, paste guard,     │
+│ hooks: Claude Code, Codex (Pi: the      │   │ output and write guard          │
+│        extension)                       │   │                                 │
 └─────────────────────────────────────────┘   └─────────────────────────────────┘
 ```
 
-Built today: the Go binary, the MCP server, the Claude Code hooks and the registration of Claude Code, Codex and Pi / Gentle Shell (Pi through its MCP entry). Releases are published (archives, SHA-256 `checksums.txt` with its Minisign signature, build provenance, the server image). Not built: the Pi extension (Phase 4), the npm launcher, and the Homebrew formula (see `ROADMAP.md`); OpenCode was dropped.
+Built today: the Go binary, the MCP server, the Claude Code and Codex hooks, the Pi / Gentle Shell extension `qbit-vault-pi` 0.2.3 (installed by the user from a git tag, not npm) and the registration of Claude Code, Codex and Pi / Gentle Shell (Pi through its MCP entry). The output and write guard (`hook post-bash`, `post-read`, `pre-write`) covers all three hosts. Releases are published (archives, SHA-256 `checksums.txt` with its Minisign signature, build provenance, the server image). Not built: the npm launcher, the Homebrew formula, in-terminal capture and a `bash` override in the Pi extension (see `ROADMAP.md`); OpenCode was dropped.
 
 With sync enabled, `internal/remote` talks HTTPS to **`qbit-vault-server`** (`cmd/qbit-vault-server`, `internal/server`): a self-hosted, zero-knowledge store of sealed vault versions, key envelopes, device public keys and audit anchors (`REMOTE_SYNC.md`). It is a separate deployment; the client stays daemon-free.
 
@@ -66,18 +67,18 @@ With sync enabled, `internal/remote` talks HTTPS to **`qbit-vault-server`** (`cm
 
 Two rules shape everything:
 
-1. **The broker is the only entry point for hosts.** The MCP server (and the Pi extension once it exists, through `broker --op`) calls `internal/broker`, which implements `contracts/secrets-broker/v1`. The Claude Code hooks do not call it: they open the vault without prompting only to redact output or block a prompt, and can neither grant nor inject. Nothing else is reachable from an agent.
+1. **The broker is the only entry point for hosts.** The MCP server (the Pi extension does not call it today: it runs the CLI and `hook`) calls `internal/broker`, which implements `contracts/secrets-broker/v1`. The Claude Code hooks do not call it: they open the vault without prompting only to redact output or block a prompt, and can neither grant nor inject. Nothing else is reachable from an agent.
 2. **Values live in exactly three places**: the encrypted file, process memory of `qbit-vault` for the duration of one operation, and the environment of one `exec` child. The `Secret` type makes accidental printing impossible by construction (`String()` returns `[REDACTED]`). With sync, the server holds a further copy, but only as ciphertext sealed on the device; it never holds a plaintext value or a key that opens one.
 
 ## Process model
 
 - No daemon. Every host operation is a fresh `qbit-vault` process (CLI) or a long-lived stdio MCP server **started and owned by the host** (one per host session). Both are stateless apart from the files in `$QBIT_VAULT_HOME`.
-- Session identity: the caller passes `--session <id>` (`^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$`, or `QBIT_VAULT_SESSION`). The MCP server uses `QBIT_VAULT_SESSION` when set and otherwise generates `mcp:<16 hex>` for its lifetime. The Pi extension (Phase 4) would pass `pi:<id>`. The hooks do not take part in grants. Grants are keyed by it.
+- Session identity: the caller passes `--session <id>` (`^[a-z0-9-]+:[A-Za-z0-9._-]{4,128}$`, or `QBIT_VAULT_SESSION`). The MCP server uses `QBIT_VAULT_SESSION` when set and otherwise generates `mcp:<16 hex>` for its lifetime. The Pi extension passes `pi:<id>` to the commands that take `--session`. The hooks do not take part in grants. Grants are keyed by it.
 - Keychain unlock happens per process; the OS caches it. In passphrase mode the unlocked key is cached with a TTL only in a `0600` file under `$XDG_RUNTIME_DIR` (tmpfs on Linux), so the user is not asked on every exec; where no such memory-backed directory exists there is no cache and the passphrase is asked on each unlock.
 
 ## Data flows
 
-### Flow A — first request from Pi / Gentle Shell (planned: needs the Phase 4 extension; today Pi uses Flow D)
+### Flow A — first request from Pi / Gentle Shell (planned: needs in-terminal capture in the extension, which is not built; today Pi uses Flow D)
 
 ```
 model ──secret_request(GITHUB_TOKEN, "gh release create")──▶ extension
@@ -89,7 +90,7 @@ qbit-vault: keychain.unlock → vault.put → grants.add(S, GITHUB_TOKEN, sessio
 extension ──tool result──▶ model   (same JSON, no value)
 ```
 
-### Flow B — exec through the Pi bash override (planned, Phase 4)
+### Flow B — exec through the Pi bash override (planned, not built)
 
 ```
 model ──bash("gh release create v1 --notes x")──▶ extension (bash override)
@@ -118,6 +119,7 @@ Claude Code ──PostToolUse hook──▶ qbit-vault hook post-bash | post-rea
       (redacts every stored value in tool_response, re-emitted as updatedToolOutput;
        withholds the output when the vault cannot be checked)
 Claude Code ──PreToolUse hook──▶ qbit-vault hook pre-write  (denies a write carrying a stored value)
+Codex ──hooks.json──▶ hook post-bash --host codex, hook pre-write --host codex (apply_patch); Pi: the extension runs the same hooks with --host pi
 Claude Code ──UserPromptSubmit hook──▶ qbit-vault hook user-prompt  (blocks a pasted secret)
 Secrets are used through MCP: model ──secret_exec──▶ qbit-vault mcp (Flow D).
 

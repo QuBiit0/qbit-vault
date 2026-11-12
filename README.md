@@ -23,20 +23,20 @@ The package is not published to npm. It is distributed as an immutable git tag o
 In Gentle Shell (it passes everything after `--` to Pi):
 
 ```sh
-gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
+gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2
 ```
 
 In plain Pi:
 
 ```sh
-pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
+pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2
 ```
 
 To try it for one run without installing it, load the same source with `-e`:
 
 ```sh
-gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
-pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
+gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.2
+pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.2
 ```
 
 To update, install the newer tag (for example `@pi-v0.3.0`): a tag is pinned, so Pi never moves a configured ref by itself. Tags are never moved or reused. `qbit-vault init` and `sync` print the install line for the version that matches your `qbit-vault` binary, for you to run.

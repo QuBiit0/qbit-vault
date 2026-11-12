@@ -39,7 +39,8 @@ export function createStatusRefresher() {
             if (!ctx.hasUI)
                 return;
             const mine = ++latest;
-            const outcome = await runJson(["grants"], { timeoutMs: STATUS_TIMEOUT_MS, cwd: ctx.cwd });
+            // --no-prompt: the footer reads the grants quietly; only a tool or a /vault command may open the unlock dialog.
+            const outcome = await runJson(["grants", "--no-prompt"], { timeoutMs: STATUS_TIMEOUT_MS, cwd: ctx.cwd });
             let text;
             let problem;
             if (outcome.ok) {

@@ -30,10 +30,10 @@ function Install-QBitVault {
     $version = $env:QBIT_VAULT_VERSION
     $vaultHome = if ($env:QBIT_VAULT_HOME) { $env:QBIT_VAULT_HOME } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.qbit-vault' }
 
-    # The release public key (key id BEEE762E58A69B2B; the second line of
+    # The release public key (key id BAC5F0F9E8487D3C; the second line of
     # defaults/release-key.pub, which a test keeps equal to this) and the first
     # release whose checksums.txt is signed.
-    $minisignKey = 'RWQrm6ZYLnbuvsS0Px4nVFDMnfj6QG4sqbwDkmelqS9njb/q577zkLt8'
+    $minisignKey = 'RWQ8fUjo+fDFus9aUks/Mb2FoLMsdNDj4y2qOD2RI8jtgENzngsW82Mw'
     $firstSigned = 'v1.4.0'
 
     function Say($msg) { Write-Host "qbit-vault install: $msg" }

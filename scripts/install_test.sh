@@ -192,6 +192,8 @@ check "newest release from one-line JSON installs" test "$("$work/dest13/qbit-va
 # exits 0 only when -P is the pinned key, -m exists and the -x file starts with
 # STUB-VALID.
 key="$(sed -n 2p "$here/../defaults/release-key.pub")"
+# The key is base64: escape it before it goes into a regular expression (+ and /).
+key_re="$(printf '%s' "$key" | sed 's/[][\.*^$+?(){}|/]/\\&/g')"
 export QBV_TEST_MINISIGN_LOG="$work/minisign.log" QBV_TEST_KEY="$key"
 mkdir -p "$work/bin-ms"
 cat >"$work/bin-ms/minisign" <<'STUB'
@@ -221,7 +223,7 @@ msrun "$work/s-valid" "$work/dest14a" v1.4.0
 check "signed release with minisign exits 0" test "$code" -eq 0
 check "signed release is installed" test -x "$work/dest14a/qbit-vault"
 check "signed release says it verified" grep -q "checksums.txt signature verified with minisign" <<<"$out"
-check "minisign gets the pinned key and files" grep -Eq -e "^-V -q -P $key -m .*checksums.txt -x .*checksums.txt.minisig\$" "$QBV_TEST_MINISIGN_LOG"
+check "minisign gets the pinned key and files" grep -Eq -e "^-V -q -P $key_re -m .*checksums.txt -x .*checksums.txt.minisig\$" "$QBV_TEST_MINISIGN_LOG"
 check "signed release prints no SHA-256-only warning" eval '! grep -q "minisign not found" <<<"$out"'
 
 signed "$work/s-bad" v1.4.0 STUB-BAD

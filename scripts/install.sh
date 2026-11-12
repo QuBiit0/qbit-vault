@@ -25,10 +25,10 @@ INSTALL_DIR="${QBIT_VAULT_INSTALL_DIR:-}"
 VERSION="${QBIT_VAULT_VERSION:-}"
 VAULT_HOME="${QBIT_VAULT_HOME:-$HOME/.qbit-vault}"
 
-# The release public key (key id BEEE762E58A69B2B; the second line of
+# The release public key (key id BAC5F0F9E8487D3C; the second line of
 # defaults/release-key.pub, which a test keeps equal to this) and the first
 # release whose checksums.txt is signed.
-MINISIGN_KEY="RWQrm6ZYLnbuvsS0Px4nVFDMnfj6QG4sqbwDkmelqS9njb/q577zkLt8"
+MINISIGN_KEY="RWQ8fUjo+fDFus9aUks/Mb2FoLMsdNDj4y2qOD2RI8jtgENzngsW82Mw"
 FIRST_SIGNED="v1.4.0"
 
 say() { printf 'qbit-vault install: %s\n' "$*"; }

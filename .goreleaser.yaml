@@ -110,6 +110,6 @@ release:
     checksums.txt is signed with Minisign. Download `checksums.txt` and `checksums.txt.minisig`, then:
 
     ```bash
-    minisign -V -P RWQrm6ZYLnbuvsS0Px4nVFDMnfj6QG4sqbwDkmelqS9njb/q577zkLt8 -m checksums.txt -x checksums.txt.minisig
+    minisign -V -P RWQ8fUjo+fDFus9aUks/Mb2FoLMsdNDj4y2qOD2RI8jtgENzngsW82Mw -m checksums.txt -x checksums.txt.minisig
     sha256sum --check --ignore-missing checksums.txt
     ```

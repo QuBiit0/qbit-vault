@@ -44,6 +44,42 @@ fetch() { # fetch URL FILE
 	fi
 }
 
+# fetch_sig URL FILE: the download of checksums.txt.minisig. Returns 0 when it
+# arrived, 3 when the release has no such file (404, or a missing file:// path)
+# and 1 for any other failure, with a fixed short reason in SIG_WHY (never the
+# URL).
+SIG_WHY=""
+fetch_sig() {
+	SIG_WHY="request failed"
+	if command -v curl >/dev/null 2>&1; then
+		_code="$(curl -sSL --proto '=https,file' --retry 2 -o "$2" -w '%{http_code}' "$1" 2>/dev/null)" && _rc=0 || _rc=$?
+		case "$_rc" in
+			0) ;;
+			37) rm -f "$2"; return 3 ;;
+			28) rm -f "$2"; SIG_WHY="timed out"; return 1 ;;
+			*) rm -f "$2"; return 1 ;;
+		esac
+		case "$_code" in
+			200 | 000) return 0 ;;
+			404) rm -f "$2"; return 3 ;;
+			[0-9][0-9][0-9]) rm -f "$2"; SIG_WHY="server answered $_code"; return 1 ;;
+		esac
+		rm -f "$2"
+		return 1
+	elif command -v wget >/dev/null 2>&1; then
+		_log="$(wget -S -q -O "$2" "$1" 2>&1)" && return 0
+		rm -f "$2"
+		_code="$(printf '%s
+' "$_log" | awk '/^ *HTTP\//{ c = $2 } END { print c }')"
+		case "$_code" in
+			404) return 3 ;;
+			[0-9][0-9][0-9]) SIG_WHY="server answered $_code" ;;
+		esac
+		return 1
+	fi
+	die "curl or wget is required"
+}
+
 sha256() {
 	if command -v sha256sum >/dev/null 2>&1; then
 		sha256sum "$1" | cut -d' ' -f1
@@ -120,15 +156,25 @@ got="$(sha256 "$tmp/$archive")"
 
 # The signature of checksums.txt, before anything is extracted or written.
 if command -v minisign >/dev/null 2>&1; then
-	if fetch "$RELEASE_URL/$VERSION/checksums.txt.minisig" "$tmp/checksums.txt.minisig" 2>/dev/null; then
-		minisign -V -q -P "$MINISIGN_KEY" -m "$tmp/checksums.txt" -x "$tmp/checksums.txt.minisig" >/dev/null 2>&1 ||
-			die "the signature of checksums.txt for $VERSION does not verify with the QBit Vault release key: nothing was installed"
-		say "checksums.txt signature verified with minisign"
-	elif signed_release "$VERSION"; then
-		die "the release $VERSION has no checksums.txt.minisig, so it is not signed with the QBit Vault release key: nothing was installed"
+	if fetch_sig "$RELEASE_URL/$VERSION/checksums.txt.minisig" "$tmp/checksums.txt.minisig"; then
+		_sig=0
 	else
-		say "$VERSION predates signed releases (first signed: $FIRST_SIGNED): checksums.txt was checked with SHA-256 only"
+		_sig=$?
 	fi
+	case "$_sig" in
+		0)
+			minisign -V -q -P "$MINISIGN_KEY" -m "$tmp/checksums.txt" -x "$tmp/checksums.txt.minisig" >/dev/null 2>&1 ||
+				die "the signature of checksums.txt for $VERSION does not verify with the QBit Vault release key: nothing was installed"
+			say "checksums.txt signature verified with minisign"
+			;;
+		3)
+			if signed_release "$VERSION"; then
+				die "the release $VERSION has no checksums.txt.minisig, so it is not signed with the QBit Vault release key: nothing was installed"
+			fi
+			say "$VERSION predates signed releases (first signed: $FIRST_SIGNED): checksums.txt was checked with SHA-256 only"
+			;;
+		*) die "could not download the signature of the release $VERSION: $SIG_WHY; nothing was installed" ;;
+	esac
 elif signed_release "$VERSION"; then
 	printf '%s
 ' "minisign not found: checksums.txt was checked with SHA-256 only. Verify the signature with: minisign -V -P $MINISIGN_KEY -m checksums.txt -x checksums.txt.minisig"

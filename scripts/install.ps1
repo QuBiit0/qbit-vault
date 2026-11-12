@@ -45,6 +45,30 @@ function Install-QBitVault {
         }
     }
 
+    # Get-ReleaseSignature URL FILE: downloads checksums.txt.minisig. State is
+    # 'ok', 'missing' (the release has no such file: 404 or no such path) or
+    # 'failed' with a fixed short Why (never the URL).
+    function Get-ReleaseSignature($url, $file) {
+        if ($url -notmatch '^https://') {
+            if (-not (Test-Path -LiteralPath $url)) { return @{ State = 'missing' } }
+            try { Copy-Item -LiteralPath $url -Destination $file } catch { return @{ State = 'failed'; Why = 'request failed' } }
+            return @{ State = 'ok' }
+        }
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $file
+        } catch {
+            $resp = $_.Exception.Response
+            if ($resp) {
+                $code = [int]$resp.StatusCode
+                if ($code -eq 404) { return @{ State = 'missing' } }
+                return @{ State = 'failed'; Why = "server answered $code" }
+            }
+            if ($_.Exception.Message -match 'timed out|timeout|canceled') { return @{ State = 'failed'; Why = 'timed out' } }
+            return @{ State = 'failed'; Why = 'request failed' }
+        }
+        return @{ State = 'ok' }
+    }
+
     # True when $v is at or above $firstSigned (a pre-release suffix is
     # ignored). A version that does not parse counts as signed.
     function Test-SignedRelease($v) {
@@ -100,9 +124,9 @@ function Install-QBitVault {
         $minisign = (Get-Command minisign -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
         if ($minisign) {
             $sigFile = Join-Path $tmp 'checksums.txt.minisig'
-            $haveSig = $true
-            try { Fetch "$releaseUrl/$version/checksums.txt.minisig" $sigFile } catch { $haveSig = $false }
-            if ($haveSig) {
+            $sig = Get-ReleaseSignature "$releaseUrl/$version/checksums.txt.minisig" $sigFile
+            if ($sig.State -eq 'failed') { throw "qbit-vault install: could not download the signature of the release ${version}: $($sig.Why); nothing was installed" }
+            if ($sig.State -eq 'ok') {
                 $verified = $false
                 try {
                     & $minisign -V -q -P $minisignKey -m (Join-Path $tmp 'checksums.txt') -x $sigFile *> $null

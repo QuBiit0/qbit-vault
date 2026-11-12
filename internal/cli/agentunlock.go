@@ -19,17 +19,19 @@ import (
 // runs are not affected (docs/CLI.md).
 const envNoPromptUnlock = "QBIT_VAULT_NO_PROMPT_UNLOCK"
 
-// msgLockedForAgent is what exec and list answer on a locked vault: they
-// never open a dialog, so the agent is sent to the tool that can.
-const msgLockedForAgent = "vault is locked; call secret_request to ask the user to unlock it"
+// msgNoDialog is what exec and list answer when the vault is locked and no
+// unlock dialog could be shown (no prompt backend, or the user turned it
+// off): the only case where the agent is told to ask for a terminal command.
+const msgNoDialog = "vault is locked and no unlock dialog could be shown; ask the user to run 'qbit-vault unlock' in their terminal"
 
 // agentUnlock is what an agent call tells the unlock dialog, and what the
 // dialog leaves behind for the audit record.
 type agentUnlock struct {
-	names []string // the secrets the call is about, already validated names
-	layer string   // "global" or "project" when the caller said which
-	never bool     // exec and list: no dialog, the call stays locked
-	asked bool     // the user typed a passphrase for this call
+	names        []string // the secrets the call is about, already validated names
+	layer        string   // "global" or "project" when the caller said which
+	lockOnCancel bool     // exec and list: a cancelled dialog leaves the call locked, not declined
+	declined     bool     // the user cancelled the dialog of this call
+	asked        bool     // the user typed a passphrase for this call
 }
 
 // unlockReason is the text of the passphrase dialog of an agent call: who
@@ -77,7 +79,7 @@ func limitRunes(s string, n int) string {
 // ended by the call's own context. It runs inside keychain.Unlock, before any
 // vault lock is taken. Nil when this call must not ask.
 func (g *globals) agentPassphrase() keychain.PassphraseFunc {
-	if g.unlock.never || g.getenv(envNoPromptUnlock) == "1" {
+	if g.getenv(envNoPromptUnlock) == "1" {
 		return nil
 	}
 	return func(confirm bool) (secret.Secret, error) {
@@ -99,6 +101,9 @@ func (g *globals) agentPassphrase() keychain.PassphraseFunc {
 			g.unlock.asked = true
 		case g.callGone():
 			return secret.Secret{}, errCallCancelled()
+		case g.unlock.lockOnCancel && errors.Is(err, prompt.ErrCancelled):
+			g.unlock.declined = true
+			return secret.Secret{}, keychain.ErrUnavailable
 		case errors.Is(err, prompt.ErrUnavailable):
 			return secret.Secret{}, keychain.ErrUnavailable
 		}
@@ -113,11 +118,13 @@ func (g *globals) recordUnlock() {
 		Detail: prompt.Requester(hostOf(g.Session), "")})
 }
 
-// lockedHint rewrites the vault_locked refusal of a path that never asks.
-func lockedHint(err error) error {
+// lockedHint rewrites the vault_locked refusal of exec and list when no
+// dialog could be shown. A cancel or a wrong passphrase keeps the plain
+// refusal: the user was asked.
+func (g *globals) lockedHint(err error) error {
 	var rf refusal.Refusal
-	if errors.As(err, &rf) && rf.Type == refusal.VaultLocked {
-		return rf.WithMessage(msgLockedForAgent)
+	if errors.As(err, &rf) && rf.Type == refusal.VaultLocked && !g.unlock.asked && !g.unlock.declined {
+		return rf.WithMessage(msgNoDialog)
 	}
 	return err
 }

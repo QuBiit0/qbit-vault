@@ -38,7 +38,7 @@ One rule in the binary, wired into each host's own mechanism: the agent's built-
 | T4 | verify S1-S9 (Risk: items 2 and 3) | gentle-ai-verify | 79719a9 | done |
 | T5 | PRs, merge, pi-v0.2.0 | parent | #52-#54, pi-v0.2.0 | done |
 | T6 | S10 follow-ups from the native reviews (L8) | worker | d5832d3, f5020cb, a6a7fe1, 98962b0, 43505b6, (this log) | done |
-| T7 | S11 release 1.3.0 | parent | see L11 | in progress |
+| T7 | S11 release 1.3.0 | parent | see L11, L14 | done |
 
 ## Log
 
@@ -69,3 +69,4 @@ One rule in the binary, wired into each host's own mechanism: the agent's built-
 - L11. T7: CHANGELOG `[1.3.0]` (minor: the guard is a new feature; the S10 fixes ride along as unreleased fixes). The `v1.3.0` tag is pushed after the merge.
 - L12. Verify of T6 (gentle-ai-verify, real binary in the Linux e2e container, 3 hosts x 40 adversarial cases): S10.1, S10.3-S10.6 pass; POSIX `command` ran from 12 hostile paths through `sh -c` with no injection; pwsh ran `commandWindows` from 5 hostile paths (argv not captured); no leak. Gap (regression from the whole-input scan): a value inside a file name (`file_path`, `path`, `notebook_path`, patch `Add File`/`Update File`/`Move to` headers) was allowed, and the Pi extension did not send `path` at all. Parent fixed it test-first: 21 new cases RED then GREEN in TestHookPreWriteScansOnlyWhatIsAdded; the extension now sends `path` and checks a write even with empty content (new vitest case). Judged correct by the verifier: a value split across two `+` lines, an indented `+` (context), a bogus `*** <value>` line (Codex rejects the patch).
 - L13. The file-name fix (67448e0) changed `packages/qbit-vault-pi/src/guard.ts` after `pi-v0.2.0` was published; tags are immutable, so the extension goes out as 0.2.1 (`pi-v0.2.1`) and `ExtensionVersion` and every install line name it before the `v1.3.0` tag is pushed. PR #55 merged (e1c07da) after a CI rerun: `TestHookCommandQuoting/drive_path` now runs on Windows only (ec24a14); the Windows `TestSyncPushFailureKeepsTheChangeAndRetries` failure of the first run (remote sync timing, untouched by this feature) passed on the rerun.
+- L14. T7 closed (polish-1.4.1 S7). Evidence: tag `v1.3.0`; GitHub release `v1.3.0` published 2026-11-11T19:25:24Z, not a draft, 11 assets; release workflow run on `v1.3.0` concluded success; `pi-v0.2.1` is on the remote (L13).

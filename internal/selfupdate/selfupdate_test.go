@@ -573,3 +573,53 @@ func TestReplacePosixSyncsDirectoryAfterRename(t *testing.T) {
 		t.Fatalf("syncDir(%q) saw %q, want the directory after the rename", got, seen)
 	}
 }
+
+// A .minisig that cannot be fetched is not "not signed": the user is told the
+// download failed, with a fixed short reason, and nothing is installed.
+func TestDownloadSignatureFetchFailures(t *testing.T) {
+	for name, tc := range map[string]struct {
+		serve  func(w http.ResponseWriter, r *http.Request)
+		reason string
+	}{
+		"server error": {func(w http.ResponseWriter, r *http.Request) { http.Error(w, "boom", 500) }, "server answered 500"},
+		"forbidden":    {func(w http.ResponseWriter, r *http.Request) { http.Error(w, "no", 403) }, "server answered 403"},
+		"connection dropped": {func(w http.ResponseWriter, r *http.Request) {
+			c, _, _ := w.(http.Hijacker).Hijack()
+			c.Close()
+		}, "request failed"},
+		"interrupted": {func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Length", "500")
+			w.Write([]byte("short"))
+		}, "download interrupted"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			f.setLinux(t, []byte("NEWBINARY"))
+			base := f.srv.Config.Handler
+			f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/blob/checksums.txt.minisig" {
+					tc.serve(w, r)
+					return
+				}
+				base.ServeHTTP(w, r)
+			})
+			rel, _ := f.client().Latest(context.Background())
+			dir := t.TempDir()
+			p, err := f.client().Download(context.Background(), rel, "linux", "amd64", dir)
+			if err == nil || p != "" {
+				t.Fatalf("accepted: %q", p)
+			}
+			want := "could not download the signature of the release v1.1.0: " + tc.reason + "; nothing was changed"
+			if err.Error() != want {
+				t.Fatalf("error %q, want %q", err, want)
+			}
+			if errors.Is(err, ErrNotSigned) {
+				t.Fatal("a fetch failure must not look like an unsigned release")
+			}
+			if strings.Contains(err.Error(), f.srv.URL) {
+				t.Fatal("the URL leaked into the message")
+			}
+			empty(t, dir)
+		})
+	}
+}

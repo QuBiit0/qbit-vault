@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -71,11 +72,11 @@ func updateFailed(msg string) error { return codedError{"update_failed", msg, ex
 // registrations, the agent skill and the adapters are those of the new
 // version (the running one is the old code, and on Windows its path is the
 // renamed copy).
-func resyncWithNewBinary(ctx context.Context, g *globals, target string, stderr io.Writer) error {
+func resyncWithNewBinary(ctx context.Context, g *globals, target string, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	c := exec.CommandContext(ctx, target, "--home", g.Home(), "sync")
-	c.Stdout = io.Discard
+	c.Stdout = stdout
 	c.Stderr = stderr
 	return c.Run()
 }
@@ -173,19 +174,51 @@ func runUpdate(cmd *cobra.Command, g *globals, check bool) error {
 	}
 	body.Updated = true
 
+	var syncText string
 	// Re-apply the recorded registrations like the installers: only when the
 	// vault is set up (state.json exists; it is not opened), and not with
 	// QBIT_VAULT_NO_SYNC=1.
 	if _, err := os.Stat(filepath.Join(g.Home(), "state.json")); err == nil {
 		if g.getenv(envNoSync) == "1" {
 			fmt.Fprintln(stderr, "skipped 'qbit-vault sync' (QBIT_VAULT_NO_SYNC=1); run it yourself so your agents use this binary")
-		} else if err := updateResync(ctx, g, target, stderr); err != nil {
-			fmt.Fprintln(stderr, "'qbit-vault sync' reported a problem; run 'qbit-vault doctor', then restart your agents")
+		} else {
+			// What sync printed (host lines, the Codex /hooks notice) is shown
+			// after the "updated" line; --json keeps its single object.
+			var syncOut bytes.Buffer
+			if err := updateResync(ctx, g, target, &limitedWriter{w: &syncOut, left: maxSyncOutput}, stderr); err != nil {
+				fmt.Fprintln(stderr, "'qbit-vault sync' reported a problem; run 'qbit-vault doctor', then restart your agents")
+			}
+			syncText = syncOut.String()
 		}
 	}
 	if g.JSON {
 		return writeJSON(out, body)
 	}
-	_, err = fmt.Fprintf(out, "updated qbit-vault %s -> %s; restart your agents so they load the new version\n", current, rel.Tag)
+	if _, err = fmt.Fprintf(out, "updated qbit-vault %s -> %s; restart your agents so they load the new version\n", current, rel.Tag); err != nil {
+		return err
+	}
+	_, err = io.WriteString(out, syncText)
 	return err
+}
+
+// maxSyncOutput bounds what is kept of the output of sync.
+const maxSyncOutput = 64 << 10
+
+// limitedWriter keeps the first left bytes and drops the rest without failing,
+// so the child never blocks on a full pipe.
+type limitedWriter struct {
+	w    io.Writer
+	left int
+}
+
+func (l *limitedWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	if len(p) > l.left {
+		p = p[:l.left]
+	}
+	l.left -= len(p)
+	if _, err := l.w.Write(p); err != nil {
+		return 0, err
+	}
+	return n, nil
 }

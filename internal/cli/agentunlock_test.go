@@ -562,3 +562,37 @@ func TestGrantsNoPromptNeverOpensTheDialog(t *testing.T) {
 		t.Fatalf("plain grants: code=%d err=%q calls=%+v", code, errs, f.Calls)
 	}
 }
+
+// R3-exec-list-cancel-untested: cancelling the unlock dialog of secret_exec or
+// secret_list is the plain retryable vault_locked ("vault is locked"), never
+// user_declined and never the "no dialog" text, after exactly one dialog;
+// exec runs nothing and nothing is audited as unlocked.
+func TestAgentUnlockCancelOnExecAndListIsThePlainVaultLocked(t *testing.T) {
+	w := grantedLockedWorld(t)
+	before := len(w.auditUnlocks())
+	for _, c := range []struct {
+		op   string
+		call func() (int, map[string]any, string)
+	}{
+		{"exec", w.execFromRepo},
+		{"list", func() (int, map[string]any, string) { return w.broker("list", envelope("list", w.repo, "")) }},
+	} {
+		f := withBackend(t, answers(cancel()))
+		code, m, out := c.call()
+		if code != exitcode.Locked || m["ok"] == true {
+			t.Fatalf("%s: code=%d out=%s", c.op, code, out)
+		}
+		if got := lockedRefusalMessage(t, m); got != "vault is locked" {
+			t.Errorf("%s: message %q, want %q", c.op, got, "vault is locked")
+		}
+		if len(f.Calls) != 1 || f.Calls[0].Kind != "passphrase" {
+			t.Errorf("%s: calls=%+v, want one passphrase dialog", c.op, f.Calls)
+		}
+		if strings.Contains(out, "stdout") || strings.Contains(out, "[REDACTED") {
+			t.Errorf("%s: something ran or was listed after a cancel: %s", c.op, out)
+		}
+	}
+	if n := len(w.auditUnlocks()); n != before {
+		t.Fatalf("%d unlock records, want %d", n, before)
+	}
+}

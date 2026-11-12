@@ -47,6 +47,12 @@ function New-Fake($file, $ver, $arch) {
     if ($LASTEXITCODE -ne 0) { throw 'could not build the fake binary' }
 }
 
+# .NET directly: Get-FileHash is missing when Windows PowerShell inherits pwsh's module path.
+function Get-Sha256($file) {
+    $stream = [IO.File]::OpenRead($file)
+    try { -join ([Security.Cryptography.SHA256]::Create().ComputeHash($stream) | ForEach-Object { $_.ToString('x2') }) } finally { $stream.Dispose() }
+}
+
 function New-Release($dir, $ver = 'v0.0.0-test') {
     $rel = Join-Path $dir $ver
     New-Item -ItemType Directory -Force -Path $rel | Out-Null
@@ -57,7 +63,7 @@ function New-Release($dir, $ver = 'v0.0.0-test') {
         New-Fake (Join-Path $src 'qbit-vault.exe') $ver $arch
         $zip = Join-Path $rel "qbit-vault_windows_$arch.zip"
         Compress-Archive -Path (Join-Path $src 'qbit-vault.exe') -DestinationPath $zip -Force
-        $sums += "$((Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant())  qbit-vault_windows_$arch.zip"
+        $sums += "$(Get-Sha256 $zip)  qbit-vault_windows_$arch.zip"
     }
     Set-Content -LiteralPath (Join-Path $rel 'checksums.txt') -Value $sums
 }
@@ -341,6 +347,21 @@ try {
     New-SignedRelease (Join-Path $work 's-beta') 'v1.4.0-beta.1'
     $r = Invoke-MsInstall (Join-Path $work 's-beta') (Join-Path $work 'dest15i') 'v1.4.0-beta.1'
     Check 'a pre-release of the first signed version counts as signed' ($r.Code -ne 0 -and -not (Test-Path -LiteralPath (Join-Path $work 'dest15i\qbit-vault.exe')))
+    # 16. A .minisig that cannot be downloaded is not "no .minisig" (S2): the
+    # user is told the download failed, with a fixed short reason, and nothing
+    # is installed. The file is held open exclusively, so reading it fails.
+    foreach ($ver in 'v1.4.0', 'v1.3.9') {
+        $rel = Join-Path $work "s-locked-$ver"
+        New-SignedRelease $rel $ver 'STUB-VALID'
+        $lock = [IO.File]::Open((Join-Path $rel "$ver\checksums.txt.minisig"), 'Open', 'Read', 'None')
+        try {
+            $r = Invoke-MsInstall $rel (Join-Path $work "dest16-$ver") $ver
+        } finally { $lock.Dispose() }
+        Check "unreadable signature of $ver exits non-zero" ($r.Code -ne 0)
+        Check "unreadable signature of $ver is reported" (($r.Out -replace '[\s|]+', ' ') -match [regex]::Escape("could not download the signature of the release ${ver}: request failed; nothing was installed"))
+        Check "unreadable signature of $ver installs nothing" (-not (Test-Path -LiteralPath (Join-Path $work "dest16-$ver\qbit-vault.exe")))
+        Check "unreadable signature of $ver never runs minisign" ((Get-Item -LiteralPath $env:QBV_TEST_MINISIGN_LOG).Length -le 2)
+    }
 } finally {
     $env:Path = $realPath
     $env:PROCESSOR_ARCHITECTURE = $realArch

@@ -12,11 +12,11 @@ import (
 	"github.com/qbitdevz/qbit-vault/internal/hosts/pi"
 )
 
-// The extension ships as the git tag pi-v0.2.2 of this repository, not on npm
+// The extension ships as the git tag pi-v0.2.3 of this repository, not on npm
 // (odd/tasks/pi-extension.md S12.4): init and sync print the install commands
 // as a suggestion for the Pi host and never run them.
-const piInstallLine = "  Pi extension (optional, run it yourself): gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2\n" +
-	"  with plain Pi: pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2\n"
+const piInstallLine = "  Pi extension (optional, run it yourself): gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3\n" +
+	"  with plain Pi: pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3\n"
 
 func noPiEnv(string) string { return "" }
 

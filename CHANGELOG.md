@@ -4,6 +4,19 @@ All notable changes to QBit Vault. The format follows [Keep a Changelog](https:/
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-12
+
+Polish after 1.4.0 (`odd/tasks/polish-1.4.1.md`). Fixes only; no new feature. The Pi extension is `qbit-vault-pi` 0.2.3 (`pi-v0.2.3`).
+
+### Fixed
+
+- A release signature that cannot be downloaded is no longer reported as "not signed". `qbit-vault update` says `could not download the signature of the release <version>: <reason>; nothing was changed` and `install.sh` / `install.ps1` say `... nothing was installed`, with a fixed reason (`server answered <code>`, `timed out`, `request failed`; never the URL). A release with no `.minisig` (not listed, or 404) and a signature that does not verify keep their messages, and nothing falls back to the SHA-256 alone.
+- `qbit-vault update` shows what the `sync` it runs printed (host lines, the Codex `/hooks` trust notice) after its `updated ...` line. A `sync` failure is still a stderr note with exit 0; `--json` is unchanged.
+- `qbit-vault-pi` 0.2.3: with a qbit-vault older than 1.4.0 (which does not know `grants --no-prompt`) the footer shows `🔐 update qbit-vault` instead of nothing and the extension notifies once `qbit-vault-pi needs qbit-vault 1.4.0 or newer; run 'qbit-vault update'`. It never retries without `--no-prompt`, so it cannot open the unlock dialog.
+- `scripts/install_test.ps1` passes under Windows PowerShell 5.1 started from PowerShell 7 with its module path inherited: the test runner no longer calls `Get-FileHash` (`install.ps1` already hashed through .NET).
+- Tests: cancelling the unlock dialog of `secret_exec` and `secret_list` is the plain retryable `vault is locked`; the `install_test.sh` check of an older release without minisign now counts its result.
+- Docs: the Codex section of `docs/AGENT_INTEGRATIONS.md` says plainly that the Windows hook shell (`commandWindows` through PowerShell) is not verified in a live Codex session.
+
 ## [1.4.0] - 2026-11-12
 
 Signed releases: `checksums.txt` is signed with Minisign (key BAC5F0F9E8487D3C). `qbit-vault update` requires the signature; the one-line installers verify it when `minisign` is installed and print the command to verify it by hand when it is not.

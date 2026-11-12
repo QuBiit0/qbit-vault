@@ -267,7 +267,48 @@ msrun "$work/s-beta" "$work/dest14i" v1.4.0-beta.1
 check "a pre-release of the first signed version counts as signed" test "$code" -ne 0 -a ! -e "$work/dest14i"
 if ! PATH="$work/bin-x86:$PATH" command -v minisign >/dev/null 2>&1; then
 	msrun "$work/s-old" "$work/dest14j" v1.3.9 none
-	check "older release, no minisign: unsigned note, no warning" test "$code" -eq 0 && eval '! grep -q "minisign not found" <<<"$out"'
+	check "older release, no minisign: unsigned note, no warning" eval 'test "$code" -eq 0 && ! grep -q "minisign not found" <<<"$out"'
+fi
+
+# A .minisig that cannot be downloaded is not "no .minisig" (S2): the user is
+# told the download failed, with a fixed short reason, and nothing is installed.
+# A stub `curl` fails only the signature download; every other URL goes to the
+# real curl.
+real_curl="$(command -v curl || true)"
+export QBV_TEST_REAL_CURL="$real_curl"
+mkdir -p "$work/bin-curl"
+cat >"$work/bin-curl/curl" <<'STUB'
+#!/bin/sh
+for a in "$@"; do url="$a"; done
+case "$url" in
+	*checksums.txt.minisig)
+		case "${QBV_TEST_SIG_MODE:-}" in
+			500) echo 500; exit 0 ;;
+			403) echo 403; exit 0 ;;
+			reset) echo 000; exit 56 ;;
+			timeout) echo 000; exit 28 ;;
+		esac ;;
+esac
+exec "$QBV_TEST_REAL_CURL" "$@"
+STUB
+chmod 755 "$work/bin-curl/curl"
+if [ -n "$real_curl" ]; then
+	for mode in "500:server answered 500" "403:server answered 403" "reset:request failed" "timeout:timed out"; do
+		export QBV_TEST_SIG_MODE="${mode%%:*}"
+		reason="${mode#*:}"
+		: >"$QBV_TEST_MINISIGN_LOG"
+		run "$work/bin-curl:$work/bin-ms:$work/bin-x86" "$work/s-valid" "$work/dest15-${mode%%:*}" QBIT_VAULT_VERSION=v1.4.0
+		check "signature download failure ($reason) exits non-zero" test "$code" -ne 0
+		check "signature download failure ($reason) is reported" grep -qxF "qbit-vault install: error: could not download the signature of the release v1.4.0: $reason; nothing was installed" <<<"$out"
+		check "signature download failure ($reason) installs nothing" test ! -e "$work/dest15-${mode%%:*}"
+		check "signature download failure ($reason) never runs minisign" test ! -s "$QBV_TEST_MINISIGN_LOG"
+	done
+	unset QBV_TEST_SIG_MODE
+	# The same failure on a version older than the first signed one is still refused.
+	export QBV_TEST_SIG_MODE=500
+	run "$work/bin-curl:$work/bin-ms:$work/bin-x86" "$work/s-old" "$work/dest15-old" QBIT_VAULT_VERSION=v1.3.9
+	check "signature download failure on an older release is refused too" test "$code" -ne 0 -a ! -e "$work/dest15-old"
+	unset QBV_TEST_SIG_MODE
 fi
 
 if [ "$fails" -ne 0 ]; then

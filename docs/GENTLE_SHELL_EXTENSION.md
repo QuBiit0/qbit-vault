@@ -10,9 +10,9 @@ It is written in TypeScript against the Pi extension API and peer-depends on `@e
 
 The user installs it from the git tag (`init` never does: AGENTS.md invariant 8). The owner has no npm account, so the package is not on npm. A git source is installed as the repository root of that ref, and the tag `pi-v<version>` points to a commit that holds only the built package (`package.json`, `dist/`, `secret-patterns.yaml`, `README.md`, `LICENSE`):
 
-- Gentle Shell (it passes everything after `--` to Pi): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1`.
-- Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1`.
-- One run only, nothing installed: `gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.1` or `pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.1`.
+- Gentle Shell (it passes everything after `--` to Pi): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2`.
+- Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2`.
+- One run only, nothing installed: `gentle-shell -- -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.2` or `pi -e git:github.com/qbitdevz/qbit-vault@pi-v0.2.2`.
 - Update: install the newer tag, for example `@pi-v0.3.0`. Pi pins a tag and does not move a configured ref by itself.
 
 What Pi does with a git package (Pi 1.5, `docs/packages.md` and its package manager): it clones the source, checks out the ref and runs `npm install --omit=dev --legacy-peer-deps` (pnpm and Bun have their own production flags) when the package has a `package.json`; it never installs peer dependencies for git packages. So the published `package.json` has no `devDependencies`, no `scripts` and only the three `peerDependencies` (`*`, provided by Pi), and nothing is built on the user's machine. `node packages/qbit-vault-pi/scripts/assemble-dist.mjs --out <empty dir>` builds that tree locally (after `npm run build`); the workflow commits it with no parent the first time and with the previous `pi-extension` head as parent afterwards, so the branch only moves forward, and pushes the annotated tag. The `v*` tags of the binary release are a different filter: a `pi-v*` tag does not start `release.yml`.
@@ -52,7 +52,7 @@ pi -e ./dist/index.js
 - A value only travels over stdin to `qbit-vault set --stdin` (or, in a tool result or an edit being checked, to `qbit-vault hook`), lives for that one call, and is never an argument, a log line, a notification, a status text, a session entry or a message to the model. The extension uses `ctx.ui` for output and never `pi.sendMessage` or `pi.appendEntry` for vault data.
 - A `NAME` that is not a valid secret name is rejected before anything runs and is not echoed, in case it was a pasted value.
 - Messages shown to the user are fixed texts or the binary's own error, which names secrets by name only.
-- A missing binary or a locked vault is reported once with the fix (`qbit-vault init`, `qbit-vault unlock`); nothing else breaks.
+- A missing binary is reported once with the fix (`qbit-vault init`); a locked vault is reported once as `vault is locked; QBit Vault asks for the passphrase when a tool or a /vault command needs it`, never as a command to run in a terminal. The footer refresh runs `qbit-vault grants --no-prompt --json`, which never opens the unlock dialog (a locked vault is `vault_locked` and the footer shows `🔒 locked`); a QBit Vault tool call or a `/vault` command the user runs may open it. Nothing else breaks.
 
 The tests (vitest, a mocked `ExtensionAPI` and a fake `qbit-vault` script) assert this with a `TESTSECRET_` fixture that matches a pattern: the value never appears in any notification, status, transformed text, session entry, message or argv.
 

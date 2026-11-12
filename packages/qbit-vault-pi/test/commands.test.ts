@@ -87,7 +87,7 @@ describe("S4 /vault list", () => {
 
 	it("shows names, layers, descriptions and grants in a view", async () => {
 		const { fake, views, ui } = await runVault("list", { list: ok(secrets), grants: ok(grants) });
-		expect(fake.calls().map((c) => c.argv)).toEqual([["list", "--json"], ["grants", "--json"], ["grants", "--json"]]);
+		expect(fake.calls().map((c) => c.argv)).toEqual([["list", "--json"], ["grants", "--json"], ["grants", "--no-prompt", "--json"]]);
 		expect(views).toEqual([
 			{
 				title: "QBit Vault: secrets",

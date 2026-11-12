@@ -543,3 +543,22 @@ func TestAgentUnlockHostileNameNeverReachesTheDialog(t *testing.T) {
 		t.Fatalf("code=%d out=%s calls=%+v", code, out, f.Calls)
 	}
 }
+
+// S5 of odd/tasks/unlock-zero-friction.md: the Pi footer asks `grants
+// --no-prompt`, which never opens a dialog, so refreshing the footer cannot
+// pop the passphrase dialog; plain `grants` (a command the user runs) asks.
+func TestGrantsNoPromptNeverOpensTheDialog(t *testing.T) {
+	w := lockedWorld(t)
+	f := withBackend(t, answers(val(fxPass), val(fxPass)))
+	code, out, errs := w.run("", "--json", "grants", "--no-prompt")
+	if code != exitcode.Locked || len(f.Calls) != 0 {
+		t.Fatalf("code=%d out=%q err=%q calls=%+v", code, out, errs, f.Calls)
+	}
+	noFixtures(t, "grants output", out+errs)
+	if !strings.Contains(out+errs, "vault_locked") && !strings.Contains(out+errs, "vault is locked") {
+		t.Fatalf("not the locked answer: out=%q err=%q", out, errs)
+	}
+	if code, _, errs := w.run("", "--json", "grants"); code != exitcode.OK || len(f.Calls) != 1 || f.Calls[0].Kind != "passphrase" {
+		t.Fatalf("plain grants: code=%d err=%q calls=%+v", code, errs, f.Calls)
+	}
+}

@@ -542,11 +542,21 @@ func (g *globals) activeGrants(stderr io.Writer, s *session) (*grants.Store, []g
 }
 
 func newGrantsList(g *globals) *cobra.Command {
-	return &cobra.Command{
+	var noPrompt bool
+	cmd := &cobra.Command{
 		Use:   "grants [--json]",
 		Short: "List active grants",
 		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if noPrompt { // a host's status line: it never opens a dialog
+				prev := g.getenv
+				g.getenv = func(k string) string {
+					if k == noPromptKey {
+						return "1"
+					}
+					return prev(k)
+				}
+			}
 			s, err := g.openSession()
 			if err != nil {
 				return err
@@ -576,6 +586,9 @@ func newGrantsList(g *globals) *cobra.Command {
 			return err
 		},
 	}
+	cmd.Flags().BoolVar(&noPrompt, "no-prompt", false, "never ask for the passphrase: a locked vault is vault_locked (host status lines)")
+	_ = cmd.Flags().MarkHidden("no-prompt")
+	return cmd
 }
 
 // grantsTable renders grants as an aligned table.

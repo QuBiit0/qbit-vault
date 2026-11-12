@@ -20,7 +20,7 @@ const (
 )
 
 const (
-	wantHookLockedPrompt = `{"systemMessage":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"qbit-vault could not check this prompt for secrets (vault locked); run 'qbit-vault unlock'"}}` + "\n"
+	wantHookLockedPrompt = `{"systemMessage":"qbit-vault could not check this prompt for secrets (vault locked); a QBit Vault tool call such as secret_list opens the unlock dialog","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"qbit-vault could not check this prompt for secrets (vault locked); a QBit Vault tool call such as secret_list opens the unlock dialog"}}` + "\n"
 	wantHookBlockFmt     = `{"decision":"block","reason":"This message contains the value of the stored secret %s, so qbit-vault blocked it. If you typed or pasted it, store it with 'qbit-vault set NAME' in your own terminal and refer to it by name. If it came from a background job or another agent's report, the command printed the value: run it through qbit-vault (secret_exec), which redacts its output.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}}` + "\n"
 )
 

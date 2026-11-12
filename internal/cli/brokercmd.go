@@ -151,12 +151,13 @@ func (b *cliBackend) Info() broker.Info {
 	return info
 }
 
-func (b *cliBackend) List(_ context.Context, e broker.Envelope) (broker.ListResult, error) {
+func (b *cliBackend) List(ctx context.Context, e broker.Envelope) (broker.ListResult, error) {
 	g := b.bound(e)
-	g.unlock.never = true // list never opens a dialog
+	g.ctx = ctx
+	g.unlock.lockOnCancel = true
 	s, err := g.openSession()
 	if err != nil {
-		return broker.ListResult{}, asRefusal(lockedHint(err))
+		return broker.ListResult{}, asRefusal(g.lockedHint(err))
 	}
 	defer s.close()
 	entries, err := s.v.List(e.Cwd)
@@ -219,7 +220,8 @@ func listedGrant(st *grants.Store, en vault.Entry, session, cwd string, now time
 
 func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecRequest) (broker.ExecResponse, error) {
 	g := b.hot(e)
-	g.unlock.never = true // exec never opens a dialog: the user already said yes
+	g.ctx = ctx
+	g.unlock.lockOnCancel = true
 	p := execPlan{command: r.Command, timeout: time.Duration(r.TimeoutMS) * time.Millisecond, shell: runner.Shell(r.Shell)}
 	seen := map[string]bool{}
 	for _, sc := range r.Secrets {
@@ -229,6 +231,7 @@ func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecR
 			p.names = append(p.names, sc.From)
 		}
 	}
+	g.unlock.names = p.names
 	if err := runner.CheckShell(p.shell); err != nil {
 		return broker.ExecResponse{}, refusal.New(refusal.Internal, "").WithMessage("shell not available on this system")
 	}
@@ -250,7 +253,7 @@ func (b *cliBackend) Exec(ctx context.Context, e broker.Envelope, r broker.ExecR
 	if err := g.runExec(cmd, p, false); err != nil {
 		var xe exitError
 		if !errors.As(err, &xe) {
-			return broker.ExecResponse{}, asRefusal(lockedHint(err))
+			return broker.ExecResponse{}, asRefusal(g.lockedHint(err))
 		}
 	}
 	var res broker.ExecResponse

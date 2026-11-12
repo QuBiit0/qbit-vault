@@ -1,0 +1,2 @@
+TESTFIXTURE checksums line
+abc123  qbit-vault_1.0.0_linux_amd64.tar.gz

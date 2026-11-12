@@ -17,6 +17,8 @@ import (
 // S5: an agent call that finds a passphrase-mode vault locked asks the
 // passphrase out of band, in a dialog that names the requester and the secret.
 
+const wantNoDialog = "vault is locked and no unlock dialog could be shown; ask the user to run 'qbit-vault unlock' in their terminal"
+
 const (
 	fxAgentValue = "TESTSECRET_agent_unlock_value"
 	fxWrongPass  = "TESTSECRET_wrong_passphrase"
@@ -219,26 +221,160 @@ func TestAgentUnlockOptOut(t *testing.T) {
 	}
 }
 
-// exec never opens a dialog: it is how a command runs after the user said
-// yes. Its refusal sends the agent to secret_request, which can unlock.
-func TestAgentExecAndListNeverAskThePassphrase(t *testing.T) {
+// grantedLockedWorld is lockedWorld with an "always in this project" grant of
+// A for w.repo, the vault locked again: what the owner has after approving a
+// request and what an exec or a list then meets once the unlock expired.
+func grantedLockedWorld(t *testing.T) *world {
+	t.Helper()
 	w := lockedWorld(t)
+	withBackend(t, answers(val(fxPass), pick(1)))
+	if code, m, out := w.broker("request", reqFor(w.repo, "")); code != exitcode.OK || m["ok"] != true {
+		t.Fatalf("approval: code=%d out=%s", code, out)
+	}
+	return w
+}
+
+func (w *world) execFromRepo() (int, map[string]any, string) {
+	w.t.Helper()
+	exe := child(w.t, "leaks", "TOKEN", 0)
+	return w.broker("exec", envelope("exec", w.repo, `"command":`+jsonString(exe)+`,"secrets":[{"name":"TOKEN","from":"A"}]`))
+}
+
+// S2 of odd/tasks/unlock-zero-friction.md: exec opens the unlock dialog, names
+// the requester and the secret, then goes on to its grant and runs.
+func TestAgentUnlockOnExec(t *testing.T) {
+	w := grantedLockedWorld(t)
+	before := len(w.auditUnlocks())
+	f := withBackend(t, answers(val(fxPass)))
+	code, m, out := w.execFromRepo()
+	if code != exitcode.OK || m["ok"] != true {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	if len(f.Calls) != 1 || f.Calls[0].Kind != "passphrase" {
+		t.Fatalf("calls=%+v, want one passphrase dialog", f.Calls)
+	}
+	if p := f.Calls[0].Passphrase; p.Heading != "Vault passphrase" || p.Reason != unlockReasonA || f.Calls[0].Confirm {
+		t.Fatalf("passphrase request=%+v", f.Calls[0])
+	}
+	if !strings.Contains(out, "[REDACTED:A]") {
+		t.Fatalf("the child ran but its output was not redacted: %s", out)
+	}
+	recs := w.auditUnlocks()
+	if len(recs) != before+1 {
+		t.Fatalf("%d unlock records, want %d", len(recs), before+1)
+	}
+	if r := recs[before]; r.By != "agent" || r.Detail != "Pi" || len(r.Names) != 1 || r.Names[0] != "A" {
+		t.Fatalf("unlock record=%+v", r)
+	}
+	noFixtures(t, "audit log", w.auditText())
+}
+
+// Unlocking never grants: an exec without a grant still asks for one.
+func TestAgentUnlockOnExecStillNeedsItsGrant(t *testing.T) {
+	w := lockedWorld(t)
+	f := withBackend(t, answers(val(fxPass)))
+	code, m, _ := w.execFromRepo()
+	if code == exitcode.OK || refusalType(m) != "grant_required" || len(f.Calls) != 1 {
+		t.Fatalf("code=%d m=%v calls=%+v", code, m, f.Calls)
+	}
+}
+
+// secret_list opens the same dialog, for the vault and not for a name.
+func TestAgentUnlockOnList(t *testing.T) {
+	w := grantedLockedWorld(t)
+	before := len(w.auditUnlocks())
+	f := withBackend(t, answers(val(fxPass)))
+	code, m, out := w.broker("list", envelope("list", w.repo, ""))
+	if code != exitcode.OK || m["ok"] != true {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	if len(f.Calls) != 1 || f.Calls[0].Kind != "passphrase" || f.Calls[0].Passphrase.Reason != unlockReasonNo ||
+		f.Calls[0].Passphrase.Heading != "Vault passphrase" {
+		t.Fatalf("calls=%+v", f.Calls)
+	}
+	if !strings.Contains(out, `"name":"A"`) || len(w.auditUnlocks()) != before+1 {
+		t.Fatalf("out=%s unlocks=%d, want %d", out, len(w.auditUnlocks()), before+1)
+	}
+}
+
+// Over MCP, as the host calls it: the dialog names the product.
+func TestMCPListAndExecOnLockedVaultAskTheNamedRequester(t *testing.T) {
+	w := grantedLockedWorld(t)
+	t.Chdir(w.repo)
 	f := withBackend(t, answers(val(fxPass), val(fxPass)))
+	s := w.startMCP()
+	s.send(rpcListCall)
+	s.waitFor(`"id":3,`)
+	s.send(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"secret_exec","arguments":{"command":"echo hi","secrets":[{"name":"TOKEN","from":"A"}]}}}`)
+	s.waitFor(`"id":4,`)
+	out, errs := s.finish()
+	if errs != "" {
+		t.Fatalf("stderr=%q", errs)
+	}
+	noFixtures(t, "mcp output", out+errs)
+	if len(f.Calls) != 2 {
+		t.Fatalf("calls=%+v out=%s", f.Calls, out)
+	}
+	for i, want := range []string{"Claude Code needs the vault. Unlock it to continue.", "Claude Code wants to use A. Unlock the vault to continue."} {
+		if got := f.Calls[i].Passphrase; got.Heading != "Vault passphrase" || got.Reason != want {
+			t.Errorf("dialog %d=%+v, want %q", i, got, want)
+		}
+	}
+}
+
+// Cancel and a wrong passphrase are the retryable vault_locked: nothing runs,
+// nothing is listed, and the message does not send anyone to a terminal.
+func TestAgentUnlockOnExecAndListCancelOrWrong(t *testing.T) {
+	w := grantedLockedWorld(t)
+	before := len(w.auditUnlocks())
+	calls := map[string]func() (int, map[string]any, string){
+		"exec": w.execFromRepo,
+		"list": func() (int, map[string]any, string) { return w.broker("list", envelope("list", w.repo, "")) },
+	}
+	answersBy := map[string]prompttest.Answer{"cancel": cancel(), "wrong passphrase": val(fxWrongPass)}
+	for name, call := range calls {
+		for what, a := range answersBy {
+			f := withBackend(t, answers(a))
+			code, m, _ := call()
+			msg := lockedRefusalMessage(t, m)
+			if code != exitcode.Locked || len(f.Calls) != 1 {
+				t.Errorf("%s/%s: code=%d calls=%+v", name, what, code, f.Calls)
+			}
+			if strings.Contains(msg, "terminal") || strings.Contains(msg, "qbit-vault unlock") || strings.Contains(msg, "secret_request") {
+				t.Errorf("%s/%s: message %q sends the user to a terminal", name, what, msg)
+			}
+		}
+	}
+	if n := len(w.auditUnlocks()); n != before {
+		t.Fatalf("%d unlock records, want %d: a wrong passphrase or a cancel unlocked nothing", n, before)
+	}
+}
+
+// With no dialog to show, exec and list say so, and only then name the command.
+func TestAgentExecAndListWithoutDialogSayNoDialogCouldBeShown(t *testing.T) {
+	w := lockedWorld(t)
 	for _, c := range []struct{ op, req string }{
 		{"exec", envelope("exec", w.outside, `"command":"echo hi","secrets":[{"name":"TOKEN","from":"A"}]`)},
 		{"list", envelope("list", w.outside, "")},
 	} {
-		code, m, _ := w.broker(c.op, c.req)
-		msg := lockedRefusalMessage(t, m)
-		if code != exitcode.Locked || !strings.Contains(msg, "secret_request") {
-			t.Errorf("%s: code=%d msg=%q", c.op, code, msg)
-		}
-		if strings.Contains(msg, "terminal") || strings.Contains(msg, "qbit-vault unlock") {
-			t.Errorf("%s: the message sends the user to a terminal: %q", c.op, msg)
+		withBackend(t, &prompttest.Fake{Unavailable: true})
+		_, m, _ := w.broker(c.op, c.req)
+		if got := lockedRefusalMessage(t, m); got != wantNoDialog {
+			t.Errorf("%s: message %q, want %q", c.op, got, wantNoDialog)
 		}
 	}
-	if len(f.Calls) != 0 {
-		t.Fatalf("exec or list opened a dialog: %+v", f.Calls)
+	f := withBackend(t, answers(val(fxPass)))
+	for _, c := range []struct{ op, req string }{
+		{"exec", envelope("exec", w.outside, `"command":"echo hi","secrets":[{"name":"TOKEN","from":"A"}]`)},
+		{"list", envelope("list", w.outside, "")},
+	} {
+		code, out := w.brokerWithEnv(map[string]string{"QBIT_VAULT_NO_PROMPT_UNLOCK": "1"}, c.op, c.req)
+		if code != exitcode.Locked || !strings.Contains(out, wantNoDialog) {
+			t.Errorf("opt-out %s: code=%d out=%s", c.op, code, out)
+		}
+	}
+	if len(f.Calls) != 0 || len(w.auditUnlocks()) != 0 {
+		t.Fatalf("asked despite the opt-out: %+v", f.Calls)
 	}
 }
 
@@ -405,5 +541,24 @@ func TestAgentUnlockHostileNameNeverReachesTheDialog(t *testing.T) {
 	code, m, out := w.broker("manage", manageReq(w.outside, `"action":"remove","name":"A\nSecond line","layer":"global"`))
 	if refusalType(m) != "invalid_name" || len(f.Calls) != 0 {
 		t.Fatalf("code=%d out=%s calls=%+v", code, out, f.Calls)
+	}
+}
+
+// S5 of odd/tasks/unlock-zero-friction.md: the Pi footer asks `grants
+// --no-prompt`, which never opens a dialog, so refreshing the footer cannot
+// pop the passphrase dialog; plain `grants` (a command the user runs) asks.
+func TestGrantsNoPromptNeverOpensTheDialog(t *testing.T) {
+	w := lockedWorld(t)
+	f := withBackend(t, answers(val(fxPass), val(fxPass)))
+	code, out, errs := w.run("", "--json", "grants", "--no-prompt")
+	if code != exitcode.Locked || len(f.Calls) != 0 {
+		t.Fatalf("code=%d out=%q err=%q calls=%+v", code, out, errs, f.Calls)
+	}
+	noFixtures(t, "grants output", out+errs)
+	if !strings.Contains(out+errs, "vault_locked") && !strings.Contains(out+errs, "vault is locked") {
+		t.Fatalf("not the locked answer: out=%q err=%q", out, errs)
+	}
+	if code, _, errs := w.run("", "--json", "grants"); code != exitcode.OK || len(f.Calls) != 1 || f.Calls[0].Kind != "passphrase" {
+		t.Fatalf("plain grants: code=%d err=%q calls=%+v", code, errs, f.Calls)
 	}
 }

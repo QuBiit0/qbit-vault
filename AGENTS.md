@@ -25,7 +25,7 @@ qbit-vault/                     (module github.com/qbitdevz/qbit-vault)
 ├── cmd/qbit-vault/             Go main: CLI entry
 ├── cmd/qbit-vault-server/      Go main: optional self-hosted sync server (serve, invite, health)
 ├── deploy/                     server Dockerfile and compose.yaml (Dokploy)
-├── defaults/                   bindings.yaml (not loaded yet), dumpguard.yaml (embedded copy in
+├── defaults/                   release-key.pub (pinned release public key), bindings.yaml (not loaded yet), dumpguard.yaml (embedded copy in
 │                               internal/dumpguard, kept equal by a test), secret-patterns.yaml
 ├── internal/
 │   ├── vault/                  encrypted store, layers, envelope users, atomic writes, backups,
@@ -41,6 +41,8 @@ qbit-vault/                     (module github.com/qbitdevz/qbit-vault)
 │   ├── dumpguard/              dump-command guard and wrapper/segment parser
 │   ├── redact/                 streaming redaction (raw, base64, url-encoded, JSON-escaped, ...)
 │   ├── audit/                  hash-chained JSONL audit log
+│   ├── minisign/               Minisign ED signature verifier; embeds the pinned release key
+│   │                           (copy of defaults/release-key.pub, kept equal by a test)
 │   ├── prompt/                 out-of-band capture: tty, osascript, powershell, zenity, kdialog
 │   │                           (scripted backend only in -tags e2eprompt builds)
 │   ├── broker/                 contract v1 handlers (request/list/exec/manage/grant/revoke)
@@ -70,6 +72,7 @@ qbit-vault/                     (module github.com/qbitdevz/qbit-vault)
 ├── assets/demo/, screenshots/  VHS tapes and script that record the README GIFs from the real binary on a throwaway
 │                               demo vault (fake values); the README and docs screenshots
 ├── tools/leakgrep/             CI leak grep over captured test output
+├── tools/release-sign/         release signer: keygen and sign checksums.txt with Minisign (env seed; not in the binary)
 ├── .agents/skills/contribution-review/   how an agent reviews a PR or triages issues for the
 │                               maintainer (copy in .claude/skills/, CI keeps them equal)
 ├── odd/tasks/                  work logs (what was built, decisions, commits)

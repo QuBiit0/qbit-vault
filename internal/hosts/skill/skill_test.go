@@ -221,3 +221,37 @@ func TestSkillExplainsTheWithheldOutputAndTheWriteBlock(t *testing.T) {
 		}
 	}
 }
+
+// S4 of odd/tasks/unlock-zero-friction.md: for a locked vault the model calls
+// a tool, which opens the unlock dialog; the terminal command is only the
+// fallback when no dialog could be shown, and the model never asks the user to
+// type a command for something a tool can do.
+func TestSkillUnlocksThroughTheToolsAndKeepsTheTerminalAsTheFallback(t *testing.T) {
+	s := string(skill.Content)
+	for _, want := range []string{
+		"With `vault locked`, call a QBit Vault tool (for example `secret_list`): it opens the unlock dialog for the user",
+		"With `vault locked`, call a QBit Vault tool (for example `secret_list`), which opens the unlock dialog, then write again.",
+		"`secret_list` and `secret_exec` ask the same way",
+		"no unlock dialog could be shown",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("skill does not say %q", want)
+		}
+	}
+	for _, stale := range []string{
+		"tell the user to run `qbit-vault unlock`",
+		"never ask: when one answers this",
+		"call `secret_request` for the name (it unlocks",
+	} {
+		if strings.Contains(s, stale) {
+			t.Errorf("skill still says %q", stale)
+		}
+	}
+	// Every mention of the terminal command is the documented fallback.
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, "qbit-vault unlock") && !strings.Contains(line, "no unlock dialog could be shown") &&
+			!strings.Contains(line, "no dialog is possible") {
+			t.Errorf("a line sends the user to the terminal outside the fallback: %.120s", line)
+		}
+	}
+}

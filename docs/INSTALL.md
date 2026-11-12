@@ -27,6 +27,7 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 1. Pick the archive for your OS and architecture: `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows).
 2. Resolve the version: `QBIT_VAULT_VERSION` if set, else the newest release **including pre-releases** (GitHub's `releases/latest` skips them): the one with the latest publish date among the last 100, because the releases API orders by tag text (`v1.0.10` sorts before `v1.0.9`).
 3. Download the archive and `checksums.txt` over HTTPS and compare the SHA-256. On a mismatch, or an archive not listed, they stop with `checksum mismatch for <archive>: nothing was installed` (or `<archive> is not listed in checksums.txt`) and install nothing.
+   Then the signature of `checksums.txt`, before anything is extracted or written (releases from `v1.4.0` on carry `checksums.txt.minisig`, made with the QBit Vault release key, which is pinned in the script; the public key is `defaults/release-key.pub`). If `minisign` is on your `PATH` they download `checksums.txt.minisig` and run `minisign -V -q -P <pinned key> -m checksums.txt -x checksums.txt.minisig`; a signature that does not verify stops with `the signature of checksums.txt for <version> does not verify with the QBit Vault release key: nothing was installed`, and a release at or above `v1.4.0` with no `.minisig` with `the release <version> has no checksums.txt.minisig, so it is not signed with the QBit Vault release key: nothing was installed`. If `minisign` is not installed they go on and print `minisign not found: checksums.txt was checked with SHA-256 only. Verify the signature with: minisign -V -P <key> -m checksums.txt -x checksums.txt.minisig` (the line carries the real key). An older release has no signature; an explicit older version (`QBIT_VAULT_VERSION=v1.3.0`) installs with `<version> predates signed releases (first signed: v1.4.0): checksums.txt was checked with SHA-256 only`.
 4. Choose the directory: `QBIT_VAULT_INSTALL_DIR` if set; else the directory of the `qbit-vault` already first on your `PATH`, when you can write to it (an upgrade in place, see below); else `~/.local/bin` (Linux, macOS) or `%LOCALAPPDATA%\Programs\qbit-vault` (Windows).
 5. Replace the binary atomically: the new file is written beside the old one and renamed over it, so a failed download or a full disk never leaves a half-written `qbit-vault`. On Windows a running `qbit-vault.exe` (an agent's MCP server) is renamed aside to `qbit-vault.exe.old-<id>` first, which Windows allows, so the upgrade works with your agents open; if the copy fails the old binary is put back. The aside file stays while that process runs and the next install removes it. On Windows the directory is added to your **user** `PATH` (open a new terminal); on Linux and macOS the script tells you if the directory is not on `PATH`.
 6. Finish: on a machine where the vault is already set up (`$QBIT_VAULT_HOME/state.json` exists, default `~/.qbit-vault`), run `qbit-vault sync` with the new binary so every registered agent points at it, and tell you to restart your agents; otherwise print the one next step, `next: run 'qbit-vault init'` (it checks the setup and ends by telling you to restart your agents). They never ask for, read or store a secret, never read your environment for values, and never run `init`; `sync` only re-applies the registrations you already made and reads no secret.
@@ -41,7 +42,7 @@ What the scripts do (`scripts/install.sh`, `scripts/install.ps1`; read them befo
 
 Pass a variable to the piped script like this: `curl -fsSL …/install.sh | QBIT_VAULT_VERSION=v1.0.0 sh`, or in PowerShell `$env:QBIT_VAULT_VERSION='v1.0.0'; irm …/install.ps1 | iex`.
 
-**Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo qbitdevz/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. Minisign-signed checksums are not built; the SHA-256 `checksums.txt` and the provenance attestation are what exist.
+**Verifying more than the checksum.** The checksum proves the archive matches `checksums.txt` from the same release. To also prove that GitHub Actions built it from this repository, verify the provenance attestation with the GitHub CLI: `gh attestation verify qbit-vault_linux_amd64.tar.gz --repo qbitdevz/qbit-vault`. The binaries are not code-signed for macOS or Windows; a file downloaded by `curl` or PowerShell carries no quarantine flag, but if you download an archive with a browser, macOS Gatekeeper or Windows SmartScreen may warn. To also prove who published the release, install [minisign](https://jedisct1.github.io/minisign/) and let the installer verify the signature, or do it by hand: download `checksums.txt` and `checksums.txt.minisig` from the release and run `minisign -V -P <key> -m checksums.txt -x checksums.txt.minisig` with the key from `defaults/release-key.pub` (its second line). Releases before `v1.4.0` are not signed.
 
 ## With Go
 
@@ -164,7 +165,7 @@ There is no `packages/` directory yet. The design is a tiny JS launcher with no 
 - `bin/qbit-vault.mjs` resolves the platform package, verifies the binary's SHA-256 against the checksum **embedded in the launcher at release time**, then `execFileSync`s it with all arguments. No download at runtime, no `postinstall`, no network beyond npm itself.
 - If the platform package is missing (unsupported platform or `--no-optional`), the launcher prints the `go install` alternative and exits 2.
 
-The release archives are already produced by GoReleaser with `checksums.txt` and GitHub build provenance; Minisign signatures are not built.
+The release archives are already produced by GoReleaser with `checksums.txt`, its Minisign signature (`checksums.txt.minisig`, from `v1.4.0`) and GitHub build provenance. The launcher design above would carry that signature in each platform package; the launcher itself is not built.
 
 ## `init` step by step
 
@@ -177,10 +178,10 @@ Everything is idempotent; re-running repairs. Every file write goes through snap
 | 3 | Empty vault | Write `vault.enc` with an empty body. **Never** reads `process.env` or any `.env` | no |
 | 4 | Detect hosts | `claude-code` (`~/.claude/` or a `claude` binary on `PATH`), `codex` (`~/.codex/` or `codex`), `pi` (the Pi agent directory, `~/.pi/`, or a `pi` or `gentle-shell` binary); `--agents` names hosts explicitly. There is no OpenCode adapter (dropped, `ROADMAP.md`) | no |
 | 5 | Register hosts | Per `AGENT_INTEGRATIONS.md`, receipts to `state.json`. Claude Code: `mcpServers.qbit-vault` in `~/.claude.json`, six hooks and the `Read`/`Edit` deny rules for the vault home in `~/.claude/settings.json`. Codex: the `[mcp_servers.qbit-vault]` table in `~/.codex/config.toml` and two hooks (`PostToolUse` on `Bash`, `PreToolUse` on `apply_patch`) in `~/.codex/hooks.json`, next to the hooks of other tools; Codex runs them after you trust them in `/hooks`, and `init` prints that reminder. Pi / Gentle Shell: `mcpServers.qbit-vault` in `<Pi agent dir>/mcp.json` (`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`). Every host also gets the `qbit-vault` agent skill: `~/.claude/skills/qbit-vault/SKILL.md` for Claude Code, one shared `~/.agents/skills/qbit-vault/SKILL.md` for Codex and Pi (`AGENT_INTEGRATIONS.md` § Agent skill) | no |
-| 6 | Extension | Pi: `init` prints the install command of the `qbit-vault-pi` extension as a suggestion under the `host pi:` line and never runs it (installing needs the network, AGENTS.md invariant 8): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1` (Gentle Shell) or `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1` (Pi). It is a git tag of this repository, not an npm package. Pi uses the MCP entry from step 5 either way | no |
+| 6 | Extension | Pi: `init` prints the install command of the `qbit-vault-pi` extension as a suggestion under the `host pi:` line and never runs it (installing needs the network, AGENTS.md invariant 8): `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2` (Gentle Shell) or `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2` (Pi). It is a git tag of this repository, not an npm package. Pi uses the MCP entry from step 5 either way | no |
 | 7 | Doctor | Run `doctor` (read-only) and print the report. It is printed whenever a host was processed or a problem was found; a healthy vault-only run prints just the vault line. Exit 1 on any problem | no |
 
-Total questions on a machine with a keychain: **zero**. Not built: verifying a binary signature, and a separate check that other tools' deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`).
+Total questions on a machine with a keychain: **zero**. `init` does not verify a signature (the installers and `update` do, see below). Not built: a separate check that other tools' deny entries survived (they survive because only entries we own are touched; `AGENT_INTEGRATIONS.md`).
 
 ## Example output
 
@@ -192,8 +193,8 @@ host claude-code: registered (mcp, hooks, deny, skill)
 host codex: registered (mcp, hooks, skill)
   Codex skips new hooks until you trust them: open /hooks in Codex and trust the qbit-vault hooks.
 host pi: registered (mcp, skill)
-  Pi extension (optional, run it yourself): gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
-  with plain Pi: pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.1
+  Pi extension (optional, run it yourself): gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2
+  with plain Pi: pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.2
 ok    vault                    unlocked (keychain: secret-service)
 ok    permissions              owner-only
 ok    host.claude-code.mcp     registered
@@ -281,10 +282,35 @@ What it does, in order:
 1. Refuses a build that is not a release (`dev`, `+dirty`, a pseudo-version) with the one-line installer / `go install` hint; `--check` still reports.
 2. Asks `https://api.github.com/repos/qbitdevz/qbit-vault/releases/latest` (or `QBIT_VAULT_RELEASES_API`, as the installers) and compares semantic versions. A draft or pre-release is never chosen.
 3. Checks that the directory of the running binary is writable (`cannot replace <path>: re-run the install command` otherwise), then asks you.
-4. Downloads `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows) and `checksums.txt` over HTTPS (redirects to GitHub's asset hosts are followed; size caps and timeouts apply), checks the archive's SHA-256 against `checksums.txt` and extracts the binary to a temp file beside the installed one. Any failure there leaves the installed binary byte-identical and removes the temp file.
+4. Downloads `qbit-vault_<os>_<arch>.tar.gz` (`.zip` on Windows) and `checksums.txt` over HTTPS (redirects to GitHub's asset hosts are followed; size caps and timeouts apply), checks the archive's SHA-256 against `checksums.txt`, then downloads `checksums.txt.minisig` and verifies it with the release public key compiled into the binary, and only then extracts the binary to a temp file beside the installed one. A missing, malformed or non-matching signature stops with `the release <version> is not signed with the QBit Vault release key; nothing was changed` (exit 1); the command never falls back to the SHA-256 alone, so a release without a signature cannot be installed with `update` (use the installer for an older one). Any failure there leaves the installed binary byte-identical and removes the temp file.
 5. Swaps it in atomically (the same rename the installers do; on Windows the running `qbit-vault.exe` is renamed to `qbit-vault.exe.old-<8 hex>` and a later `update` removes the old copies).
 6. When the vault is set up, runs `sync` of the new binary (skip with `QBIT_VAULT_NO_SYNC=1`) and prints `updated qbit-vault <current> -> <latest>; restart your agents so they load the new version`.
 
 The TUI does the same from its Update section: each time it opens it checks for a newer release in the background (5 s timeout; the screen never waits and a failure only shows `could not check for updates`), shows `update available <latest>` in the header, and `u` runs this update with the TUI suspended for the confirmation. `QBIT_VAULT_NO_UPDATE_CHECK=1` turns the open-time check off (the section then offers `c check now`).
 
-It never opens the vault, grants, audit log or sync state, reads no secret, and contacts only the GitHub API and the release assets. The trust anchor is the same as the installers': a SHA-256 `checksums.txt` served over HTTPS from the repository's releases. Minisign-signed checksums are not built yet; when they are, the command verifies them without changing its interface (THREAT_MODEL L12).
+It never opens the vault, grants, audit log or sync state, reads no secret, and contacts only the GitHub API and the release assets. The trust anchor is the release public key pinned in the binary (never downloaded) and the Minisign signature of `checksums.txt`; the SHA-256 in `checksums.txt` then binds the archive to it (THREAT_MODEL L12). `update --check` downloads nothing and does not look at signatures.
+
+## Verifying a release
+
+Every release from `v1.4.0` on is published only after `checksums.txt` has been signed with the QBit Vault release key (Minisign, Ed25519). The public key is `defaults/release-key.pub`; it is pinned in the binary (for `update`) and in both installers, never downloaded.
+
+```bash
+# in a directory with checksums.txt, checksums.txt.minisig and the archive you downloaded
+minisign -V -P <key> -m checksums.txt -x checksums.txt.minisig   # <key>: second line of defaults/release-key.pub
+sha256sum --check --ignore-missing checksums.txt
+```
+
+The first command proves who published `checksums.txt`; the second binds your archive to it. The release notes repeat the command with the key. The signature is the authenticity proof; the build-provenance attestation (`gh attestation verify`) covers the archives and `checksums.txt` but not the `.minisig`, which is made after the build in a separate job.
+
+## Releasing (maintainer)
+
+A `v*` tag runs `.github/workflows/release.yml`: the release job tests (with `QBIT_VAULT_RELEASE_CHECK=1`, which fails while the pinned key is the test key), builds with GoReleaser and creates the release as a **draft**; the `sign` job waits for a reviewer of the `release-signing` environment, checks the draft's assets against `checksums.txt`, signs it with `tools/release-sign`, verifies the signature with the pinned key, uploads `checksums.txt.minisig`, and publishes the release. The server image is built after that. If any step fails the release stays a draft; fix forward with a new version (tags are never moved).
+
+One-time owner setup (the seed never passes through an agent or a log):
+
+1. Generate the key pair locally: `go run ./tools/release-sign keygen --pub defaults/release-key.pub`. It writes the public key and prints the seed once on stdout; keep it out of shell history and files.
+2. Copy the public key into the other pinned copies: `internal/minisign/release-key.pub` (the same file), `MINISIGN_KEY` in `scripts/install.sh` and `$minisignKey` in `scripts/install.ps1` (the second line of the file, plus the key id in the comment next to it), and the key in the `.goreleaser.yaml` footer. `go test ./...` fails until all copies agree.
+3. Create the `release-signing` environment (repository Settings, Environments) with the owner as required reviewer, and store the seed in it: `gh secret set QBIT_VAULT_SIGNING_KEY --env release-signing`.
+4. Commit the public key, tag the release, approve the `sign` job, then check: the release was a draft until signed, `checksums.txt.minisig` is attached, `minisign -V` passes, and `qbit-vault update` from the previous version accepts it.
+
+Residual risk: the seed lives in a GitHub environment secret, protected by the reviewer approval, not in hardware. Whoever can approve the environment and push a tag can sign (THREAT_MODEL L12).

@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/qbitdevz/qbit-vault/internal/minisign/minisigntest"
 )
 
 func TestIsRelease(t *testing.T) {
@@ -82,6 +84,7 @@ type fakeRelease struct {
 	ua        atomic.Value
 	assets    map[string][]byte
 	checksums string
+	sign      func(sums string) []byte // the checksums.txt.minisig served
 	apiBody   func(base string) string
 }
 
@@ -104,6 +107,14 @@ func newFake(t *testing.T) *fakeRelease {
 			fmt.Fprint(w, f.checksums)
 			return
 		}
+		if name == "checksums.txt.minisig" {
+			if f.sign == nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Write(f.sign(f.checksums))
+			return
+		}
 		b, ok := f.assets[name]
 		if !ok {
 			http.NotFound(w, r)
@@ -113,8 +124,11 @@ func newFake(t *testing.T) *fakeRelease {
 	})
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
+	f.sign = func(sums string) []byte {
+		return testSigner.Sign([]byte(sums), "timestamp:1 file:checksums.txt version:v1.1.0")
+	}
 	f.apiBody = func(base string) string {
-		return releaseJSON(base, "v1.1.0", false, false, "2026-01-02T00:00:00Z", "qbit-vault_linux_amd64.tar.gz", "qbit-vault_windows_amd64.zip", "checksums.txt")
+		return releaseJSON(base, "v1.1.0", false, false, "2026-01-02T00:00:00Z", "qbit-vault_linux_amd64.tar.gz", "qbit-vault_windows_amd64.zip", "checksums.txt", "checksums.txt.minisig")
 	}
 	return f
 }
@@ -166,7 +180,15 @@ func zipOf(t *testing.T, name string, body []byte) []byte {
 	return buf.Bytes()
 }
 
-func (f *fakeRelease) client() *Client { return NewClient("v1.0.0", f.srv.URL+"/api") }
+// testSigner is a throwaway release key; clients under test trust it through
+// Client.Key, so these tests do not depend on which key the binary pins.
+var testSigner = minisigntest.New(1)
+
+func (f *fakeRelease) client() *Client {
+	c := NewClient("v1.0.0", f.srv.URL+"/api")
+	c.Key = testSigner.Pub
+	return c
+}
 
 func (f *fakeRelease) setLinux(t *testing.T, binary []byte) {
 	a := tarGz(t, "qbit-vault", binary)
@@ -270,8 +292,74 @@ func TestDownloadTarGz(t *testing.T) {
 	if b, _ := os.ReadFile(p); string(b) != "NEWBINARY" {
 		t.Fatalf("content %q", b)
 	}
-	if f.hits.Load() != 2 {
-		t.Fatalf("hits=%d, want archive+checksums", f.hits.Load())
+	if f.hits.Load() != 3 {
+		t.Fatalf("hits=%d, want archive+checksums+signature", f.hits.Load())
+	}
+}
+
+const notSignedMsg = "the release v1.1.0 is not signed with the QBit Vault release key; nothing was changed"
+
+func TestDownloadSignatureRefusals(t *testing.T) {
+	other := minisigntest.New(2)
+	for name, mutate := range map[string]func(f *fakeRelease){
+		"not listed": func(f *fakeRelease) {
+			f.apiBody = func(b string) string {
+				return releaseJSON(b, "v1.1.0", false, false, "2026-01-02T00:00:00Z", "qbit-vault_linux_amd64.tar.gz", "checksums.txt")
+			}
+		},
+		"listed but gone": func(f *fakeRelease) { f.sign = nil },
+		"another key": func(f *fakeRelease) {
+			f.sign = func(s string) []byte { return other.Sign([]byte(s), "timestamp:1") }
+		},
+		"signs other checksums": func(f *fakeRelease) {
+			// checksums.txt still lists the archive with its real SHA-256.
+			f.sign = func(s string) []byte { return testSigner.Sign([]byte(s+"tampered"), "timestamp:1") }
+		},
+		"malformed": func(f *fakeRelease) { f.sign = func(string) []byte { return []byte("garbage\n") } },
+		"empty":     func(f *fakeRelease) { f.sign = func(string) []byte { return nil } },
+		"oversized": func(f *fakeRelease) {
+			f.sign = func(s string) []byte {
+				return append(testSigner.Sign([]byte(s), "timestamp:1"), bytes.Repeat([]byte("x"), maxSignature)...)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			f.setLinux(t, []byte("NEWBINARY"))
+			mutate(f)
+			rel, _ := f.client().Latest(context.Background())
+			dir := t.TempDir()
+			p, err := f.client().Download(context.Background(), rel, "linux", "amd64", dir)
+			if err == nil || p != "" {
+				t.Fatalf("accepted: %q", p)
+			}
+			if err.Error() != notSignedMsg || !errors.Is(err, ErrNotSigned) {
+				t.Fatalf("error %q", err)
+			}
+			empty(t, dir)
+		})
+	}
+}
+
+func TestDownloadSignatureCheckedAfterChecksum(t *testing.T) {
+	f := newFake(t)
+	f.setLinux(t, []byte("NEWBINARY"))
+	f.checksums = strings.Repeat("a", 64) + "  qbit-vault_linux_amd64.tar.gz\n"
+	rel, _ := f.client().Latest(context.Background())
+	_, err := f.client().Download(context.Background(), rel, "linux", "amd64", t.TempDir())
+	if err == nil || errors.Is(err, ErrNotSigned) {
+		t.Fatalf("a checksum mismatch must be reported as such: %v", err)
+	}
+}
+
+// The default client trusts the key pinned in the binary, not the test key.
+func TestDownloadDefaultKeyIsThePinnedOne(t *testing.T) {
+	f := newFake(t)
+	f.setLinux(t, []byte("NEWBINARY"))
+	rel, _ := f.client().Latest(context.Background())
+	_, err := NewClient("v1.0.0", f.srv.URL+"/api").Download(context.Background(), rel, "linux", "amd64", t.TempDir())
+	if !errors.Is(err, ErrNotSigned) {
+		t.Fatalf("a signature by a throwaway key was accepted: %v", err)
 	}
 }
 

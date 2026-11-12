@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qbitdevz/qbit-vault/internal/exitcode"
+	"github.com/qbitdevz/qbit-vault/internal/minisign"
 	"github.com/qbitdevz/qbit-vault/internal/prompt"
 	"github.com/qbitdevz/qbit-vault/internal/refusal"
 	"github.com/qbitdevz/qbit-vault/internal/selfupdate"
@@ -42,6 +43,9 @@ var (
 	updateGOARCH = runtime.GOARCH
 	// updateResync re-applies the host registrations with the new binary.
 	updateResync = resyncWithNewBinary
+	// updateKey verifies the release signature. Nil is the key pinned in the
+	// binary; only tests set it, to a throwaway key. No flag or variable reaches it.
+	updateKey *minisign.PublicKey
 )
 
 type updateBody struct {
@@ -116,6 +120,7 @@ func runUpdate(cmd *cobra.Command, g *globals, check bool) error {
 	}
 
 	client := selfupdate.NewClient(current, updateAPI(g.getenv))
+	client.Key = updateKey
 	rel, err := client.Latest(ctx)
 	if err != nil {
 		return updateFailed(err.Error())

@@ -10,7 +10,9 @@
 #   QBIT_VAULT_RELEASE_URL  base download URL (default: the GitHub releases of qbitdevz/qbit-vault)
 #   QBIT_VAULT_NO_SYNC      set to 1 to skip `qbit-vault sync` after an upgrade
 #
-# It downloads one archive and checksums.txt, verifies the SHA-256, and copies
+# It downloads one archive and checksums.txt, verifies the SHA-256 and, when
+# minisign is installed, the Minisign signature of checksums.txt against the
+# release key pinned below (docs/INSTALL.md § Verify a download), and copies
 # the binary. An existing install is upgraded in place, and when the vault is
 # already set up it runs `qbit-vault sync` so your agents use the new binary.
 # It never asks for, reads or stores a secret, and it never runs
@@ -22,6 +24,12 @@ RELEASE_URL="${QBIT_VAULT_RELEASE_URL:-https://github.com/$REPO/releases/downloa
 INSTALL_DIR="${QBIT_VAULT_INSTALL_DIR:-}"
 VERSION="${QBIT_VAULT_VERSION:-}"
 VAULT_HOME="${QBIT_VAULT_HOME:-$HOME/.qbit-vault}"
+
+# The release public key (key id BAC5F0F9E8487D3C; the second line of
+# defaults/release-key.pub, which a test keeps equal to this) and the first
+# release whose checksums.txt is signed.
+MINISIGN_KEY="RWQ8fUjo+fDFus9aUks/Mb2FoLMsdNDj4y2qOD2RI8jtgENzngsW82Mw"
+FIRST_SIGNED="v1.4.0"
 
 say() { printf 'qbit-vault install: %s\n' "$*"; }
 die() { printf 'qbit-vault install: error: %s\n' "$*" >&2; exit 1; }
@@ -44,6 +52,31 @@ sha256() {
 	else
 		die "sha256sum or shasum is required to verify the download"
 	fi
+}
+
+# signed_release VERSION: true when VERSION is at or above FIRST_SIGNED (a
+# pre-release suffix is ignored). A version that does not parse counts as signed.
+signed_release() {
+	_v="${1#v}"
+	_v="${_v%%[-+]*}"
+	_f="${FIRST_SIGNED#v}"
+	_ifs="$IFS"
+	IFS=.
+	# shellcheck disable=SC2086
+	set -- $_v
+	_a="${1:-}" _b="${2:-}" _c="${3:-}"
+	# shellcheck disable=SC2086
+	set -- $_f
+	_x="${1:-}" _y="${2:-}" _z="${3:-}"
+	IFS="$_ifs"
+	for _n in "$_a" "$_b" "$_c"; do
+		case "$_n" in '' | *[!0-9]*) return 0 ;; esac
+	done
+	[ "$_a" -gt "$_x" ] && return 0
+	[ "$_a" -lt "$_x" ] && return 1
+	[ "$_b" -gt "$_y" ] && return 0
+	[ "$_b" -lt "$_y" ] && return 1
+	[ "$_c" -ge "$_z" ]
 }
 
 case "$(uname -s)" in
@@ -84,6 +117,24 @@ want="$(awk -v f="$archive" '$2 == f { print $1 }' "$tmp/checksums.txt")"
 [ -n "$want" ] || die "$archive is not listed in checksums.txt"
 got="$(sha256 "$tmp/$archive")"
 [ "$want" = "$got" ] || die "checksum mismatch for $archive: nothing was installed"
+
+# The signature of checksums.txt, before anything is extracted or written.
+if command -v minisign >/dev/null 2>&1; then
+	if fetch "$RELEASE_URL/$VERSION/checksums.txt.minisig" "$tmp/checksums.txt.minisig" 2>/dev/null; then
+		minisign -V -q -P "$MINISIGN_KEY" -m "$tmp/checksums.txt" -x "$tmp/checksums.txt.minisig" >/dev/null 2>&1 ||
+			die "the signature of checksums.txt for $VERSION does not verify with the QBit Vault release key: nothing was installed"
+		say "checksums.txt signature verified with minisign"
+	elif signed_release "$VERSION"; then
+		die "the release $VERSION has no checksums.txt.minisig, so it is not signed with the QBit Vault release key: nothing was installed"
+	else
+		say "$VERSION predates signed releases (first signed: $FIRST_SIGNED): checksums.txt was checked with SHA-256 only"
+	fi
+elif signed_release "$VERSION"; then
+	printf '%s
+' "minisign not found: checksums.txt was checked with SHA-256 only. Verify the signature with: minisign -V -P $MINISIGN_KEY -m checksums.txt -x checksums.txt.minisig"
+else
+	say "$VERSION predates signed releases (first signed: $FIRST_SIGNED): checksums.txt was checked with SHA-256 only"
+fi
 
 tar -xzf "$tmp/$archive" -C "$tmp" qbit-vault || die "the archive has no qbit-vault binary"
 

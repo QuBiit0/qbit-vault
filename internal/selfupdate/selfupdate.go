@@ -28,6 +28,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/qbitdevz/qbit-vault/internal/minisign"
 )
 
 // Default limits: the archive of a release is a few megabytes.
@@ -35,6 +37,7 @@ const (
 	defaultMaxArchive   = 200 << 20
 	defaultMaxChecksums = 1 << 20
 	maxBinary           = 400 << 20
+	maxSignature        = 16 << 10
 	maxAPIBody          = 8 << 20
 	apiTimeout          = 20 * time.Second
 	downloadTimeout     = 10 * time.Minute
@@ -56,6 +59,9 @@ type Client struct {
 	API          string
 	MaxArchive   int64
 	MaxChecksums int64
+	// Key verifies checksums.txt.minisig. Nil means the release key pinned in
+	// the binary; only tests set it, with a throwaway key.
+	Key *minisign.PublicKey
 }
 
 // NewClient returns a client for api (the releases API URL) that identifies
@@ -311,6 +317,44 @@ func (c *Client) Latest(ctx context.Context) (Release, error) {
 	return best.release(), nil
 }
 
+// ErrNotSigned matches (errors.Is) the Download error of a release whose
+// checksums.txt has no valid signature from the pinned key.
+var ErrNotSigned = errors.New("not signed with the QBit Vault release key")
+
+type notSignedError struct{ tag string }
+
+func (e notSignedError) Error() string {
+	return "the release " + e.tag + " is not signed with the QBit Vault release key; nothing was changed"
+}
+
+func (notSignedError) Is(target error) bool { return target == ErrNotSigned }
+
+func notSigned(tag string) error { return notSignedError{tag} }
+
+// verifySignature checks checksums.txt.minisig of rel against sums with the
+// pinned key. Every failure, including a missing file, is the same refusal.
+func (c *Client) verifySignature(ctx context.Context, rel Release, sums []byte) error {
+	key := c.Key
+	if key == nil {
+		var err error
+		if key, err = minisign.ReleaseKey(); err != nil {
+			return notSigned(rel.Tag)
+		}
+	}
+	sigURL, ok := rel.Assets["checksums.txt.minisig"]
+	if !ok {
+		return notSigned(rel.Tag)
+	}
+	sig, err := c.get(ctx, sigURL, maxSignature, "")
+	if err != nil {
+		return notSigned(rel.Tag)
+	}
+	if _, err := minisign.Verify(key, sums, sig); err != nil {
+		return notSigned(rel.Tag)
+	}
+	return nil
+}
+
 // Download fetches and verifies the archive of rel and writes the binary to a
 // new temp file in dir. The caller owns the returned path; on any error
 // nothing is left behind.
@@ -348,6 +392,9 @@ func (c *Client) Download(ctx context.Context, rel Release, goos, goarch, dir st
 	got := sha256.Sum256(data)
 	if !strings.EqualFold(want, hex.EncodeToString(got[:])) {
 		return "", fmt.Errorf("checksum mismatch for %s: nothing was installed", archive)
+	}
+	if err := c.verifySignature(ctx, rel, sums); err != nil {
+		return "", err
 	}
 	tmp, err := os.CreateTemp(dir, ".qbit-vault.update-*")
 	if err != nil {

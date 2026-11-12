@@ -97,7 +97,7 @@ func TestReleaseWorkflowPublishesTheServerImage(t *testing.T) {
 	}
 	job := w[i:]
 	for _, want := range []string{
-		"needs: release",
+		"needs: sign",
 		"packages: write",
 		"contents: read",
 		"docker/setup-qemu-action@",
@@ -233,5 +233,161 @@ func TestPiExtensionReleaseWorkflowIsManualAndNeverForces(t *testing.T) {
 	}
 	if !strings.Contains(repoFile(t, ".github", "workflows", "release.yml"), `tags: ["v*"]`) {
 		t.Error("release.yml no longer filters on v* tags: re-check that pi-v* cannot trigger it")
+	}
+}
+
+// jobText returns the text of one job of release.yml: from its key to the next
+// job (or the end of the file).
+func jobText(t *testing.T, name string) string {
+	t.Helper()
+	w := repoFile(t, ".github", "workflows", "release.yml")
+	start := strings.Index(w, "\n  "+name+":\n")
+	if start < 0 {
+		t.Fatalf("release.yml has no %s job", name)
+	}
+	job := w[start+1:]
+	if m := regexp.MustCompile(`\n  [a-z][a-z-]*:\n`).FindStringIndex(job); m != nil {
+		job = job[:m[0]+1]
+	}
+	return job
+}
+
+// stepText returns the step of a job whose "name:" is name.
+func stepText(t *testing.T, job, name string) string {
+	t.Helper()
+	for _, step := range strings.Split(job, "\n      - ") {
+		if strings.HasPrefix(step, "name: "+name+"\n") {
+			return step
+		}
+	}
+	t.Fatalf("no step named %q", name)
+	return ""
+}
+
+// The release is a draft until the sign job has put checksums.txt.minisig on
+// it (S4.1); it stays a regular release, not a pre-release.
+func TestGoReleaserPublishesADraft(t *testing.T) {
+	g := repoFile(t, ".goreleaser.yaml")
+	i := strings.Index(g, "\nrelease:\n")
+	if i < 0 {
+		t.Fatal(".goreleaser.yaml has no release block")
+	}
+	block := g[i:]
+	for _, want := range []string{"\n  draft: true\n", `prerelease: "false"`} {
+		if !strings.Contains(block, want) {
+			t.Errorf("release block lacks %q", want)
+		}
+	}
+}
+
+// release -> sign -> server-image: the image is only published for a signed
+// release, and the release is only published by sign (S4.1).
+func TestReleaseJobsRunInOrder(t *testing.T) {
+	w := repoFile(t, ".github", "workflows", "release.yml")
+	r, s, im := strings.Index(w, "\n  release:\n"), strings.Index(w, "\n  sign:\n"), strings.Index(w, "\n  server-image:\n")
+	if r < 0 || s < 0 || im < 0 || !(r < s && s < im) {
+		t.Fatalf("jobs must be release, sign, server-image in that order (at %d, %d, %d)", r, s, im)
+	}
+	if !strings.Contains(jobText(t, "sign"), "\n    needs: release\n") {
+		t.Error("sign must need release")
+	}
+	if !strings.Contains(jobText(t, "server-image"), "\n    needs: sign\n") {
+		t.Error("server-image must need sign")
+	}
+	if strings.Contains(jobText(t, "release"), "needs:") {
+		t.Error("release must not need another job")
+	}
+}
+
+func TestSignJobIsProtectedAndMinimal(t *testing.T) {
+	job := jobText(t, "sign")
+	if !strings.Contains(job, "\n    environment: release-signing\n") {
+		t.Error("sign must run in the release-signing environment")
+	}
+	m := regexp.MustCompile(`\n    permissions:\n((?:      .*\n)+)`).FindStringSubmatch(job)
+	if m == nil {
+		t.Fatal("sign has no permissions block")
+	}
+	var perms []string
+	for _, line := range strings.Split(strings.TrimSpace(m[1]), "\n") {
+		perms = append(perms, strings.TrimSpace(strings.SplitN(line, "#", 2)[0]))
+	}
+	if len(perms) != 1 || perms[0] != "contents: write" {
+		t.Errorf("sign permissions = %q, want exactly [contents: write]", perms)
+	}
+	for _, bad := range []string{"id-token", "attestations", "packages", "secrets: inherit", "\n    env:"} {
+		if strings.Contains(job, bad) {
+			t.Errorf("sign job contains %q", bad)
+		}
+	}
+}
+
+// The signing seed is set in the environment of one step of the sign job and
+// nowhere else in the workflow (S4.3).
+func TestOnlyTheSignStepSeesTheSigningKey(t *testing.T) {
+	w := repoFile(t, ".github", "workflows", "release.yml")
+	const ref = "secrets.QBIT_VAULT_SIGNING_KEY"
+	if n := strings.Count(w, ref); n != 1 {
+		t.Fatalf("%s appears %d times in release.yml, want 1", ref, n)
+	}
+	step := stepText(t, jobText(t, "sign"), "sign")
+	if !strings.Contains(step, "        env:\n          QBIT_VAULT_SIGNING_KEY: ${{ "+ref+" }}\n") {
+		t.Errorf("the secret must be in the env of the sign step only:\n%s", step)
+	}
+	for _, name := range []string{"release", "server-image"} {
+		if strings.Contains(jobText(t, name), "QBIT_VAULT_SIGNING_KEY") {
+			t.Errorf("%s job mentions the signing key", name)
+		}
+	}
+}
+
+// The sign job checks what it downloaded, signs, verifies with the pinned
+// key, uploads, and only then publishes (S4.1): a failed step leaves a draft.
+func TestSignJobStepsRunInTheSafeOrder(t *testing.T) {
+	job := jobText(t, "sign")
+	order := []string{
+		"gh release download",
+		"sha256sum --check --strict",
+		"go build",
+		"QBIT_VAULT_SIGNING_KEY",
+		`release-sign" verify`,
+		"gh release upload",
+		`--draft=false`,
+	}
+	last := -1
+	for _, want := range order {
+		i := strings.Index(job, want)
+		if i < 0 {
+			t.Fatalf("sign job lacks %q", want)
+		}
+		if i < last {
+			t.Errorf("%q comes before an earlier stage of the sign job", want)
+		}
+		last = i
+	}
+	if strings.Count(job, "--draft=false") != 1 || strings.Contains(job, "continue-on-error") {
+		t.Error("exactly one publish step and no continue-on-error allowed in the sign job")
+	}
+}
+
+// The release job refuses to build while the test key is pinned (S7).
+func TestReleaseJobTestsRunWithTheReleaseCheck(t *testing.T) {
+	step := stepText(t, jobText(t, "release"), "test")
+	if !strings.Contains(step, "go test") || !strings.Contains(step, `QBIT_VAULT_RELEASE_CHECK: "1"`) {
+		t.Errorf("the release test step must run go test with QBIT_VAULT_RELEASE_CHECK=1:\n%s", step)
+	}
+}
+
+// release.yml starts only on v* tags (pi-v* extension tags and branches
+// cannot publish a binary release).
+func TestReleaseWorkflowTriggersOnlyOnVersionTags(t *testing.T) {
+	w := repoFile(t, ".github", "workflows", "release.yml")
+	if !strings.Contains(w, "\non:\n  push:\n    tags: [\"v*\"]\n\npermissions:") {
+		t.Error("release.yml must trigger only on push of v* tags")
+	}
+	for _, bad := range []string{"workflow_dispatch", "pull_request", "branches:"} {
+		if strings.Contains(w, bad) {
+			t.Errorf("release.yml contains %q", bad)
+		}
 	}
 }

@@ -35,13 +35,31 @@ describe("S5 status text", () => {
 	});
 });
 
+describe("zero-friction unlock (odd/tasks/unlock-zero-friction.md S5)", () => {
+	it("the locked notice does not send the user to a terminal", () => {
+		expect(LOCKED).toBe("vault is locked; QBit Vault asks for the passphrase when a tool or a /vault command needs it");
+		expect(LOCKED).not.toMatch(/terminal|qbit-vault unlock/);
+	});
+
+	it("the footer refresh never lets the binary open a dialog", async () => {
+		const fake = useFake({ grants: err("vault_locked", "locked", 4) });
+		const harness = mockPi();
+		const { ctx } = mockCtx();
+		await harness.emit("session_start", {}, ctx);
+		await harness.emit("tool_result", { toolName: "mcp__qbit_vault__secret_request" }, ctx);
+		const calls = fake.calls().map((c) => c.argv);
+		expect(calls.length).toBeGreaterThan(0);
+		for (const argv of calls) expect(argv).toEqual(["grants", "--no-prompt", "--json"]);
+	});
+});
+
 describe("S5 refresh on session_start", () => {
 	it("shows the number of grants that apply to this session and to the project", async () => {
 		const fake = useFake({ grants: grantsOf(SESSION, null, "pi:someone-else") });
 		const harness = mockPi();
 		const { ctx, ui } = mockCtx();
 		await harness.emit("session_start", { type: "session_start", reason: "startup" }, ctx);
-		expect(fake.calls().map((c) => c.argv)).toEqual([["grants", "--json"]]);
+		expect(fake.calls().map((c) => c.argv)).toEqual([["grants", "--no-prompt", "--json"]]);
 		expect(statusCalls(ui)).toEqual([["qbit-vault", "🔐 2 grants"]]);
 		expect(ui.notify).not.toHaveBeenCalled();
 	});

@@ -11,7 +11,7 @@ Sliced so every PR stays ≤ 400 changed lines (the review budget), each with co
 | 2 contract and MCP | done |
 | 2S remote sync | done |
 | 3 hosts | done as scoped: Claude Code, Codex, Pi / Gentle Shell through MCP; OpenCode dropped; packaging moved to Phase 5 |
-| 4 Gentle Shell / Pi extension | not built (Pi uses its MCP entry) |
+| 4 Gentle Shell / Pi extension | v1 built (`qbit-vault-pi` 0.2.3, git tag `pi-v0.2.3`, not on npm); in-terminal capture, `bash` override and extension-registered tools deferred |
 | 5 hardening and release 1.0.0 | 1.0.0 is the first stable release: archives, installers, provenance and the server image are done; npm and Homebrew are not built (Minisign-signed checksums are built, first signed release 1.4.0); `qbit-vault update` is built after 1.0.0 (`odd/tasks/self-update.md`) |
 | TUI | done (`odd/tasks/tui.md`); the Update section checks for a newer release on open and updates from there (`odd/tasks/self-update.md`) |
 
@@ -90,7 +90,7 @@ Dogfood round 1 (real use on Windows with Claude Code and Pi, `odd/tasks/dogfood
 
 ## Phase 4 — Gentle Shell extension (`qbit-vault-pi`) — v1 built, published from `pi-v*` git tags (not on npm)
 
-`packages/qbit-vault-pi` is built and tested (vitest with a fake binary, a Go test that keeps its `secret-patterns.yaml` equal to `defaults/`, the `pi-extension` CI job). The owner publishes it to npm, so `init` still prints no install line for it. Scope decided in `odd/tasks/pi-extension.md` S2; reference in `GENTLE_SHELL_EXTENSION.md`.
+`packages/qbit-vault-pi` is built and tested (vitest with a fake binary, a Go test that keeps its `secret-patterns.yaml` equal to `defaults/`, the `pi-extension` CI job). It is distributed as `pi-v*` git tags, not npm; `init` and `sync` print its install command for the Pi host and never run it. Scope decided in `odd/tasks/pi-extension.md` S2; reference in `GENTLE_SHELL_EXTENSION.md`.
 
 Built in v1: `/vault list|set|rm|revoke|audit|doctor` with completions, the footer status, paste interception with the shared pattern file, and the `session_shutdown` revoke. 0.2.0 adds the output and write guard on the built-in tools (`odd/tasks/output-guard.md`).
 

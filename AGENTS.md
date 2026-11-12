@@ -77,8 +77,8 @@ qbit-vault/                     (module github.com/qbitdevz/qbit-vault)
 │                               maintainer (copy in .claude/skills/, CI keeps them equal)
 ├── odd/tasks/                  work logs (what was built, decisions, commits)
 ├── .github/workflows/ci.yml    gofmt, vet, build, test on Linux/macOS/Windows, plus a latest-stable-Go job; leak grep
-├── packages/qbit-vault-pi/     TypeScript Pi / Gentle Shell extension (v1: /vault commands, footer status,
-│                               paste interception); built and tested in CI, published to npm by the owner
+├── packages/qbit-vault-pi/     TypeScript Pi / Gentle Shell extension (0.2.3: /vault commands, footer status,
+│                               paste interception, output and write guard); built and tested in CI, git tag pi-v*, not npm
 ├── packages/qbit-vault/        not built (Phase 5): npm launcher
 ├── scripts/                    install.sh, install.ps1 (one-line install from a release, SHA-256
 │                               verified) and their tests install_test.sh, install_test.ps1

@@ -41,7 +41,7 @@ curl -fsSL https://github.com/qbitdevz/qbit-vault/releases/latest/download/insta
 irm https://github.com/qbitdevz/qbit-vault/releases/latest/download/install.ps1 | iex
 ```
 
-The scripts are assets of every release (`releases/latest/download/…`); the copies in `scripts/` are the same files. The script downloads the release for your system, checks its SHA-256 and installs `qbit-vault` (Linux and macOS: `~/.local/bin`; Windows: added to your `PATH`, open a new terminal). Running it again upgrades in place. With Go 1.26+ you can use `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` instead. Every release also carries a build-provenance attestation you can verify with `gh attestation verify`, and from `v1.4.0` a Minisign signature of `checksums.txt` (`minisign -V -P <key> -m checksums.txt -x checksums.txt.minisig`, key in `defaults/release-key.pub`). Options and details: [docs/INSTALL.md](docs/INSTALL.md).
+The scripts are assets of every release (`releases/latest/download/…`); the copies in `scripts/` are the same files. The script downloads the release for your system, checks its SHA-256 and installs `qbit-vault` (Linux and macOS: `~/.local/bin`; Windows: added to your `PATH`, open a new terminal). Running it again upgrades in place. With Go 1.26+ you can use `go install github.com/qbitdevz/qbit-vault/cmd/qbit-vault@latest` instead. Every release also carries a build-provenance attestation you can verify with `gh attestation verify`, and from `v1.4.0` a Minisign signature of `checksums.txt` (`minisign -V -P <key> -m checksums.txt -x checksums.txt.minisig`, key in `defaults/release-key.pub`); the installers verify it when `minisign` is installed and otherwise print the command, and `qbit-vault update` refuses a release without a valid signature. Options and details: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## First 5 minutes
 
@@ -134,13 +134,13 @@ Every command, flag and exit code: [docs/CLI.md](docs/CLI.md). Most commands tak
 
 ## Supported agents
 
-Every agent gets the MCP server and the `qbit-vault` skill; only Claude Code also gets hooks and deny rules. The skill is kept current by `qbit-vault sync`, which the install scripts run after every upgrade.
+Every agent gets the MCP server and the `qbit-vault` skill; Claude Code and Codex also get hooks (the output and write guard), and only Claude Code gets deny rules; Pi gets the same guard from its extension. The skill is kept current by `qbit-vault sync`, which the install scripts run after every upgrade.
 
 | Agent | MCP tools | Skill | Hooks | Deny rules | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Claude Code | yes | `~/.claude/skills` | `pre-bash`, `post-bash`, `post-read`, `user-prompt` | `Read` / `Edit` of the vault directory | `post-*` redact tool output; `user-prompt` blocks a prompt that carries a secret; `pre-bash` keeps user-only commands out of the agent's shell |
-| Codex | yes | `~/.agents/skills` | no | no | `secret_exec` output is already redacted |
-| Pi / Gentle Shell | yes | `~/.agents/skills` (shared with Codex) | no | no | via `mcp.json`; the `qbit-vault-pi` extension (`/vault` commands, footer status, paste interception; [docs](docs/GENTLE_SHELL_EXTENSION.md)) installs from a git tag, not npm: `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3` (Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3`); `init` prints that line for you to run |
+| Claude Code | yes | `~/.claude/skills` | `pre-bash`, `post-bash`, `post-read`, `pre-write`, `user-prompt` | `Read` / `Edit` of the vault directory | `post-*` redact tool output (Bash, PowerShell, Read, Grep, Glob); `pre-write` denies a write or edit that carries a stored value; `user-prompt` blocks a prompt that carries a secret; `pre-bash` keeps user-only commands out of the agent's shell |
+| Codex | yes | `~/.agents/skills` | `post-bash`, `pre-write` (`~/.codex/hooks.json`) | no | `secret_exec` output is already redacted; the hooks redact `Bash` output and deny an `apply_patch` that writes a stored value; Codex runs them only after you trust them in `/hooks` |
+| Pi / Gentle Shell | yes | `~/.agents/skills` (shared with Codex) | extension | no | via `mcp.json`; the `qbit-vault-pi` extension (`/vault` commands, footer status, paste interception, output and write guard; [docs](docs/GENTLE_SHELL_EXTENSION.md)) installs from a git tag, not npm: `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3` (Pi: `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3`); `init` prints that line for you to run |
 
 Choose agents yourself with `qbit-vault init --agents claude-code,codex,pi` (or `--agents none`). OpenCode is not supported. Every config file an install touches is backed up first, and `qbit-vault uninstall` reverts it. Per-agent files and the hook protocol: [docs/AGENT_INTEGRATIONS.md](docs/AGENT_INTEGRATIONS.md).
 

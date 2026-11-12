@@ -1,6 +1,6 @@
 # Agent integrations
 
-One broker, one contract, three hosts: Claude Code, Codex and Pi / Gentle Shell. OpenCode was in the original design and is dropped (`odd/tasks/hosts.md` S8; no adapter exists). "Built" means `init` registers it and it is tested; *extension* items need the Pi extension `qbit-vault-pi` (Phase 4 v1, built; 0.2.0 adds the output and write guard; not on npm, `GENTLE_SHELL_EXTENSION.md`); *deferred* items are not built (not in v1 of the extension, or not on the roadmap yet for the other hosts). "MCP" is the portable path through `secret_exec`; today it is the path every host uses.
+One broker, one contract, three hosts: Claude Code, Codex and Pi / Gentle Shell. OpenCode was in the original design and is dropped (`odd/tasks/hosts.md` S8; no adapter exists). "Built" means `init` registers it and it is tested; *extension* items need the Pi extension `qbit-vault-pi` (built, 0.2.3: `/vault` commands, footer status, paste interception, output and write guard; not on npm, `GENTLE_SHELL_EXTENSION.md`); *deferred* items are not built (not in v1 of the extension, or not on the roadmap yet for the other hosts). "MCP" is the portable path through `secret_exec`; today it is the path every host uses.
 
 | Capability | Pi / Gentle Shell | Claude Code | Codex |
 | --- | --- | --- | --- |
@@ -181,7 +181,7 @@ Not verified (no Codex session was run, and the real `~/.codex` was not read): t
 
 **OpenCode**: dropped. The original design registered an MCP entry in `~/.config/opencode/opencode.json` and a bash-rewrite plugin; no adapter exists, `--agents opencode` is an unknown agent, and none is planned (`odd/tasks/hosts.md` S8).
 
-**Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`qbit-vault-pi`, the rich path) is built (Phase 4 v1, `packages/qbit-vault-pi`) and distributed as the git tag `pi-v<version>` of this repository, not on npm: `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3` in Gentle Shell or `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3` in Pi (`-e` instead of `install` tries it for one run; install a newer tag to update). See `GENTLE_SHELL_EXTENSION.md`.
+**Pi (plain, without Gentle Shell)**: for Pi ≥ 0.99, an MCP entry in `~/.pi/agent/mcp.json` so the four tools exist (built, below). The extension (`qbit-vault-pi`, the rich path) is built (`packages/qbit-vault-pi`, 0.2.3) and distributed as the git tag `pi-v<version>` of this repository, not on npm: `gentle-shell -- install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3` in Gentle Shell or `pi install git:github.com/qbitdevz/qbit-vault@pi-v0.2.3` in Pi (`-e` instead of `install` tries it for one run; install a newer tag to update). See `GENTLE_SHELL_EXTENSION.md`.
 
 **Pi / Gentle Shell registration written by `init`** (adapter `pi`, `internal/hosts/pi`): two steps: `skill` writes `~/.agents/skills/qbit-vault/SKILL.md`, shared with Codex (§ Agent skill), and `mcp` is merged into `<Pi agent dir>/mcp.json` after a snapshot, owning only `mcpServers.qbit-vault`:
 
